@@ -22,6 +22,154 @@ import { Chip, MsgInline } from "./CatalogoTabla";
 
 const PERFILES_CON_PERMISOS: PerfilKey[] = ["renzo", "jesus"];
 
+// ── Cuentas de la plataforma (solo gerencia) ───────────────────────
+// Alta/baja de cuentas de Supabase Auth vía /api/usuarios (service_role
+// en el servidor; la ruta re-verifica el rol gerencia del solicitante).
+
+type CuentaPlataforma = { id: string; email: string; nombre: string; rol: string; creado_en?: string };
+
+const ROL_LABELS: Record<string, string> = { gerencia: "Gerencia", renzo: "Renzo", jesus: "Jesús" };
+
+function generarPassword(): string {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = new Uint8Array(14);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => abc[b % abc.length]).join("");
+}
+
+function CuentasSeccion() {
+  const [cuentas, setCuentas] = useState<CuentaPlataforma[] | null>(null);
+  const [yo, setYo] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ error?: string | null; ok?: string | null }>({});
+  const [guardando, setGuardando] = useState(false);
+  const [nuevo, setNuevo] = useState({ email: "", nombre: "", rol: "renzo", password: "" });
+
+  const cargar = async () => {
+    const r = await fetch("/api/usuarios");
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "No se pudieron cargar las cuentas.");
+    setCuentas(j.usuarios);
+    setYo(j.yo);
+  };
+  useEffect(() => {
+    cargar().catch((e) => setMsg({ error: e instanceof Error ? e.message : "Error cargando cuentas." }));
+  }, []);
+
+  const crear = async (e: FormEvent) => {
+    e.preventDefault();
+    setMsg({});
+    setGuardando(true);
+    try {
+      const r = await fetch("/api/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nuevo),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo crear la cuenta.");
+      setMsg({ ok: `Cuenta ${nuevo.email} creada (${ROL_LABELS[nuevo.rol] ?? nuevo.rol}). Contraseña: ${nuevo.password} — cópiala ahora, no se vuelve a mostrar.` });
+      setNuevo({ email: "", nombre: "", rol: "renzo", password: "" });
+      await cargar();
+    } catch (err) {
+      setMsg({ error: err instanceof Error ? err.message : "No se pudo crear la cuenta." });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const resetPassword = async (c: CuentaPlataforma) => {
+    const pass = generarPassword();
+    if (!window.confirm(`¿Asignar una contraseña nueva a ${c.email}? Se mostrará una sola vez.`)) return;
+    setMsg({});
+    setGuardando(true);
+    try {
+      const r = await fetch("/api/usuarios", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: c.id, password: pass }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo cambiar la contraseña.");
+      setMsg({ ok: `Contraseña nueva de ${c.email}: ${pass} — cópiala ahora.` });
+    } catch (err) {
+      setMsg({ error: err instanceof Error ? err.message : "No se pudo cambiar la contraseña." });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const eliminar = async (c: CuentaPlataforma) => {
+    if (!window.confirm(`¿Eliminar la cuenta ${c.email}? Esta acción no se puede deshacer.`)) return;
+    setMsg({});
+    setGuardando(true);
+    try {
+      const r = await fetch("/api/usuarios", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: c.id }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo eliminar la cuenta.");
+      setMsg({ ok: `Cuenta ${c.email} eliminada.` });
+      await cargar();
+    } catch (err) {
+      setMsg({ error: err instanceof Error ? err.message : "No se pudo eliminar la cuenta." });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Seccion
+      titulo="Cuentas de la plataforma"
+      sub="Cuentas de acceso (email + contraseña). Gerencia = administrador total; Renzo y Jesús usan la matriz de permisos."
+    >
+      <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+        {cuentas === null && <span className="muted" style={{ fontSize: 13 }}>Cargando cuentas…</span>}
+        {cuentas?.map((c) => (
+          <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13, flex: 1 }}>
+              <b>{c.nombre}</b>
+              <span className="cc-dias">{c.email} · {ROL_LABELS[c.rol] ?? c.rol}{c.id === yo ? " · tú" : ""}</span>
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={() => void resetPassword(c)} disabled={guardando} title="Generar contraseña nueva">
+              Nueva clave
+            </button>
+            {c.id !== yo && (
+              <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void eliminar(c)} disabled={guardando}>
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      <form onSubmit={crear} style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+          <input className="input" type="email" required placeholder="Email *" value={nuevo.email} onChange={(e) => setNuevo((f) => ({ ...f, email: e.target.value }))} />
+          <input className="input" required placeholder="Nombre *" value={nuevo.nombre} onChange={(e) => setNuevo((f) => ({ ...f, nombre: e.target.value }))} />
+        </div>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "140px 1fr auto auto" }}>
+          <select className="input" value={nuevo.rol} onChange={(e) => setNuevo((f) => ({ ...f, rol: e.target.value }))}>
+            <option value="renzo">Renzo</option>
+            <option value="jesus">Jesús</option>
+            <option value="gerencia">Gerencia</option>
+          </select>
+          <input className="input" required minLength={8} placeholder="Contraseña (mín. 8) *" value={nuevo.password} onChange={(e) => setNuevo((f) => ({ ...f, password: e.target.value }))} />
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setNuevo((f) => ({ ...f, password: generarPassword() }))}>
+            Generar
+          </button>
+          <button className="btn btn-primary btn-sm" type="submit" disabled={guardando}>
+            {guardando ? "Guardando…" : "Crear cuenta"}
+          </button>
+        </div>
+      </form>
+      <div style={{ marginTop: 8 }}>
+        <MsgInline error={msg.error} ok={msg.ok} />
+      </div>
+    </Seccion>
+  );
+}
+
 // ── Tarjeta de sección con mensajes propios ────────────────────────
 
 function Seccion({ titulo, sub, children }: { titulo: string; sub?: string; children: React.ReactNode }) {
@@ -409,6 +557,8 @@ export function AdminView({ t }: ViewProps) {
           </Seccion>
         )}
 
+
+        {esGerencia && <CuentasSeccion />}
 
         {esGerencia && (
           <Seccion
