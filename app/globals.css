@@ -324,6 +324,12 @@ table.clean.cartera tr.sem-high td:first-child { box-shadow: inset 3px 0 0 var(-
 
 /* ── Tablas ───────────────────────────────────────────── */
 .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-xs); overflow: hidden; }
+/* Con .table-scroll el contenedor SÍ debe desplazarse horizontalmente
+   (definida después de .table-wrap para ganar la cascada) y las celdas
+   no se parten: la tabla toma su ancho natural y se navega con scroll. */
+.table-wrap.table-scroll { overflow-x: auto; }
+.table-scroll table.clean { width: max-content; min-width: 100%; }
+.table-scroll table.clean th, .table-scroll table.clean td { white-space: nowrap; }
 table.clean { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 table.clean th { text-align: left; padding: 12px 18px; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; background: var(--surface-2); border-bottom: 1px solid var(--border); }
 table.clean td { padding: 13px 18px; border-top: 1px solid var(--border); color: var(--text-2); }
