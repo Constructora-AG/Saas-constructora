@@ -79,8 +79,14 @@ create index if not exists gestion_log_cobrador_idx on gestion_log (cobrador_id,
 create index if not exists gestion_log_canal_idx on gestion_log (canal, created_at desc);
 
 -- ── Realtime: publicar cambios del log y la gestión ──────────────────────────
-alter publication supabase_realtime add table gestion_log;
-alter publication supabase_realtime add table cartera_gestion;
+do $$ begin
+  alter publication supabase_realtime add table gestion_log;
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table cartera_gestion;
+exception when duplicate_object then null;
+end $$;
 
 -- ── Vista de supervisión: actividad de cobro por cobrador (últimas 24h) ──────
 create or replace view v_actividad_cobrador as

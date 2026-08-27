@@ -34,6 +34,8 @@ create index if not exists sh_contactos_asesor_idx on sh_contactos (asesor);
 create index if not exists sh_contactos_fecha_idx on sh_contactos (fecha);
 
 -- ── Agregación de pipeline / ventas / prospectos por asesor ──────────────────
+drop function if exists vend_prospectos(timestamptz, timestamptz);
+drop function if exists vend_contactos(timestamptz, timestamptz);
 create or replace function vend_prospectos(desde timestamptz, hasta timestamptz)
 returns table (
   asesor text, total bigint, prospecto bigint, seguimiento bigint,
