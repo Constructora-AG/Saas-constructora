@@ -202,7 +202,7 @@ export function ResumenView({ t }: ViewProps) {
         </div>
         <div className="kpi">
           <div className="kpi-head">
-            <span className="kpi-ico"><IconWallet /></span>
+            <span className="kpi-ico s-brand"><IconWallet /></span>
             <span className="kpi-label">Valor del contrato</span>
           </div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(CONTRACT_VALUE)}</div>
@@ -220,7 +220,7 @@ export function ResumenView({ t }: ViewProps) {
         </div>
         <div className="kpi">
           <div className="kpi-head">
-            <span className="kpi-ico"><IconCoins /></span>
+            <span className="kpi-ico s-warn"><IconCoins /></span>
             <span className="kpi-label">Total peajes</span>
           </div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(totalPeajes)}</div>
@@ -228,7 +228,7 @@ export function ResumenView({ t }: ViewProps) {
         </div>
         <div className="kpi">
           <div className="kpi-head">
-            <span className="kpi-ico"><IconTruck /></span>
+            <span className="kpi-ico s-brand"><IconTruck /></span>
             <span className="kpi-label">Servicios registrados</span>
           </div>
           <div className="kpi-value">{servicios.toLocaleString("es-CO")}</div>
