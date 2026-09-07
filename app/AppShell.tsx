@@ -11,6 +11,8 @@ interface NavItem {
   icon: ReactNode;
   /** id del módulo en lib/auth/modulos.ts (controla visibilidad por rol). */
   modulo: string;
+  /** Sub-módulos (se muestran anidados bajo el ítem). */
+  children?: NavItem[];
 }
 
 const NAV: { section: string; items: NavItem[] }[] = [
@@ -33,8 +35,16 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Finanzas",
     items: [
-      { href: "/aaa", label: "Proyecto Triple A", icon: <IconBuilding />, modulo: "aaa" },
-      { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte" },
+      {
+        href: "/aaa", label: "Proyecto Triple A", icon: <IconBuilding />, modulo: "aaa",
+        children: [
+          { href: "/aaa/consolidado", label: "Consolidado", icon: null, modulo: "aaa" },
+          { href: "/aaa/alquiler", label: "Contrato Alquiler", icon: null, modulo: "aaa" },
+          { href: "/aaa/emergencia", label: "Otro Sí / Emergencia", icon: null, modulo: "aaa" },
+          { href: "/aaa/prefacturas", label: "Prefacturas", icon: null, modulo: "aaa" },
+          { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte" },
+        ],
+      },
     ],
   },
   {
@@ -52,7 +62,11 @@ const TITLES: Record<string, string> = {
   "/recaudo": "Recaudo por proyecto",
   "/supervision": "Vendedores",
   "/marketing": "Marketing y gestión de leads",
-  "/aaa/transporte": "Control Transporte AAA — Contrato IS No. 04-2026",
+  "/aaa/transporte": "Proyecto Triple A — Control Transporte AAA (Contrato IS No. 04-2026)",
+  "/aaa/consolidado": "Proyecto Triple A — Consolidado",
+  "/aaa/alquiler": "Proyecto Triple A — Contrato Alquiler",
+  "/aaa/emergencia": "Proyecto Triple A — Otro Sí / Emergencia",
+  "/aaa/prefacturas": "Proyecto Triple A — Prefacturas",
   "/aaa": "Proyecto Triple A",
   "/usuarios": "Usuarios y roles de la plataforma",
 };
@@ -75,7 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     : "AG";
 
   // "/aaa" es exacto para que no quede activo junto con "/aaa/transporte".
-  const activeHref = (href: string) => (href === "/" || href === "/aaa" ? path === href : path.startsWith(href));
+  const activeHref = (href: string) => (href === "/" ? path === href : path === href || path.startsWith(href + "/"));
   const currentTitle =
     Object.entries(TITLES).find(([h]) => (h === "/" ? path === "/" : path.startsWith(h)))?.[1] ?? "Constructora Anaya Giraldo";
 
@@ -93,21 +107,41 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV.map((group) => ({ ...group, items: group.items.filter((i) => puedeVer(usuario, i.modulo)) }))
+          {NAV.map((group) => ({
+            ...group,
+            items: group.items
+              .map((i) => (i.children ? { ...i, children: i.children.filter((c) => puedeVer(usuario, c.modulo)) } : i))
+              .filter((i) => (i.children ? i.children.length > 0 : puedeVer(usuario, i.modulo))),
+          }))
             .filter((group) => group.items.length > 0)
             .map((group) => (
             <div key={group.section} className="nav-group">
               <div className="nav-group-title">{group.section}</div>
               {group.items.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={`nav-item${activeHref(item.href) ? " active" : ""}`}
-                >
-                  <span className="nav-item-icon">{item.icon}</span>
-                  {item.label}
-                </a>
+                <div key={item.href}>
+                  <a
+                    href={item.children ? item.children[0].href : item.href}
+                    onClick={() => setOpen(false)}
+                    className={`nav-item${(item.children ? path.startsWith(item.href) : activeHref(item.href)) ? " active" : ""}`}
+                  >
+                    <span className="nav-item-icon">{item.icon}</span>
+                    {item.label}
+                  </a>
+                  {item.children && (
+                    <div className="nav-sub">
+                      {item.children.map((c) => (
+                        <a
+                          key={c.href}
+                          href={c.href}
+                          onClick={() => setOpen(false)}
+                          className={`nav-item nav-sub-item${activeHref(c.href) ? " active" : ""}`}
+                        >
+                          {c.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           ))}

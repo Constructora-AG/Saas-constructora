@@ -238,8 +238,10 @@ function MaquinasTable({ machines, conIva }: { machines: Maquina[]; conIva: bool
   );
 }
 
-export function AaaClient({ data, prefacturas, demo }: { data: CorteAaa; prefacturas: PrefacturaRow[]; demo: boolean }) {
-  const [tab, setTab] = useState<Tab>("consolidado");
+export type AaaTab = Tab;
+
+/** Vista de Proyecto Triple A. `tab` viene de la ruta (/aaa/<seccion>): cada sección es un módulo interno. */
+export function AaaClient({ data, prefacturas, demo, tab }: { data: CorteAaa; prefacturas: PrefacturaRow[]; demo: boolean; tab: Tab }) {
   const [conIva, setConIva] = useState(false);
 
   const cons = data.consolidado;
@@ -251,12 +253,6 @@ export function AaaClient({ data, prefacturas, demo }: { data: CorteAaa; prefact
   return (
     <>
       <div className="filters-bar" style={{ marginTop: 0 }}>
-        <div className="segmented">
-          <button className={`seg${tab === "consolidado" ? " active" : ""}`} onClick={() => setTab("consolidado")}>Consolidado</button>
-          <button className={`seg${tab === "alquiler" ? " active" : ""}`} onClick={() => setTab("alquiler")}>Contrato Alquiler</button>
-          <button className={`seg${tab === "emergencia" ? " active" : ""}`} onClick={() => setTab("emergencia")}>Otro Sí / Emergencia</button>
-          <button className={`seg${tab === "prefacturas" ? " active" : ""}`} onClick={() => setTab("prefacturas")}>Prefacturas</button>
-        </div>
         {tab !== "prefacturas" && (
           <div className="segmented">
             <button className={`seg${!conIva ? " active" : ""}`} onClick={() => setConIva(false)}>Sin IVA</button>
