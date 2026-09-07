@@ -5,7 +5,7 @@ import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
 // Gestión de cuentas de la plataforma — SOLO rol `gerencia`.
 //   GET    → lista las cuentas (usuarios + fila de rol)
 //   POST   → crea una cuenta   { email, nombre, rol, password }
-//   PATCH  → cambia contraseña { id, password }
+//   PATCH  → actualiza { id, password? | rol? | nombre? }
 //   DELETE → elimina la cuenta { id }  (nunca la propia)
 // El middleware ya exige sesión; aquí además se verifica el rol gerencia
 // leyendo la fila del solicitante con la service_role.
@@ -79,19 +79,49 @@ export async function PATCH(req: NextRequest) {
   const g = await exigirGerencia();
   if (g instanceof NextResponse) return g;
 
-  let b: { id?: string; password?: string };
+  // Actualiza cualquiera de: contraseña, rol, nombre. { id, password?, rol?, nombre? }
+  let b: { id?: string; password?: string; rol?: string; nombre?: string };
   try {
     b = await req.json();
   } catch {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
   if (!b.id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
-  if (!b.password || b.password.length < 8) {
-    return NextResponse.json({ error: "La contraseña debe tener al menos 8 caracteres" }, { status: 400 });
+  const supa = supabaseAdmin();
+  const cambios: string[] = [];
+
+  if (b.password !== undefined) {
+    if (!b.password || b.password.length < 8) {
+      return NextResponse.json({ error: "La contraseña debe tener al menos 8 caracteres" }, { status: 400 });
+    }
+    const { error } = await supa.auth.admin.updateUserById(b.id, { password: b.password });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    cambios.push("password");
   }
-  const { error } = await supabaseAdmin().auth.admin.updateUserById(b.id, { password: b.password });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ ok: true });
+
+  const patch: { rol?: string; nombre?: string } = {};
+  if (b.rol !== undefined) {
+    const rol = b.rol as (typeof ROLES)[number];
+    if (!ROLES.includes(rol)) return NextResponse.json({ error: "Rol inválido" }, { status: 400 });
+    if (b.id === g.uid && rol !== "gerencia") {
+      return NextResponse.json({ error: "No puedes quitarte a ti mismo el rol de Gerencia" }, { status: 400 });
+    }
+    patch.rol = rol;
+  }
+  if (b.nombre !== undefined) {
+    const nombre = b.nombre.trim();
+    if (!nombre) return NextResponse.json({ error: "El nombre no puede quedar vacío" }, { status: 400 });
+    patch.nombre = nombre;
+  }
+  if (Object.keys(patch).length) {
+    const { error } = await supa.from("usuarios").update(patch).eq("id", b.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // refleja nombre/rol también en los metadatos de Auth (informativo)
+    await supa.auth.admin.updateUserById(b.id, { user_metadata: patch }).catch(() => undefined);
+    cambios.push(...Object.keys(patch));
+  }
+  if (!cambios.length) return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
+  return NextResponse.json({ ok: true, cambios });
 }
 
 export async function DELETE(req: NextRequest) {

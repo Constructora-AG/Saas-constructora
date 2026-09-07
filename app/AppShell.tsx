@@ -8,6 +8,8 @@ interface NavItem {
   href: string;
   label: string;
   icon: ReactNode;
+  /** Solo visible para el rol Gerencia. */
+  soloGerencia?: boolean;
 }
 
 const NAV: { section: string; items: NavItem[] }[] = [
@@ -34,6 +36,12 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck /> },
     ],
   },
+  {
+    section: "Administración",
+    items: [
+      { href: "/usuarios", label: "Usuarios y roles", icon: <IconActivity />, soloGerencia: true },
+    ],
+  },
 ];
 
 const TITLES: Record<string, string> = {
@@ -45,6 +53,7 @@ const TITLES: Record<string, string> = {
   "/marketing": "Marketing y gestión de leads",
   "/aaa/transporte": "Control Transporte AAA — Contrato IS No. 04-2026",
   "/aaa": "Proyecto Triple A",
+  "/usuarios": "Usuarios y roles de la plataforma",
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -83,7 +92,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV.map((group) => (
+          {NAV.map((group) => ({ ...group, items: group.items.filter((i) => !i.soloGerencia || usuario?.rol === "gerencia") }))
+            .filter((group) => group.items.length > 0)
+            .map((group) => (
             <div key={group.section} className="nav-group">
               <div className="nav-group-title">{group.section}</div>
               {group.items.map((item) => (
