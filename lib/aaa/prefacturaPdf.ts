@@ -77,7 +77,7 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
     ["NIT:", CLIENTE_AAA.nit, "Teléfono", CLIENTE_AAA.telefono],
     ["Dirección", CLIENTE_AAA.direccion, "Vendedor", CLIENTE_AAA.vendedor],
     ["Ciudad", CLIENTE_AAA.ciudad, "Centro Costo", r.centro_costo || r.area_aaa || ""],
-    ["Correo", CLIENTE_AAA.correo, "LUGAR DEL SERVICIO", [r.periodo || "", r.lugar || ""].filter(Boolean).join("\n")],
+    ["Correo", CLIENTE_AAA.correo, "LUGAR DEL SERVICIO", r.lugar || ""],
   ];
   const topY = y;
   filas.forEach((f, i) => {
