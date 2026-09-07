@@ -145,6 +145,9 @@ export interface Servicio {
   photo: boolean;
   approved: boolean;
   invoiced: boolean;
+  /** Contrato de Alquiler: horas máquina (solicitada→atendida) y valor de la hora según tarifario. */
+  horasMaquina?: NumLike;
+  valorHora?: NumLike;
   /** N° de la prefactura (PF0001…) en la que quedó incluido el servicio; null/undefined = sin prefacturar. */
   prefactura?: string | null;
   /** Recargos aplicados (SPEC §3.3): se persisten para precargar los checkboxes al editar. */

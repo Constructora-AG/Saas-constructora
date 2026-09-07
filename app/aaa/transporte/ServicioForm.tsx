@@ -17,7 +17,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { UseTransporte } from "@/lib/transporte/useTransporte";
 import type { AdjuntoFile, AdminConfig, MonthInfo, NumLike, Servicio, Tarifario } from "@/lib/transporte/model";
 import { areaAAADe, aprobadorDe, num, nuevoServicioId } from "@/lib/transporte/model";
-import { autoRecargos, computeValor, fdate, fmtCOP } from "@/lib/transporte/logic";
+import { autoRecargos, computeValor, fdate, fmtCOP, respHours } from "@/lib/transporte/logic";
 import { openAttachment, processSelectedFile } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
 
@@ -247,8 +247,26 @@ export function ServicioForm({
   // ── Recálculos encadenados (handlers, no efectos) ────────────────
 
   /** Aplica computeValor sobre un estado candidato y actualiza el hint. */
+  const esAlquiler = t.ns === "alquiler";
+  /** Alquiler: unitario de la tarifa elegida (valor hora máquina o valor del viaje de transporte). */
+  const tarifaSel = (c: Campos) => tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas.find((r) => r.id === c.tarifaRuta) ?? null;
+  const esPorHora = (c: Campos) => { const r = tarifaSel(c); return !!r && /\(HR\)|hora/i.test(r.label); };
   const conValor = (next: Campos): Campos => {
     if (!tarifario) return next;
+    if (esAlquiler) {
+      const r = tarifaSel(next);
+      if (!r) { setTarifaHint(null); return next; }
+      const unit = num(r.unitario);
+      const horas = respHours(next.hourReq, next.hourAtt);
+      if (esPorHora(next)) {
+        if (horas == null) { setTarifaHint(`Valor hora máquina: ${fmtCOP(unit)} — indica hora solicitada y atendida para calcular las horas.`); return { ...next, tolls: "0" }; }
+        const total = Math.round(unit * horas);
+        setTarifaHint(`${horas} h × ${fmtCOP(unit)} (hora máquina) = ${fmtCOP(total)}`);
+        return { ...next, value: String(total), tolls: "0" };
+      }
+      setTarifaHint(`Transporte del equipo: ${fmtCOP(unit)} por viaje`);
+      return { ...next, value: String(unit), tolls: "0" };
+    }
     const c = computeValor(tarifario, next.tarifaCategoria || null, next.tarifaRuta || null, next.recNocturno, next.recDominical);
     if (!c) { setTarifaHint(null); return next; }
     const out = { ...next, capacity: String(c.capacidad) };
@@ -365,7 +383,9 @@ export function ServicioForm({
       hourReq: f.hourReq,
       hourAtt: f.hourAtt,
       value: f.value,
-      tolls: f.tolls,
+      tolls: esAlquiler ? "0" : f.tolls,
+      horasMaquina: esAlquiler ? (respHours(f.hourReq, f.hourAtt) ?? "") : undefined,
+      valorHora: esAlquiler && esPorHora(f) ? String(num(tarifaSel(f)?.unitario ?? 0)) : undefined,
       photo: f.photo,
       approved: f.approved,
       invoiced: f.invoiced,
@@ -472,7 +492,7 @@ export function ServicioForm({
               )}
             </div>
 
-            {seccion("Tarifa del pliego (opcional — calcula el valor automáticamente)")}
+            {seccion(esAlquiler ? "Tarifa del contrato (equipo y zona — calcula el valor automáticamente)" : "Tarifa del pliego (opcional — calcula el valor automáticamente)")}
             <div style={gridAuto}>
               <label className="field">Categoría del tarifario
                 <select value={f.tarifaCategoria} onChange={(e) => cambiaCategoria(e.target.value)}>
@@ -492,7 +512,7 @@ export function ServicioForm({
               )}
             </div>
             {tarifaHint && <div className="muted" style={{ fontSize: 12.5 }}>{tarifaHint}</div>}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", marginTop: 6 }}>
+            {!esAlquiler && <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", marginTop: 6 }}>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13 }}>
                 <input type="checkbox" checked={f.recNocturno} onChange={(e) => cambiaRecargo("noct", e.target.checked)} />
                 Recargo nocturno (+{recNoct})
@@ -501,8 +521,8 @@ export function ServicioForm({
                 <input type="checkbox" checked={f.recDominical} onChange={(e) => cambiaRecargo("dom", e.target.checked)} />
                 Recargo dominical/festivo (+{recDom})
               </label>
-            </div>
-            {autoNota && <div style={{ color: "var(--warn)", fontSize: 12.5 }}>{autoNota}</div>}
+            </div>}
+            {!esAlquiler && autoNota && <div style={{ color: "var(--warn)", fontSize: 12.5 }}>{autoNota}</div>}
 
             {seccion("Vehículo y carga")}
             <div style={gridAuto}>
@@ -565,18 +585,29 @@ export function ServicioForm({
               <label className="field">Hora atendida
                 <input className="input" type="time" value={f.hourAtt} onChange={(e) => cambiaTiempo({ hourAtt: e.target.value })} />
               </label>
+              <label className="field">{esAlquiler ? "Horas máquina (solicitada → atendida)" : "Tiempo de respuesta"}
+                <input className="input num" readOnly value={(() => { const h = respHours(f.hourReq, f.hourAtt); if (h == null) return ""; const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return `${h} h (${hh}:${String(mm).padStart(2, "0")})`; })()} style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
+              </label>
             </div>
 
             {seccion("Financiero")}
             <div style={gridAuto}>
-              <label className="field">Valor del servicio (COP)
+              {esAlquiler && (
+                <label className="field">Valor hora máquina (COP) <span className="muted" style={{ fontWeight: 400 }}>· del tarifario</span>
+                  <input className="input num" readOnly value={tarifaSel(f) ? (esPorHora(f) ? fmtCOP(num(tarifaSel(f)!.unitario)) : `${fmtCOP(num(tarifaSel(f)!.unitario))} / viaje`) : "Selecciona equipo y zona"}
+                    style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
+                </label>
+              )}
+              <label className="field">Valor del servicio (COP){esAlquiler && tarifaSel(f) && <span className="muted" style={{ fontWeight: 400 }}> · calculado</span>}
                 <input className="input num" type="number" step="1" min="0" value={f.value}
                   onChange={(e) => setF({ ...f, value: e.target.value })} />
               </label>
-              <label className="field">Peajes (COP)
-                <input className="input num" type="number" step="1" min="0" value={f.tolls}
-                  onChange={(e) => setF({ ...f, tolls: e.target.value })} />
-              </label>
+              {!esAlquiler && (
+                <label className="field">Peajes (COP)
+                  <input className="input num" type="number" step="1" min="0" value={f.tolls}
+                    onChange={(e) => setF({ ...f, tolls: e.target.value })} />
+                </label>
+              )}
             </div>
 
             {seccion("Evidencia fotográfica y soportes")}
