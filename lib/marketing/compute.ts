@@ -276,3 +276,25 @@ export const SEGUIMIENTO_LABEL = (v: number | null | undefined): { label: string
   if (v === SEGUIMIENTO.VENCIDO) return { label: "Tarea vencida", tone: "high" };
   return { label: "Sin tareas", tone: "warn" };
 };
+
+// ── Nombre legible del lead ────────────────────────────────────────
+// Smarthome guarda en "Nombre del cliente" lo que el lead escribió en el
+// anuncio (WhatsApp/Facebook): a veces es un mensaje, un enlace o emojis.
+// Aquí se limpia y, si no parece un nombre, se muestra el contacto.
+const RE_URL = /https?:\/\/\S+|www\.\S+|fb\.me\/\S+/gi;
+const RE_EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu;
+const RE_MENSAJE = /^(hola|buen[oa]s|quisiera|quiero|me interesa|informaci[oó]n|clic a whatsapp|deseo|necesito|estoy interesad|precio|cu[aá]nto)/i;
+
+export function nombreLead(p: { nombre?: string | null; celular?: string | null; email?: string | null; prospect_id?: string }): { texto: string; sinNombre: boolean; original: string } {
+  const original = String(p.nombre ?? "").trim();
+  let limpio = original.replace(RE_URL, " ").replace(RE_EMOJI, " ").replace(/[^\p{L}\p{N}\s.'-]/gu, " ").replace(/\s+/g, " ").trim();
+  const palabras = limpio.split(" ").filter(Boolean);
+  const pareceMensaje = !limpio || !/\p{L}/u.test(limpio) || RE_MENSAJE.test(limpio) || palabras.length > 5 || /\d{6,}/.test(limpio);
+  if (pareceMensaje) {
+    const contacto = (p.celular && String(p.celular).trim()) || (p.email && String(p.email).trim()) || (p.prospect_id ? p.prospect_id.slice(0, 8) : "");
+    return { texto: contacto ? `Sin nombre · ${contacto}` : "Sin nombre", sinNombre: true, original };
+  }
+  // Capitalización suave (los nombres llegan en mayúsculas o minúsculas mezcladas)
+  limpio = palabras.map((w) => (w.length > 2 && w === w.toUpperCase() ? w[0] + w.slice(1).toLowerCase() : w)).join(" ");
+  return { texto: limpio, sinNombre: false, original };
+}

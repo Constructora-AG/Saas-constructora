@@ -6,8 +6,7 @@ import { useUsuario } from "@/lib/auth/useUsuario";
 import type { Inversion, Lead, MarketingData, Prospecto } from "@/lib/marketing/types";
 import {
   agruparLeads, canalCorto, cpaPorMes, distribucion, embudo, esCompra, esContactado, esDescartado,
-  gestionPorAsesor, normGenero, pct, porCreativo, rangoEdad, totalGestion, SEGUIMIENTO_LABEL,
-} from "@/lib/marketing/compute";
+  gestionPorAsesor, normGenero, pct, porCreativo, rangoEdad, totalGestion, SEGUIMIENTO_LABEL, nombreLead } from "@/lib/marketing/compute";
 
 const NUM = new Intl.NumberFormat("es-CO");
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -424,7 +423,9 @@ function VistaGestion({ prospectos }: { prospectos: Prospecto[] }) {
           <tbody>
             {sinGestion.map((p) => (
               <tr key={p.prospect_id}>
-                <td><b>{p.nombre || p.prospect_id.slice(0, 8)}</b></td>
+                <td title={nombreLead(p).original || undefined}>
+                  {(() => { const n = nombreLead(p); return n.sinNombre ? <span className="muted" title={n.original ? `Texto recibido: ${n.original}` : "El lead no dejó nombre"}>{n.texto}</span> : <b>{n.texto}</b>; })()}
+                </td>
                 <td className="muted">{p.proyecto}</td>
                 <td className="muted">{canalCorto(p.fuente ?? "")}</td>
                 <td>{p.asesor || <span className="muted">—</span>}</td>
