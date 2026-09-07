@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { catalogoDe } from "@/lib/aaa/catalogo";
 
-// Flujo: pendiente_acta_migo (default) → pendiente_pago (automático al tener acta + migo) → pagada | rechazada
-const ESTADOS = new Set(["pendiente_acta_migo", "pendiente_pago", "pagada", "rechazada"]);
+// Flujo: pendiente_acta_migo → por_facturar (automático con acta + migo) → pendiente_pago (automático al adjuntar factura) → pagada | rechazada
+const ESTADOS = new Set(["pendiente_acta_migo", "por_facturar", "pendiente_pago", "pagada", "rechazada"]);
 
 interface AdjuntoBody { name?: unknown; type?: unknown; dataUrl?: unknown }
 const MAX_ADJUNTO = 6 * 1024 * 1024; // ~6 MB en base64
@@ -15,6 +15,21 @@ function limpiarAdjunto(v: unknown): { name: string; type: string; dataUrl: stri
   if (!/^data:[\w.+-]+\/[\w.+-]+;base64,/.test(dataUrl)) throw new Error("Adjunto inválido");
   if (dataUrl.length > MAX_ADJUNTO) throw new Error("El archivo supera el tamaño máximo (~4 MB)");
   return { name: String(a.name ?? "archivo"), type: String(a.type ?? "application/octet-stream"), dataUrl };
+}
+
+/** Texto legible del período a partir de las fechas (para tabla y exportes). */
+function periodoTexto(desde: unknown, hasta: unknown, fallback: unknown): string | null {
+  const f = (s: unknown) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s ?? ""));
+    if (!m) return null;
+    const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+    return `${m[3]} ${meses[+m[2] - 1]} ${m[1]}`;
+  };
+  const a = f(desde), b = f(hasta);
+  if (a && b) return a === b ? a : `${a} al ${b}`;
+  if (a) return `desde ${a}`;
+  if (b) return `hasta ${b}`;
+  return fallback ? String(fallback) : null;
 }
 
 /** Valida los ítems contra el catálogo del contrato; devuelve los ítems normalizados o un error legible. */
@@ -96,7 +111,9 @@ export async function POST(req: NextRequest) {
       fecha_generacion: b.fecha_generacion,
       fecha_vencimiento: b.fecha_vencimiento ?? null,
       centro_costo: b.centro_costo ?? null,
-      periodo: b.periodo ?? null,
+      periodo_desde: b.periodo_desde || null,
+      periodo_hasta: b.periodo_hasta || null,
+      periodo: periodoTexto(b.periodo_desde, b.periodo_hasta, b.periodo),
       lugar: b.lugar ?? null,
       items,
       valor_base: valorBase,
@@ -134,8 +151,11 @@ export async function PATCH(req: NextRequest) {
   if (e0 || !actual) return NextResponse.json({ error: "Prefactura no encontrada" }, { status: 404 });
 
   const patch: Record<string, unknown> = {};
-  for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "periodo", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
+  for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "periodo", "periodo_desde", "periodo_hasta", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
     if (k in b) patch[k] = b[k];
+  }
+  if ("periodo_desde" in b || "periodo_hasta" in b) {
+    patch.periodo = periodoTexto(patch.periodo_desde ?? actual.periodo_desde, patch.periodo_hasta ?? actual.periodo_hasta, patch.periodo ?? actual.periodo);
   }
   if (b.items !== undefined) {
     const v = validarItems(String(patch.contrato ?? actual.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : []);
@@ -146,16 +166,26 @@ export async function PATCH(req: NextRequest) {
   try {
     const acta = limpiarAdjunto(b.acta);
     const migo = limpiarAdjunto(b.migo);
+    const factura = limpiarAdjunto(b.factura);
     if (acta !== undefined) patch.acta = acta;
     if (migo !== undefined) patch.migo = migo;
+    if (factura !== undefined) patch.factura = factura;
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Adjunto inválido" }, { status: 400 });
   }
-  // Transición automática: con acta y migo cargados, sale de "pendiente_acta_migo"
+  // Transiciones automáticas:
+  //  · acta + migo cargados  → "pendiente_acta_migo" pasa a "por_facturar"
+  //  · factura adjunta       → "por_facturar" pasa a "pendiente_pago"
   const actaFinal = "acta" in patch ? patch.acta : actual.acta;
   const migoFinal = "migo" in patch ? patch.migo : actual.migo;
-  const estadoFinal = String(patch.estado ?? actual.estado);
-  if (actaFinal && migoFinal && estadoFinal === "pendiente_acta_migo") patch.estado = "pendiente_pago";
+  const facturaFinal = "factura" in patch ? patch.factura : actual.factura;
+  let estadoFinal = String(patch.estado ?? actual.estado);
+  if (actaFinal && migoFinal && estadoFinal === "pendiente_acta_migo") estadoFinal = "por_facturar";
+  if (facturaFinal && estadoFinal === "por_facturar") {
+    estadoFinal = "pendiente_pago";
+    if (!("fecha_factura" in patch) && !actual.fecha_factura) patch.fecha_factura = new Date().toISOString().slice(0, 10);
+  }
+  if (estadoFinal !== String(actual.estado) || "estado" in patch) patch.estado = estadoFinal;
   if (!Object.keys(patch).length) return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
 
   const { data, error } = await supa.from("aaa_prefacturas").update(patch).eq("id", b.id).select().single();

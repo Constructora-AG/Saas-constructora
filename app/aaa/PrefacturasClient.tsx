@@ -2,8 +2,8 @@
 // ════════════════════════════════════════════════════════════════════
 // Prefacturas (Proyecto Triple A)
 // - N° automático consecutivo PF0001, PF0002, … (lo asigna el servidor).
-// - Estado: "Pendiente de Acta y Migo" por defecto → al cargar ambos
-//   documentos pasa solo a "Pendiente de pago" → "Pagada" | "Rechazada".
+// - Estado: "Pendiente de Acta y Migo" → (acta + migo) "Por facturar" →
+//   (factura adjunta) "Pendiente de pago" → "Pagada" | "Rechazada".
 // - Crear, editar (mismo formulario), eliminar; cargar/abrir acta y migo.
 // ════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,11 +15,12 @@ const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP",
 
 const ESTADOS: Record<string, { label: string; cls: string }> = {
   pendiente_acta_migo: { label: "Pendiente de Acta y Migo", cls: "warn" },
+  por_facturar: { label: "Por facturar", cls: "mid" },
   pendiente_pago: { label: "Pendiente de pago", cls: "mid" },
   pagada: { label: "Pagada", cls: "ok" },
   rechazada: { label: "Rechazada", cls: "high" },
 };
-const ACTIVAS = new Set(["pendiente_acta_migo", "pendiente_pago"]);
+const ACTIVAS = new Set(["pendiente_acta_migo", "por_facturar", "pendiente_pago"]);
 
 const HOY = new Date();
 function diasDesde(fecha: string) {
@@ -52,7 +53,7 @@ function leerArchivo(f: File): Promise<AdjuntoPrefactura> {
 
 interface ItemForm { item: string; cantidad: string; vr_unit: string }
 const ITEM0: ItemForm = { item: "", cantidad: "", vr_unit: "" };
-const FORM0 = { contrato: "alquiler" as "alquiler" | "emergencia", fecha_generacion: "", fecha_vencimiento: "", centro_costo: "", periodo: "", lugar: "", nota: "" };
+const FORM0 = { contrato: "alquiler" as "alquiler" | "emergencia", fecha_generacion: "", fecha_vencimiento: "", centro_costo: "", periodo_desde: "", periodo_hasta: "", lugar: "", nota: "" };
 
 export function PrefacturasClient({ initialRows, demo }: { initialRows: PrefacturaRow[]; demo: boolean }) {
   const [rows, setRows] = useState<PrefacturaRow[]>(initialRows);
@@ -68,7 +69,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
   const [abierta, setAbierta] = useState<string | null>(null);
   const [subiendo, setSubiendo] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const pendienteSubida = useRef<{ id: string; campo: "acta" | "migo" } | null>(null);
+  const pendienteSubida = useRef<{ id: string; campo: "acta" | "migo" | "factura" } | null>(null);
 
   const catalogo = catalogoDe(form.contrato);
   const activas = useMemo(() => rows.filter((r) => ACTIVAS.has(r.estado)), [rows]);
@@ -99,7 +100,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
   const abrirEdicion = (r: PrefacturaRow) => {
     setError(null); setOk(null);
     setEditando(r);
-    setForm({ contrato: r.contrato, fecha_generacion: r.fecha_generacion ?? "", fecha_vencimiento: r.fecha_vencimiento ?? "", centro_costo: r.centro_costo ?? "", periodo: r.periodo ?? "", lugar: r.lugar ?? "", nota: r.nota ?? "" });
+    setForm({ contrato: r.contrato, fecha_generacion: r.fecha_generacion ?? "", fecha_vencimiento: r.fecha_vencimiento ?? "", centro_costo: r.centro_costo ?? "", periodo_desde: r.periodo_desde ?? "", periodo_hasta: r.periodo_hasta ?? "", lugar: r.lugar ?? "", nota: r.nota ?? "" });
     setItems((r.items as PrefacturaItem[]).map((it) => ({ item: it.item, cantidad: String(it.cantidad), vr_unit: String(it.vr_unit) })));
     setMostrarForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -123,7 +124,8 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
         fecha_generacion: form.fecha_generacion,
         fecha_vencimiento: form.fecha_vencimiento || null,
         centro_costo: form.centro_costo.trim() || null,
-        periodo: form.periodo.trim() || null,
+        periodo_desde: form.periodo_desde || null,
+        periodo_hasta: form.periodo_hasta || null,
         lugar: form.lugar.trim() || null,
         nota: form.nota.trim() || null,
         items: items.filter((it) => it.item).map((it) => ({ item: it.item, cantidad: Number(it.cantidad), vr_unit: Number(it.vr_unit) })),
@@ -150,8 +152,8 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
     setError(null); setOk(null);
     const patch: Record<string, unknown> = { id: row.id, estado };
     if (estado === "pagada" && !row.numero_factura) {
-      const num = window.prompt("Número de factura / soporte de pago (opcional):");
-      if (num) { patch.numero_factura = num; patch.fecha_factura = new Date().toISOString().slice(0, 10); }
+      const num = window.prompt("Número de la factura (opcional):");
+      if (num) { patch.numero_factura = num; }
     }
     try {
       const p = await llamar({ method: "PATCH", body: JSON.stringify(patch) });
@@ -172,7 +174,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
   }
 
   // Carga de acta / migo: abre el selector de archivo y envía el documento
-  const pedirArchivo = (id: string, campo: "acta" | "migo") => {
+  const pedirArchivo = (id: string, campo: "acta" | "migo" | "factura") => {
     pendienteSubida.current = { id, campo };
     fileRef.current?.click();
   };
@@ -189,30 +191,35 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
       const p = await llamar({ method: "PATCH", body: JSON.stringify({ id: destino.id, [destino.campo]: adj }) });
       if (p) {
         setRows((rs) => rs.map((r) => (r.id === p.id ? p : r)));
-        setOk(p.estado === "pendiente_pago" && p.acta && p.migo ? `${destino.campo === "acta" ? "Acta" : "Migo"} cargado. La prefactura ${p.numero} pasó a Pendiente de pago.` : `${destino.campo === "acta" ? "Acta" : "Migo"} cargado en ${p.numero}.`);
+        const nombre = LABEL_ADJ[destino.campo];
+        const cambio = p.estado !== rows.find((r) => r.id === p.id)?.estado ? ` La prefactura ${p.numero} pasó a ${(ESTADOS[p.estado] ?? { label: p.estado }).label}.` : "";
+        setOk(`${nombre} cargad${destino.campo === "factura" ? "a" : "o"} en ${p.numero}.${cambio}`);
       }
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setSubiendo(null); pendienteSubida.current = null; }
   }
-  async function quitarAdjunto(row: PrefacturaRow, campo: "acta" | "migo") {
-    if (!window.confirm(`¿Quitar el ${campo === "acta" ? "acta" : "migo"} de ${row.numero}?`)) return;
+  async function quitarAdjunto(row: PrefacturaRow, campo: "acta" | "migo" | "factura") {
+    if (!window.confirm(`¿Quitar ${campo === "factura" ? "la factura" : "el " + campo} de ${row.numero}?`)) return;
     try {
       const p = await llamar({ method: "PATCH", body: JSON.stringify({ id: row.id, [campo]: null }) });
       if (p) setRows((rs) => rs.map((r) => (r.id === row.id ? p : r)));
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }
 
-  const Adjunto = ({ r, campo }: { r: PrefacturaRow; campo: "acta" | "migo" }) => {
+  const LABEL_ADJ = { acta: "Acta", migo: "Migo", factura: "Factura" } as const;
+  const Adjunto = ({ r, campo }: { r: PrefacturaRow; campo: "acta" | "migo" | "factura" }) => {
     const a = r[campo];
-    const label = campo === "acta" ? "Acta" : "Migo";
+    const label = LABEL_ADJ[campo];
+    // La factura solo se adjunta cuando ya está "Por facturar" (acta y migo listos)
+    const puedeCargar = campo === "factura" ? r.estado === "por_facturar" || r.estado === "pendiente_pago" : ACTIVAS.has(r.estado);
     const busy = subiendo === `${r.id}:${campo}`;
     return a ? (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
         <button className="badge ok" style={{ border: "none", cursor: "pointer", font: "inherit" }} title={`Abrir ${a.name}`} onClick={() => abrirAdjunto(a)}>✓ {label}</button>
-        {ACTIVAS.has(r.estado) && <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} title={`Quitar ${label.toLowerCase()}`} onClick={() => void quitarAdjunto(r, campo)}>×</button>}
+        {puedeCargar && <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} title={`Quitar ${label.toLowerCase()}`} onClick={() => void quitarAdjunto(r, campo)}>×</button>}
       </span>
     ) : (
-      <button className="btn btn-ghost btn-sm" disabled={busy || demo || !ACTIVAS.has(r.estado)} onClick={() => pedirArchivo(r.id, campo)} title={`Cargar ${label.toLowerCase()} (PDF o imagen)`}>
+      <button className="btn btn-ghost btn-sm" disabled={busy || demo || !puedeCargar} onClick={() => pedirArchivo(r.id, campo)} title={campo === "factura" && !puedeCargar ? "Primero carga el acta y el migo" : `Cargar ${label.toLowerCase()} (PDF o imagen)`}>
         {busy ? "Subiendo…" : `Cargar ${label}`}
       </button>
     );
@@ -235,7 +242,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
         <div className="kpi">
           <div className="kpi-head"><span className="kpi-ico s-ok"><IconCheck /></span><span className="kpi-label">Pendiente de pago</span></div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(totalPendientePago)}</div>
-          <div className="kpi-foot">con acta y migo cargados</div>
+          <div className="kpi-foot">{COP.format(activas.filter((r) => r.estado === "por_facturar").reduce((s, r) => s + Number(r.valor_base), 0))} por facturar (acta y migo listos)</div>
         </div>
         <div className="kpi">
           <div className="kpi-head"><span className={`kpi-ico ${masAntigua > 30 ? "s-high" : masAntigua > 15 ? "s-warn" : ""}`}><IconCoins /></span><span className="kpi-label">Más antigua sin pagar</span></div>
@@ -271,18 +278,23 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
             </div>
             <div className="drawer-body">
         <form onSubmit={guardar} style={{ display: "grid", gap: 12 }}>
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-            <input className="input" readOnly value={editando ? editando.numero : proximoNumero} title="Se asigna automáticamente de forma consecutiva" style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
-            <select className="input" value={form.contrato} onChange={(e) => { setForm((f) => ({ ...f, contrato: e.target.value as typeof form.contrato })); setItems([{ ...ITEM0 }]); }}>
-              <option value="alquiler">Contrato Alquiler</option>
-              <option value="emergencia">Otro Sí / Emergencia</option>
-            </select>
-            <label className="field">Generación *<input className="input" required type="date" value={form.fecha_generacion} onChange={setF("fecha_generacion")} /></label>
-            <label className="field">Vencimiento<input className="input" type="date" value={form.fecha_vencimiento} onChange={setF("fecha_vencimiento")} /></label>
-            <input className="input" placeholder="Centro de costo AAA (ej. MANTENIMIENTO, ASEO)" value={form.centro_costo} onChange={setF("centro_costo")} />
-            <input className="input" placeholder="Período (ej. 21 al 25 de julio)" value={form.periodo} onChange={setF("periodo")} />
-            <input className="input" placeholder="Lugar del servicio" value={form.lugar} onChange={setF("lugar")} />
-            <input className="input" placeholder="Nota / observaciones" value={form.nota} onChange={setF("nota")} />
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+            <label className="field">N° de prefactura
+              <input className="input" readOnly value={editando ? editando.numero : proximoNumero.replace(" (automático)", "")} title="Se asigna automáticamente de forma consecutiva" style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
+            </label>
+            <label className="field">Contrato *
+              <select className="input" value={form.contrato} onChange={(e) => { setForm((f) => ({ ...f, contrato: e.target.value as typeof form.contrato })); setItems([{ ...ITEM0 }]); }}>
+                <option value="alquiler">Contrato Alquiler</option>
+                <option value="emergencia">Otro Sí / Emergencia</option>
+              </select>
+            </label>
+            <label className="field">Fecha de generación *<input className="input" required type="date" value={form.fecha_generacion} onChange={setF("fecha_generacion")} /></label>
+            <label className="field">Fecha de vencimiento<input className="input" type="date" value={form.fecha_vencimiento} onChange={setF("fecha_vencimiento")} /></label>
+            <label className="field">Período · desde<input className="input" type="date" value={form.periodo_desde} max={form.periodo_hasta || undefined} onChange={setF("periodo_desde")} /></label>
+            <label className="field">Período · hasta<input className="input" type="date" value={form.periodo_hasta} min={form.periodo_desde || undefined} onChange={setF("periodo_hasta")} /></label>
+            <label className="field">Centro de costo AAA<input className="input" placeholder="Ej. MANTENIMIENTO, ASEO" value={form.centro_costo} onChange={setF("centro_costo")} /></label>
+            <label className="field">Lugar del servicio<input className="input" placeholder="Ej. POCITOS" value={form.lugar} onChange={setF("lugar")} /></label>
+            <label className="field" style={{ gridColumn: "1 / -1" }}>Nota / observaciones<input className="input" value={form.nota} onChange={setF("nota")} /></label>
           </div>
 
           <div className="section-title" style={{ margin: "4px 0 0" }}>Ítems — nombres exactos de Herpro (así cruzan al facturar)</div>
@@ -331,7 +343,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
               <th style={{ textAlign: "right" }}>Con IVA</th>
               <th>Antigüedad</th>
               <th>Estado</th>
-              <th>Acta / Migo</th>
+              <th>Acta / Migo / Factura</th>
               <th></th>
             </tr>
           </thead>
@@ -361,6 +373,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
                       <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                         <Adjunto r={r} campo="acta" />
                         <Adjunto r={r} campo="migo" />
+                        <Adjunto r={r} campo="factura" />
                       </span>
                     </td>
                     <td style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
@@ -372,7 +385,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
                           <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void cambiarEstado(r, "rechazada")}>Rechazar</button>
                         )}
                         {(r.estado === "rechazada" || r.estado === "pagada") && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => void cambiarEstado(r, r.acta && r.migo ? "pendiente_pago" : "pendiente_acta_migo")}>Reabrir</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => void cambiarEstado(r, r.factura ? "pendiente_pago" : r.acta && r.migo ? "por_facturar" : "pendiente_acta_migo")}>Reabrir</button>
                         )}
                         <button className="btn btn-ghost btn-sm" onClick={() => abrirEdicion(r)}>Editar</button>
                         <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void eliminar(r)}>Eliminar</button>
