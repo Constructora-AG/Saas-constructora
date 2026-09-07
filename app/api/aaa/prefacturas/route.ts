@@ -219,7 +219,23 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
   if (!b.id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
-  const { error } = await supabaseAdmin().from("aaa_prefacturas").delete().eq("id", b.id);
+  const supa = supabaseAdmin();
+  const { data: row } = await supa.from("aaa_prefacturas").select("numero, servicios").eq("id", b.id).maybeSingle();
+  const { error } = await supa.from("aaa_prefacturas").delete().eq("id", b.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  // Prefactura de Transporte AAA: liberar los servicios que tenía incluidos
+  const servicios = Array.isArray(row?.servicios) ? (row!.servicios as Array<{ monthKey: string; id: string }>) : [];
+  const porMes = new Map<string, Set<string>>();
+  servicios.forEach((s) => { if (!porMes.has(s.monthKey)) porMes.set(s.monthKey, new Set()); porMes.get(s.monthKey)!.add(s.id); });
+  for (const [mk, ids] of porMes) {
+    const key = `services:${mk}`;
+    const { data: kv } = await supa.from("transporte_kv").select("value").eq("key", key).maybeSingle();
+    if (!kv?.value) continue;
+    try {
+      const arr = JSON.parse(String(kv.value)) as Array<{ id: string; prefactura?: string | null }>;
+      const next = arr.map((s) => (ids.has(s.id) && s.prefactura === row?.numero ? { ...s, prefactura: null } : s));
+      await supa.from("transporte_kv").upsert({ key, value: JSON.stringify(next) }, { onConflict: "key" });
+    } catch { /* si el mes no se puede leer, se deja como está */ }
+  }
+  return NextResponse.json({ ok: true, liberados: servicios.length });
 }
