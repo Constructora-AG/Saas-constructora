@@ -87,7 +87,7 @@ export function porCreativo(leads: Lead[]): PorCreativo[] {
     }
     if (!c.titulo && l.ad_titulo) c.titulo = l.ad_titulo;
     if (!c.url && l.ad_url) c.url = l.ad_url;
-    if (!c.miniatura && l.ad_miniatura) c.miniatura = l.ad_miniatura;
+    if (l.ad_miniatura && (!c.miniatura || (/\/storage\//.test(l.ad_miniatura) && !/\/storage\//.test(c.miniatura)))) c.miniatura = l.ad_miniatura;
     if (l.canal && !c.canales.includes(l.canal)) c.canales.push(l.canal);
     if (l.proyecto && !c.proyectos.includes(l.proyecto)) c.proyectos.push(l.proyecto);
     c.leads++;

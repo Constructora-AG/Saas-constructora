@@ -3,6 +3,7 @@ import { bi } from "@/lib/smarthome/client";
 import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
 import { PROJECTS } from "@/lib/smarthome/projects";
 import { mapDigitalRecord, mapProspectDetail } from "@/lib/marketing/smarthome";
+import { cachearMiniaturas } from "@/lib/marketing/miniaturas";
 
 const ALLOWED = new Set(PROJECTS.map((p) => p.name.trim().toLowerCase()));
 const permitido = (proyecto: unknown) => ALLOWED.has((proyecto ?? "").toString().trim().toLowerCase());
@@ -32,6 +33,10 @@ async function handler(req: NextRequest) {
   if (req.nextUrl.searchParams.get("estado")) {
     const { data } = await supa.from("mk_sync_estado").select("ultimo_ok, detalle").eq("clave", "marketing").maybeSingle();
     return NextResponse.json({ ultimo_ok: data?.ultimo_ok ?? null, detalle: data?.detalle ?? null });
+  }
+  // ?miniaturas=1 → solo guarda en Storage las miniaturas de anuncios aún vigentes
+  if (req.nextUrl.searchParams.get("miniaturas")) {
+    return NextResponse.json(await cachearMiniaturas(supa));
   }
   const errores: string[] = [];
   const inicio = Date.now();
@@ -65,7 +70,11 @@ async function handler(req: NextRequest) {
     errores.push(`prospectDetail: ${String(e)}`);
   }
 
-  const detalle = { leads, prospectos, errores: errores.slice(0, 10), segundos: Math.round((Date.now() - inicio) / 1000) };
+  // ── Miniaturas de anuncios → Storage (los enlaces de fbcdn caducan en días) ──
+  let miniaturas: { cacheadas: number; caducadas: number; reutilizadas: number } | null = null;
+  try { miniaturas = await cachearMiniaturas(supa); } catch (e) { errores.push(`miniaturas: ${String(e)}`); }
+
+  const detalle = { leads, prospectos, miniaturas, errores: errores.slice(0, 10), segundos: Math.round((Date.now() - inicio) / 1000) };
   if (leads || prospectos) {
     await supa.from("mk_sync_estado").upsert({ clave: "marketing", ultimo_ok: new Date().toISOString(), detalle }, { onConflict: "clave" });
   }

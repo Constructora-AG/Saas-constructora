@@ -396,12 +396,7 @@ function VistaMarketing({ leads, compradores, ventas, contexto }: { leads: Lead[
               <tr key={c.clave}>
                 <td style={{ maxWidth: 360 }}>
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    {c.miniatura ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={c.miniatura} alt="" width={44} height={44} style={{ objectFit: "cover", borderRadius: 6, flex: "none", background: "var(--surface-2)" }} referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="avatar" style={{ flex: "none" }}>{c.tipo === "video" ? "▶" : "AD"}</span>
-                    )}
+                    <Miniatura src={c.miniatura} tipo={c.tipo} />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600, whiteSpace: "normal" }}>{c.titulo}</div>
                       <div className="muted" style={{ fontSize: 11.5 }}>
@@ -660,6 +655,15 @@ function VistaGestion({ prospectos, contexto }: { prospectos: Prospecto[]; conte
       )}
     </>
   );
+}
+
+/** Miniatura del anuncio; si el enlace caducó (CDN de Facebook) muestra el marcador en lugar de una imagen rota. */
+function Miniatura({ src, tipo }: { src: string; tipo: string }) {
+  const [rota, setRota] = useState(false);
+  useEffect(() => { setRota(false); }, [src]);
+  if (!src || rota) return <span className="avatar" style={{ flex: "none" }} title={src ? "La imagen del anuncio ya no está disponible" : undefined}>{tipo === "video" ? "▶" : "AD"}</span>;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt="" width={44} height={44} style={{ objectFit: "cover", borderRadius: 6, flex: "none", background: "var(--surface-2)" }} referrerPolicy="no-referrer" onError={() => setRota(true)} />;
 }
 
 function Semaforo({ v }: { v: number | null }) {
