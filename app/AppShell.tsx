@@ -51,6 +51,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Administración",
     items: [
+      { href: "/asistente", label: "Asistente de gerencia", icon: <IconMessage />, modulo: "asistente" },
       { href: "/usuarios", label: "Usuarios y roles", icon: <IconActivity />, modulo: "usuarios" },
     ],
   },
@@ -71,6 +72,7 @@ const TITLES: Record<string, string> = {
   "/aaa/prefacturas": "Proyecto Triple A — Prefacturas",
   "/aaa": "Proyecto Triple A",
   "/usuarios": "Usuarios y roles de la plataforma",
+  "/asistente": "Asistente de gerencia (IA)",
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
