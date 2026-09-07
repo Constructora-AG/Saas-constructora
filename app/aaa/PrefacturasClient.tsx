@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { catalogoDe, CONTRATO_LABEL, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
+import { DIAS_HABILES_PAGO, diasHasta, sumarDiasHabiles } from "@/lib/aaa/pago";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
 import { ResponsiveTables } from "./ResponsiveTables";
 
@@ -103,6 +104,8 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
   const totalActivo = activas.reduce((s, r) => s + Number(r.valor_base), 0);
   const totalPendientePago = activas.filter((r) => r.estado === "pendiente_pago").reduce((s, r) => s + Number(r.valor_base), 0);
   const masAntigua = activas.reduce((m, r) => Math.max(m, diasDesde(r.fecha_generacion)), 0);
+  // Pendientes de pago con fecha estimada (factura + 45 días hábiles) ya vencida
+  const pagosVencidos = rows.filter((r) => r.estado === "pendiente_pago" && (diasHasta(sumarDiasHabiles(r.fecha_factura)) ?? 1) < 0);
   const totalForm = items.reduce((s, it) => s + (Number(it.cantidad) || 0) * (Number(it.vr_unit) || 0), 0);
 
   const setF = (k: keyof typeof FORM0) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -268,7 +271,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
         <div className="kpi">
           <div className="kpi-head"><span className="kpi-ico s-ok"><IconCheck /></span><span className="kpi-label">Pendiente de pago</span></div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(totalPendientePago)}</div>
-          <div className="kpi-foot">{COP.format(activas.filter((r) => r.estado === "por_facturar").reduce((s, r) => s + Number(r.valor_base), 0))} por facturar (acta y migo listos)</div>
+          <div className="kpi-foot">{COP.format(activas.filter((r) => r.estado === "por_facturar").reduce((s, r) => s + Number(r.valor_base), 0))} por facturar · {pagosVencidos.length ? <span style={{ color: "var(--high)", fontWeight: 600 }}>{pagosVencidos.length} con pago vencido</span> : "pago a 45 días hábiles"}</div>
         </div>
         <div className="kpi">
           <div className="kpi-head"><span className={`kpi-ico ${masAntigua > 30 ? "s-high" : masAntigua > 15 ? "s-warn" : ""}`}><IconCoins /></span><span className="kpi-label">Más antigua sin pagar</span></div>
@@ -400,7 +403,21 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                     <td>{activa ? <span className={`badge ${agingCls(dias)}`}>{dias} días</span> : <span className="muted">—</span>}</td>
                     <td>
                       <span className={`badge ${est.cls}`}>{est.label}</span>
-                      {r.numero_factura && <span className="cc-dias">{r.numero_factura} · {fmtF(r.fecha_factura)}</span>}
+                      {r.numero_factura && <span className="cc-dias">Fact. {r.numero_factura} · {fmtF(r.fecha_factura)}</span>}
+                      {!r.numero_factura && r.fecha_factura && <span className="cc-dias">Facturada {fmtF(r.fecha_factura)}</span>}
+                      {r.estado === "pendiente_pago" && (() => {
+                        const pago = sumarDiasHabiles(r.fecha_factura);
+                        const d = diasHasta(pago);
+                        if (!pago || d === null) return <span className="cc-dias">Sin fecha de factura: no se puede estimar el pago</span>;
+                        return (
+                          <span className="cc-dias" title={`${DIAS_HABILES_PAGO} días hábiles desde la factura`}>
+                            Pago estimado {fmtF(pago)} ·{" "}
+                            <span className={`badge ${d < 0 ? "high" : d <= 7 ? "warn" : "ok"}`} style={{ padding: "1px 6px", fontSize: 10.5 }}>
+                              {d < 0 ? `vencido hace ${-d} día(s)` : d === 0 ? "vence hoy" : `en ${d} día(s)`}
+                            </span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
