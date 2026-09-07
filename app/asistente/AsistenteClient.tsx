@@ -95,7 +95,7 @@ export function AsistenteClient() {
       <section className="asis-main">
         {!configurado && (
           <div className="info-bar" style={{ background: "var(--high-soft)", borderColor: "#eccaca", color: "var(--high)" }}>
-            <IconInfo /><div><b>El asistente aún no está activo.</b> Falta configurar la clave de la API de Anthropic (ANTHROPIC_API_KEY) en el servidor.</div>
+            <IconInfo /><div><b>El asistente aún no está activo.</b> Falta configurar la clave de la API de DeepSeek (DEEPSEEK_API_KEY) en el servidor.</div>
           </div>
         )}
         <div className="asis-chat">

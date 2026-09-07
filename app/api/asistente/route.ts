@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
 import { puedeVer, type RolPlataforma } from "@/lib/auth/modulos";
 import { sistemaAsistente } from "@/lib/asistente/contexto";
@@ -15,8 +14,27 @@ export const maxDuration = 300;
 //   DELETE /api/asistente?id=…       → elimina la conversación
 // Solo usuarios con el módulo `asistente` (superadmin o extra otorgado).
 // ════════════════════════════════════════════════════════════════════
-const MODEL = process.env.ASISTENTE_MODEL || "claude-opus-5";
+// Proveedor: cualquier API compatible con OpenAI (chat/completions + tools).
+// Por defecto DeepSeek (deepseek-chat). Variables: DEEPSEEK_API_KEY,
+// ASISTENTE_BASE_URL (opcional), ASISTENTE_MODEL (opcional).
+const API_KEY = process.env.DEEPSEEK_API_KEY || process.env.ASISTENTE_API_KEY;
+const BASE_URL = (process.env.ASISTENTE_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
+const MODEL = process.env.ASISTENTE_MODEL || "deepseek-chat";
 const MAX_PASOS = 12;
+
+interface ChatMsg { role: "system" | "user" | "assistant" | "tool"; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string }
+interface ToolCall { id: string; type: "function"; function: { name: string; arguments: string } }
+async function chat(messages: ChatMsg[], tools: unknown[]): Promise<{ content: string; tool_calls: ToolCall[] }> {
+  const res = await fetch(`${BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+    body: JSON.stringify({ model: MODEL, messages, tools, tool_choice: "auto", temperature: 0.2, max_tokens: 6000 }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j?.error?.message ?? `${res.status} ${res.statusText}`);
+  const m = j.choices?.[0]?.message ?? {};
+  return { content: typeof m.content === "string" ? m.content : "", tool_calls: Array.isArray(m.tool_calls) ? m.tool_calls : [] };
+}
 
 interface Paso { proposito: string; sql: string; filas: number; error?: string }
 interface Mensaje { role: "user" | "assistant"; content: string; pasos?: Paso[]; at: string }
@@ -43,7 +61,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
   }
   const { data } = await supa.from("asistente_conversaciones").select("id, titulo, updated_at").eq("usuario_id", u.id).order("updated_at", { ascending: false }).limit(50);
-  return NextResponse.json({ conversaciones: data ?? [], configurado: Boolean(process.env.ANTHROPIC_API_KEY) });
+  return NextResponse.json({ conversaciones: data ?? [], configurado: Boolean(API_KEY) });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -58,8 +76,7 @@ export async function DELETE(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const u = await usuarioActual();
   if (!u) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "El asistente no está configurado: falta la clave ANTHROPIC_API_KEY en el servidor." }, { status: 503 });
+  if (!API_KEY) return NextResponse.json({ error: "El asistente no está configurado: falta la clave DEEPSEEK_API_KEY en el servidor." }, { status: 503 });
   const body = await req.json().catch(() => ({}));
   const mensaje = String(body.mensaje ?? "").trim();
   if (!mensaje) return NextResponse.json({ error: "Escribe una pregunta." }, { status: 400 });
@@ -73,52 +90,56 @@ export async function POST(req: NextRequest) {
     if (!data) id = null; else historial = (data.mensajes as Mensaje[]) ?? [];
   }
 
-  // Bucle de herramientas
-  const client = new Anthropic({ apiKey });
-  const tools: Anthropic.Tool[] = [{
-    name: "consultar_sql",
-    description: "Ejecuta una consulta SELECT de solo lectura sobre la base de datos de la plataforma y devuelve las filas en JSON (máximo 300).",
-    input_schema: {
-      type: "object",
-      properties: {
-        proposito: { type: "string", description: "Qué buscas con la consulta, en una frase (se muestra al usuario)." },
-        sql: { type: "string", description: "Consulta SQL PostgreSQL. Solo SELECT/WITH, sin punto y coma." },
+  // Bucle de herramientas (formato OpenAI)
+  const tools = [{
+    type: "function",
+    function: {
+      name: "consultar_sql",
+      description: "Ejecuta una consulta SELECT de solo lectura sobre la base de datos de la plataforma y devuelve las filas en JSON (máximo 300).",
+      parameters: {
+        type: "object",
+        properties: {
+          proposito: { type: "string", description: "Qué buscas con la consulta, en una frase (se muestra al usuario)." },
+          sql: { type: "string", description: "Consulta SQL PostgreSQL. Solo SELECT/WITH, sin punto y coma." },
+        },
+        required: ["proposito", "sql"],
       },
-      required: ["proposito", "sql"],
     },
   }];
-  const mensajes: Anthropic.MessageParam[] = [
-    ...historial.slice(-16).map((m) => ({ role: m.role, content: m.content })),
+  const mensajes: ChatMsg[] = [
+    { role: "system", content: sistemaAsistente(u.nombre) },
+    ...historial.slice(-16).map((m) => ({ role: m.role, content: m.content }) as ChatMsg),
     { role: "user", content: mensaje },
   ];
   const pasos: Paso[] = [];
   let respuesta = "";
   try {
     for (let i = 0; i < MAX_PASOS; i++) {
-      const res = await client.messages.create({ model: MODEL, max_tokens: 6000, system: sistemaAsistente(u.nombre), tools, messages: mensajes });
-      const textos = res.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text);
-      const usos = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-      if (res.stop_reason !== "tool_use" || usos.length === 0) { respuesta = textos.join("\n").trim(); break; }
-      mensajes.push({ role: "assistant", content: res.content });
-      const resultados: Anthropic.ToolResultBlockParam[] = [];
-      for (const uso of usos) {
-        const inp = uso.input as { proposito?: string; sql?: string };
+      const res = await chat(mensajes, tools);
+      if (res.tool_calls.length === 0) { respuesta = res.content.trim(); break; }
+      mensajes.push({ role: "assistant", content: res.content || null, tool_calls: res.tool_calls });
+      for (const tc of res.tool_calls) {
+        let inp: { proposito?: string; sql?: string } = {};
+        try { inp = JSON.parse(tc.function.arguments || "{}"); } catch { inp = {}; }
         const sql = String(inp.sql ?? "");
+        if (tc.function.name !== "consultar_sql" || !sql) {
+          mensajes.push({ role: "tool", tool_call_id: tc.id, content: "ERROR: herramienta o argumentos inválidos" }); continue;
+        }
         const { data, error } = await supa.rpc("asistente_consulta", { q: sql });
         if (error) {
           pasos.push({ proposito: inp.proposito ?? "", sql, filas: 0, error: error.message });
-          resultados.push({ type: "tool_result", tool_use_id: uso.id, content: `ERROR: ${error.message}`, is_error: true });
+          mensajes.push({ role: "tool", tool_call_id: tc.id, content: `ERROR: ${error.message}` });
         } else {
           const filas = Array.isArray(data) ? data : [];
           pasos.push({ proposito: inp.proposito ?? "", sql, filas: filas.length });
           let txt = JSON.stringify(filas);
           if (txt.length > 40_000) txt = txt.slice(0, 40_000) + "… (truncado: agrega filtros o agrupa)";
-          resultados.push({ type: "tool_result", tool_use_id: uso.id, content: txt });
+          mensajes.push({ role: "tool", tool_call_id: tc.id, content: txt });
         }
       }
-      mensajes.push({ role: "user", content: resultados });
-      if (i === MAX_PASOS - 1) respuesta = textos.join("\n").trim() || "No alcancé a terminar el análisis. Intenta con una pregunta más acotada.";
+      if (i === MAX_PASOS - 1) respuesta = res.content.trim() || "No alcancé a terminar el análisis. Intenta con una pregunta más acotada.";
     }
+    if (!respuesta) respuesta = "No obtuve una respuesta del modelo. Intenta de nuevo.";
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: `El asistente no pudo responder: ${msg}` }, { status: 502 });

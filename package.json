@@ -10,7 +10,6 @@
     "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.124.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "2.47.10",
     "exceljs": "^4.4.0",
