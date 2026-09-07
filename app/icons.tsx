@@ -78,3 +78,6 @@ export const IconInfo = (p: P) => (
 export const IconDownload = (p: P) => (
   <svg {...base(p)}><path d="M12 3v12" /><path d="m7 11 5 4 5-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
 );
+export const IconMegaphone = (p: P) => (
+  <svg {...base(p)}><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z" /><path d="M15 9a4 4 0 0 1 0 6" /><path d="M18 6.5a8 8 0 0 1 0 11" /></svg>
+);

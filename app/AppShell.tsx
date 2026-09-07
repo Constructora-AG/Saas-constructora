@@ -1,7 +1,7 @@
 "use client";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout } from "./icons";
+import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout, IconMegaphone } from "./icons";
 import { useUsuario, ROL_LABELS } from "@/lib/auth/useUsuario";
 
 interface NavItem {
@@ -22,6 +22,12 @@ const NAV: { section: string; items: NavItem[] }[] = [
     ],
   },
   {
+    section: "Comercial",
+    items: [
+      { href: "/marketing", label: "Marketing y leads", icon: <IconMegaphone /> },
+    ],
+  },
+  {
     section: "Finanzas",
     items: [
       { href: "/aaa", label: "Proyecto Triple A", icon: <IconBuilding /> },
@@ -36,6 +42,7 @@ const TITLES: Record<string, string> = {
   "/cobranza": "Bitácora de cobranza",
   "/recaudo": "Recaudo por proyecto",
   "/supervision": "Vendedores",
+  "/marketing": "Marketing y gestión de leads",
   "/aaa/transporte": "Control Transporte AAA — Contrato IS No. 04-2026",
   "/aaa": "Proyecto Triple A",
 };

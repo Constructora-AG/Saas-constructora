@@ -2,10 +2,13 @@
 import { useEffect, useState } from "react";
 
 export type Range = { from: Date | null; to: Date | null };
-export type Preset = "hoy" | "mes" | "anio" | "todo" | "custom";
+export type Preset = "hoy" | "ayer" | "7d" | "30d" | "mes" | "anio" | "todo" | "custom";
 
 const PRESETS: [Preset, string][] = [
   ["hoy", "Hoy"],
+  ["ayer", "Ayer"],
+  ["7d", "7 días"],
+  ["30d", "30 días"],
   ["mes", "Este mes"],
   ["anio", "Este año"],
   ["todo", "Todo"],
@@ -18,6 +21,9 @@ export function rangeFor(preset: Preset, from?: string, to?: string): Range {
   const now = new Date();
   switch (preset) {
     case "hoy": return { from: startOfDay(now), to: endOfDay(now) };
+    case "ayer": { const y = new Date(now); y.setDate(y.getDate() - 1); return { from: startOfDay(y), to: endOfDay(y) }; }
+    case "7d": { const d = new Date(now); d.setDate(d.getDate() - 6); return { from: startOfDay(d), to: endOfDay(now) }; }
+    case "30d": { const d = new Date(now); d.setDate(d.getDate() - 29); return { from: startOfDay(d), to: endOfDay(now) }; }
     // Mes/año COMPLETOS (no solo hasta hoy): "debe recaudar este mes" = todo el mes.
     case "mes": return { from: startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)), to: endOfDay(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
     case "anio": return { from: startOfDay(new Date(now.getFullYear(), 0, 1)), to: endOfDay(new Date(now.getFullYear(), 11, 31)) };
