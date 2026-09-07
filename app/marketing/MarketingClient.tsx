@@ -62,17 +62,40 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
 
   async function sincronizar() {
     setSync("run");
-    setSyncMsg("Consultando Smarthome… puede tardar 1–3 minutos.");
+    setSyncMsg("Consultando Smarthome… puede tardar 1–2 minutos. No cierres esta pestaña.");
+    const inicio = Date.now();
+    const exito = (j: { leads: number; prospectos: number; segundos?: number; errores?: string[] }) => {
+      setSync("ok");
+      setSyncMsg(`Listo: ${NUM.format(j.leads)} leads y ${NUM.format(j.prospectos)} prospectos${j.segundos ? ` en ${j.segundos}s` : ""}${j.errores?.length ? ` · avisos: ${j.errores.join("; ")}` : ""}`);
+    };
     try {
-      const res = await fetch("/api/marketing/sync", { method: "POST" });
+      const res = await fetch("/api/marketing/sync", { method: "POST", keepalive: true });
       const j = await res.json();
       if (!res.ok || (!j.leads && !j.prospectos)) throw new Error(j.error ?? (j.errores ?? []).join("; ") ?? "sin datos");
-      setSync("ok");
-      setSyncMsg(`Listo: ${NUM.format(j.leads)} leads y ${NUM.format(j.prospectos)} prospectos en ${j.segundos}s${j.errores?.length ? ` · avisos: ${j.errores.join("; ")}` : ""}`);
+      exito(j);
       await cargar(range);
     } catch (e) {
+      // Si el navegador perdió la conexión (p. ej. "Failed to fetch"), la sincronización
+      // suele seguir corriendo en el servidor: consultamos su estado hasta 4 minutos.
+      const esRed = e instanceof TypeError;
+      if (esRed) {
+        setSyncMsg("Se perdió la conexión con el servidor; verificando si la sincronización terminó…");
+        for (let i = 0; i < 24; i++) {
+          await new Promise((r) => setTimeout(r, 10000));
+          try {
+            const r2 = await fetch("/api/marketing/sync?estado=1", { cache: "no-store" });
+            const s = await r2.json();
+            if (s?.ultimo_ok && new Date(s.ultimo_ok).getTime() >= inicio - 5000) {
+              const d = (s.detalle ?? {}) as { leads?: number; prospectos?: number; segundos?: number; errores?: string[] };
+              exito({ leads: d.leads ?? 0, prospectos: d.prospectos ?? 0, segundos: d.segundos, errores: d.errores });
+              await cargar(range);
+              return;
+            }
+          } catch { /* seguir esperando */ }
+        }
+      }
       setSync("err");
-      setSyncMsg(`No se pudo sincronizar: ${String(e)}`);
+      setSyncMsg(`No se pudo sincronizar: ${String(e)}. Vuelve a intentarlo; si persiste, revisa la conexión con Smarthome.`);
     }
   }
 

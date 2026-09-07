@@ -28,12 +28,19 @@ async function handler(req: NextRequest) {
   if (!(await autorizado(req))) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const supa = supabaseAdmin();
+  // ?estado=1 → solo devuelve el último estado registrado (lo usa la UI si se pierde la conexión)
+  if (req.nextUrl.searchParams.get("estado")) {
+    const { data } = await supa.from("mk_sync_estado").select("ultimo_ok, detalle").eq("clave", "marketing").maybeSingle();
+    return NextResponse.json({ ultimo_ok: data?.ultimo_ok ?? null, detalle: data?.detalle ?? null });
+  }
   const errores: string[] = [];
   const inicio = Date.now();
   let leads = 0;
   let prospectos = 0;
 
-  // ── Leads digitales (getDigitalRecords) ────────────────────────────────────
+  // Las dos fases (leads digitales y prospectos) corren EN PARALELO para
+  // acortar la sincronización (antes ~75 s en serie).
+  const faseLeads = (async () => {
   try {
     const digital = await bi.digitalRecords();
     const rows = digital.filter((r) => permitido(r.Project)).map(mapDigitalRecord);
@@ -45,8 +52,10 @@ async function handler(req: NextRequest) {
   } catch (e) {
     errores.push(`digitalRecords: ${String(e)}`);
   }
+  })();
 
   // ── Prospectos enriquecidos (getProspectDetail, todas las páginas) ─────────
+  const faseProspectos = (async () => {
   try {
     const detail = await bi.prospectDetail({ all: true, createdDate: "2015-01-01" });
     const rows = (detail as unknown as Record<string, unknown>[]).filter((r) => permitido(r.Proyecto)).map(mapProspectDetail);
@@ -58,6 +67,8 @@ async function handler(req: NextRequest) {
   } catch (e) {
     errores.push(`prospectDetail: ${String(e)}`);
   }
+  })();
+  await Promise.all([faseLeads, faseProspectos]);
 
   const detalle = { leads, prospectos, errores: errores.slice(0, 10), segundos: Math.round((Date.now() - inicio) / 1000) };
   if (leads || prospectos) {
