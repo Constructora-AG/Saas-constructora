@@ -426,10 +426,40 @@ function VistaGestion({ prospectos }: { prospectos: Prospecto[] }) {
   const t = useMemo(() => totalGestion(filas), [filas]);
   const vivos = t.recibidos - t.ventas - t.descartados;
 
-  const sinGestion = useMemo(() => prospectos
+  // ── Leads sin gestionar: filtros propios (proyecto / fechas), gráfica por período y paginación ──
+  const [sgProyecto, setSgProyecto] = useState("");
+  const [sgDesde, setSgDesde] = useState("");
+  const [sgHasta, setSgHasta] = useState("");
+  const [sgAgrup, setSgAgrup] = useState<"semana" | "mes" | "anio">("mes");
+  const [sgPagina, setSgPagina] = useState(1);
+  const SG_PAGE = 10;
+  const sgProyectos = useMemo(() => [...new Set(prospectos.map((p) => p.proyecto ?? "").filter(Boolean))].sort(), [prospectos]);
+  const enFiltro = (p: Prospecto) => (!sgProyecto || p.proyecto === sgProyecto) && (!sgDesde || (p.fecha_creacion ?? "") >= sgDesde) && (!sgHasta || (p.fecha_creacion ?? "").slice(0, 10) <= sgHasta);
+  const sgRecibidos = useMemo(() => prospectos.filter(enFiltro), [prospectos, sgProyecto, sgDesde, sgHasta]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sinGestionTodos = useMemo(() => sgRecibidos
     .filter((p) => !esCompra(p.ciclo, p.etapa, p.es_venta) && !esDescartado(p.ciclo) && !esContactado(p.etapa, p.acciones))
-    .sort((a, b) => (a.fecha_creacion ?? "").localeCompare(b.fecha_creacion ?? ""))
-    .slice(0, 60), [prospectos]);
+    .sort((a, b) => (a.fecha_creacion ?? "").localeCompare(b.fecha_creacion ?? "")), [sgRecibidos]);
+  useEffect(() => { setSgPagina(1); }, [sgProyecto, sgDesde, sgHasta, prospectos]);
+  const sgTotalPag = Math.max(1, Math.ceil(sinGestionTodos.length / SG_PAGE));
+  const sgPag = Math.min(sgPagina, sgTotalPag);
+  const sinGestion = useMemo(() => sinGestionTodos.slice((sgPag - 1) * SG_PAGE, sgPag * SG_PAGE), [sinGestionTodos, sgPag]);
+  // Serie por período: sin gestionar vs recibidos
+  const periodoDe = (iso: string | null | undefined): { key: string; label: string } | null => {
+    if (!iso) return null; const d = new Date(iso); if (isNaN(d.getTime())) return null;
+    const y = d.getFullYear(), m = d.getMonth();
+    if (sgAgrup === "anio") return { key: String(y), label: String(y) };
+    if (sgAgrup === "mes") return { key: `${y}-${String(m + 1).padStart(2, "0")}`, label: d.toLocaleDateString("es-CO", { month: "short", year: "2-digit" }) };
+    const lunes = new Date(d); lunes.setDate(d.getDate() - ((d.getDay() + 6) % 7)); lunes.setHours(0, 0, 0, 0);
+    return { key: lunes.toISOString().slice(0, 10), label: `S ${lunes.toLocaleDateString("es-CO", { day: "2-digit", month: "short" })}` };
+  };
+  const serieSg = useMemo(() => {
+    const m = new Map<string, { key: string; label: string; recibidos: number; sinGestion: number }>();
+    for (const p of sgRecibidos) { const k = periodoDe(p.fecha_creacion); if (!k) continue; const e = m.get(k.key) ?? { ...k, recibidos: 0, sinGestion: 0 }; e.recibidos++; m.set(k.key, e); }
+    for (const p of sinGestionTodos) { const k = periodoDe(p.fecha_creacion); if (!k) continue; const e = m.get(k.key); if (e) e.sinGestion++; }
+    const arr = [...m.values()].sort((a, b) => a.key.localeCompare(b.key));
+    return sgAgrup === "semana" ? arr.slice(-26) : sgAgrup === "mes" ? arr.slice(-24) : arr;
+  }, [sgRecibidos, sinGestionTodos, sgAgrup]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sgMax = Math.max(1, ...serieSg.map((s) => s.recibidos));
 
   return (
     <>
@@ -487,7 +517,48 @@ function VistaGestion({ prospectos }: { prospectos: Prospecto[] }) {
         </table>
       </div>
 
-      <div className="section-title">Leads sin gestionar (los más antiguos primero)</div>
+      <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span>Leads sin gestionar</span>
+        <span className="topbar-spacer" style={{ flex: 1 }} />
+        <span className="muted" style={{ fontSize: 12.5, textTransform: "none", letterSpacing: 0 }}>{NUM.format(sinGestionTodos.length)} sin atender de {NUM.format(sgRecibidos.length)} recibidos ({PCT(pct(sinGestionTodos.length, sgRecibidos.length))})</span>
+      </div>
+      <div className="toolbar" style={{ alignItems: "flex-end", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        <label className="field" style={{ minWidth: 200 }}>Proyecto
+          <select className="input" value={sgProyecto} onChange={(e) => setSgProyecto(e.target.value)}>
+            <option value="">Todos los proyectos</option>
+            {sgProyectos.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+        <label className="field">Llegaron desde<input className="input" type="date" value={sgDesde} onChange={(e) => setSgDesde(e.target.value)} /></label>
+        <label className="field">Hasta<input className="input" type="date" value={sgHasta} onChange={(e) => setSgHasta(e.target.value)} /></label>
+        {(sgProyecto || sgDesde || sgHasta) && <button className="btn btn-ghost btn-sm" onClick={() => { setSgProyecto(""); setSgDesde(""); setSgHasta(""); }}>Limpiar filtros</button>}
+        <span className="topbar-spacer" style={{ flex: 1 }} />
+        <div className="segmented">
+          {([["semana", "Por semana"], ["mes", "Por mes"], ["anio", "Por año"]] as const).map(([k, l]) => (
+            <button key={k} className={`seg${sgAgrup === k ? " active" : ""}`} onClick={() => setSgAgrup(k)}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Gráfica: leads sin gestionar por período (barra clara = recibidos, barra oscura = sin gestionar) */}
+      <div className="chart-card" style={{ marginBottom: 18 }}>
+        <div className="chart-title">Leads no atendidos por {sgAgrup === "semana" ? "semana" : sgAgrup === "mes" ? "mes" : "año"}</div>
+        <div className="chart-sub">Barra clara = leads recibidos en el período · barra oscura = los que siguen sin ninguna gestión. Los períodos se calculan por la fecha en que llegó el lead.</div>
+        {serieSg.length === 0 ? <div className="muted" style={{ padding: 12 }}>Sin datos para el filtro.</div> : (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${serieSg.length}, minmax(0, 1fr))`, gap: 6, alignItems: "end", height: 190, padding: "8px 4px 0" }}>
+            {serieSg.map((s) => (
+              <div key={s.key} title={`${s.label}: ${s.sinGestion} sin gestionar de ${s.recibidos} recibidos (${PCT(pct(s.sinGestion, s.recibidos))})`} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", minWidth: 0 }}>
+                <span className="num" style={{ fontSize: 11, fontWeight: 700, color: s.sinGestion ? "var(--high)" : "var(--muted)", marginBottom: 2 }}>{s.sinGestion}</span>
+                <div style={{ position: "relative", width: "100%", height: `${Math.max(2, (s.recibidos / sgMax) * 140)}px`, background: "var(--brand-soft)", borderRadius: "4px 4px 0 0" }}>
+                  <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${s.recibidos ? (s.sinGestion / s.recibidos) * 100 : 0}%`, background: "var(--high)", borderRadius: "4px 4px 0 0", opacity: .85 }} />
+                </div>
+                <span className="muted" style={{ fontSize: 10.5, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="table-wrap table-scroll">
         <table className="clean">
           <thead><tr><th>Lead</th><th>Proyecto</th><th>Fuente</th><th>Asesor</th><th>Llegó</th><th>Hace</th><th>Semáforo</th></tr></thead>
@@ -505,10 +576,24 @@ function VistaGestion({ prospectos }: { prospectos: Prospecto[] }) {
                 <td><Semaforo v={p.seguimiento} /></td>
               </tr>
             ))}
-            {sinGestion.length === 0 && <tr><td colSpan={7} className="muted" style={{ textAlign: "center", padding: 24 }}>Todos los leads del período tienen al menos una gestión.</td></tr>}
+            {sinGestion.length === 0 && <tr><td colSpan={7} className="muted" style={{ textAlign: "center", padding: 24 }}>Todos los leads del filtro tienen al menos una gestión.</td></tr>}
           </tbody>
         </table>
       </div>
+      {sinGestionTodos.length > SG_PAGE && (
+        <div className="pager">
+          <span className="muted">Mostrando {(sgPag - 1) * SG_PAGE + 1}–{Math.min(sinGestionTodos.length, sgPag * SG_PAGE)} de {NUM.format(sinGestionTodos.length)} leads sin gestionar</span>
+          <span className="topbar-spacer" style={{ flex: 1 }} />
+          <button className="btn btn-ghost btn-sm" disabled={sgPag <= 1} onClick={() => setSgPagina(sgPag - 1)}>‹ Anterior</button>
+          {[...new Set([1, sgTotalPag, sgPag - 1, sgPag, sgPag + 1])].filter((p) => p >= 1 && p <= sgTotalPag).sort((a, b) => a - b).map((p, i, arr) => (
+            <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {i > 0 && arr[i - 1] !== p - 1 && <span className="muted">…</span>}
+              <button className={`btn btn-sm ${p === sgPag ? "btn-primary" : "btn-ghost"}`} onClick={() => setSgPagina(p)}>{p}</button>
+            </span>
+          ))}
+          <button className="btn btn-ghost btn-sm" disabled={sgPag >= sgTotalPag} onClick={() => setSgPagina(sgPag + 1)}>Siguiente ›</button>
+        </div>
+      )}
     </>
   );
 }
