@@ -55,14 +55,14 @@ const seqDe = (s: Servicio) => Number((s as unknown as { seq?: number }).seq ?? 
 const COLUMNAS: ReadonlyArray<Columna> = [
   { id: "fecha", label: "Fecha", fija: true, w: 7 },
   { id: "tipo", label: "Tipo", w: 7 },
-  { id: "area", label: "Área AAA", w: 12 },
-  { id: "placa", label: "Placa", w: 6 },
+  { id: "area", label: "Área AAA", w: 11 },
+  { id: "placa", label: "Placa", w: 7 },
   { id: "cap", label: "Cap.", w: 5, num: true },
   { id: "conductor", label: "Conductor", w: 10 },
   { id: "operario", label: "Operario", w: 9 },
   { id: "equipo", label: "Equipo", w: 11 },
   { id: "destino", label: "Destino", w: 12 },
-  { id: "valor", label: "Valor", w: 8, num: true },
+  { id: "valor", label: "Valor", w: 9, num: true },
   { id: "peajes", label: "Peajes", w: 6, num: true },
   { id: "soportes", label: "Soportes", w: 11 },
   { id: "vobo", label: "V°B°", w: 4 },
@@ -70,7 +70,7 @@ const COLUMNAS: ReadonlyArray<Columna> = [
   { id: "aprobo", label: "Aprobó", w: 7 },
   { id: "acciones", label: "", fija: true, w: 4 },
 ];
-const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "peajes", "aprobo"];
+const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "operario", "peajes", "aprobo"];
 
 /** Descripción de un servicio como ítem de prefactura. */
 const descripcionServicio = (s: Servicio) =>
@@ -433,7 +433,7 @@ export function RegistrosView({ t }: ViewProps) {
                   {ver("area") && <td title={areaAAADe(s) || ""}><span className="clamp">{areaAAADe(s) || "—"}</span></td>}
                   {ver("placa") && (
                     <td>
-                      <b>{s.plate || "—"}</b>
+                      <b className="nowrap">{s.plate || "—"}</b>
                       {!ver("cap") && s.capacity !== "" && s.capacity != null && <span className="sub">{num(s.capacity)} T</span>}
                     </td>
                   )}
@@ -451,7 +451,7 @@ export function RegistrosView({ t }: ViewProps) {
                   )}
                   {ver("valor") && (
                     <td className="num" style={{ textAlign: "right" }}>
-                      <b>{fmtCOP(s.value)}</b>
+                      <b className="nowrap">{fmtCOP(s.value)}</b>
                       {!ver("peajes") && num(s.tolls) > 0 && <span className="sub">+ {fmtCOP(s.tolls)} peajes</span>}
                     </td>
                   )}
