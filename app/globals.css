@@ -586,3 +586,21 @@ table.tbl-fit td.row-actions { padding-right: 6px; display: table-cell; }
 .asis-md code { background: var(--surface); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
 .asis-md hr { border: 0; border-top: 1px solid var(--border); margin: 10px 0; }
 @media (max-width: 900px) { .asis { grid-template-columns: 1fr; } .asis-list { max-height: 160px; } }
+
+/* ── Burbuja flotante del asistente ────────────────────────────────── */
+.burbuja-btn { position: fixed; right: 22px; bottom: 22px; z-index: 60; width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 8px 24px rgba(0,0,0,.22); cursor: pointer; transition: transform .15s; }
+.burbuja-btn:hover { transform: scale(1.06); }
+.burbuja-btn svg { width: 24px; height: 24px; }
+.burbuja-panel { position: fixed; right: 22px; bottom: 90px; z-index: 60; width: min(520px, calc(100vw - 32px)); height: min(680px, calc(100vh - 120px)); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column; overflow: hidden; }
+.burbuja-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.burbuja-body { flex: 1; min-height: 0; display: flex; }
+.burbuja-body .asis { grid-template-columns: 1fr; gap: 0; min-height: 0; flex: 1; }
+.burbuja-body .asis.compacto .asis-side { padding: 8px 10px; border-bottom: 1px solid var(--border); gap: 6px; }
+.burbuja-body .asis.compacto .asis-list { display: none; }
+.burbuja-body .asis-main { border: 0; border-radius: 0; min-height: 0; }
+.burbuja-body .asis-chat { padding: 12px; }
+.burbuja-body .asis-empty { margin: 8px 0; }
+.burbuja-body .asis-empty-t { font-size: 16px; }
+.burbuja-body .asis-sug { grid-template-columns: 1fr; }
+.burbuja-body .asis-bubble { font-size: 13.5px; }
+@media (max-width: 600px) { .burbuja-panel { right: 8px; bottom: 80px; width: calc(100vw - 16px); height: calc(100vh - 100px); } .burbuja-btn { right: 14px; bottom: 14px; } }

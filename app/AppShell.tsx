@@ -1,7 +1,8 @@
 "use client";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout, IconMegaphone } from "./icons";
+import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout, IconMegaphone, IconSettings } from "./icons";
+import { Burbuja } from "./asistente/Burbuja";
 import { useUsuario, ROL_LABELS } from "@/lib/auth/useUsuario";
 import { moduloDeRuta, puedeVer, rutaInicial } from "@/lib/auth/modulos";
 
@@ -51,7 +52,8 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Administración",
     items: [
-      { href: "/asistente", label: "Asistente de gerencia", icon: <IconMessage />, modulo: "asistente" },
+      { href: "/asistente", label: "Asistente IA", icon: <IconMessage />, modulo: "asistente" },
+      { href: "/configuracion-ia", label: "Configuración IA", icon: <IconSettings />, modulo: "configuracion_ia" },
       { href: "/usuarios", label: "Usuarios y roles", icon: <IconActivity />, modulo: "usuarios" },
     ],
   },
@@ -72,7 +74,8 @@ const TITLES: Record<string, string> = {
   "/aaa/prefacturas": "Proyecto Triple A — Prefacturas",
   "/aaa": "Proyecto Triple A",
   "/usuarios": "Usuarios y roles de la plataforma",
-  "/asistente": "Asistente de gerencia (IA)",
+  "/asistente": "Asistente IA",
+  "/configuracion-ia": "Configuración del Asistente IA",
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -190,6 +193,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })()}
         </div>
+        {usuario && <Burbuja />}
       </div>
     </div>
   );

@@ -26,3 +26,11 @@ begin
 end $$;
 revoke all on function public.asistente_consulta(text) from public, anon, authenticated;
 grant execute on function public.asistente_consulta(text) to service_role;
+create table if not exists public.app_config (
+  clave text primary key,
+  valor jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+alter table public.app_config enable row level security;
+grant all on public.app_config to service_role;

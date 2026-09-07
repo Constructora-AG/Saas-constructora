@@ -7,20 +7,29 @@ interface Paso { proposito: string; sql: string; filas: number; error?: string }
 interface Mensaje { role: "user" | "assistant"; content: string; pasos?: Paso[]; at: string }
 interface Conv { id: string; titulo: string; updated_at: string }
 
-const SUGERENCIAS = [
-  "¿Cómo está la cartera hoy? Resume mora por proyecto y los 10 clientes con mayor saldo en mora.",
-  "Informe de recaudo del mes actual comparado con el mes anterior, por proyecto.",
-  "¿Cuántos leads llegaron este mes, cuántos siguen sin gestionar y cómo va cada asesor?",
-  "Informe ejecutivo de ventas: unidades y valor vendido por proyecto y por torre o manzana.",
-  "Estado de las prefacturas a Triple A: cuáles están pendientes de pago y por qué valor.",
-  "Resumen de servicios de Transporte AAA del mes: cantidad, valor total y cuánto falta por prefacturar.",
-];
+const SUGERENCIAS: Record<string, string[]> = {
+  cartera: [
+    "¿Cómo está la cartera hoy? Resume mora por proyecto y los 10 clientes con mayor saldo en mora.",
+    "Informe de recaudo del mes actual comparado con el mes anterior, por proyecto.",
+  ],
+  vendedores: ["¿Cómo va cada asesor este mes: prospectos recibidos, gestiones y ventas?"],
+  marketing: [
+    "¿Cuántos leads llegaron este mes, cuántos siguen sin gestionar y cómo va cada asesor?",
+    "Informe ejecutivo de ventas: unidades y valor vendido por proyecto y por torre o manzana.",
+  ],
+  aaa: [
+    "Estado de las prefacturas a Triple A: cuáles están pendientes de pago y por qué valor.",
+    "Resumen de servicios de Transporte AAA del mes: cantidad, valor total y cuánto falta por prefacturar.",
+  ],
+};
+const AREA_NOMBRE: Record<string, string> = { cartera: "cartera, cobranza y recaudo", vendedores: "vendedores", marketing: "marketing, leads y ventas", aaa: "Proyecto Triple A" };
 
 const fechaCorta = (iso: string) => new Date(iso).toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
 
-export function AsistenteClient() {
+export function AsistenteClient({ compacto = false }: { compacto?: boolean }) {
   const [convs, setConvs] = useState<Conv[]>([]);
   const [configurado, setConfigurado] = useState(true);
+  const [areas, setAreas] = useState<string[]>([]);
   const [id, setId] = useState<string | null>(null);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [texto, setTexto] = useState("");
@@ -32,7 +41,7 @@ export function AsistenteClient() {
 
   const cargarLista = useCallback(async () => {
     const r = await fetch("/api/asistente"); const j = await r.json();
-    if (r.ok) { setConvs(j.conversaciones ?? []); setConfigurado(Boolean(j.configurado)); }
+    if (r.ok) { setConvs(j.conversaciones ?? []); setConfigurado(Boolean(j.configurado)); setAreas(j.areas ?? []); }
     else setError(j.error ?? "No se pudo cargar");
   }, []);
   useEffect(() => { void cargarLista(); }, [cargarLista]);
@@ -78,9 +87,15 @@ export function AsistenteClient() {
   };
 
   return (
-    <div className="asis">
+    <div className={`asis${compacto ? " compacto" : ""}`}>
       <aside className="asis-side">
         <button className="btn btn-primary" style={{ width: "100%" }} onClick={nueva}><IconMessage /> Nueva conversación</button>
+        {compacto && convs.length > 0 && (
+          <select className="input select-sm" value={id ?? ""} onChange={(e) => e.target.value && void abrir(e.target.value)}>
+            <option value="">Conversaciones anteriores…</option>
+            {convs.map((c) => <option key={c.id} value={c.id}>{fechaCorta(c.updated_at)} · {c.titulo}</option>)}
+          </select>
+        )}
         <div className="asis-list">
           {convs.map((c) => (
             <div key={c.id} className={`asis-conv${c.id === id ? " active" : ""}`} onClick={() => void abrir(c.id)}>
@@ -95,16 +110,16 @@ export function AsistenteClient() {
       <section className="asis-main">
         {!configurado && (
           <div className="info-bar" style={{ background: "var(--high-soft)", borderColor: "#eccaca", color: "var(--high)" }}>
-            <IconInfo /><div><b>El asistente aún no está activo.</b> Falta configurar la clave de la API de DeepSeek (DEEPSEEK_API_KEY) en el servidor.</div>
+            <IconInfo /><div><b>El asistente aún no está activo.</b> Gerencia debe cargar la clave de la API en el módulo Configuración IA.</div>
           </div>
         )}
         <div className="asis-chat">
           {mensajes.length === 0 && (
             <div className="asis-empty">
               <div className="asis-empty-t">¿Qué necesitas saber hoy?</div>
-              <div className="muted" style={{ marginBottom: 14 }}>Puedo consultar cartera, recaudo, ventas, leads y marketing, Transporte AAA, alquiler y prefacturas, y armar informes listos para descargar en PDF.</div>
+              <div className="muted" style={{ marginBottom: 14 }}>Puedo consultar {areas.length ? areas.map((a) => AREA_NOMBRE[a] ?? a).join(", ") : "la información de tus módulos"} y armar informes listos para descargar en PDF.</div>
               <div className="asis-sug">
-                {SUGERENCIAS.map((s) => <button key={s} className="asis-chip" onClick={() => void enviar(s)} disabled={busy || !configurado}>{s}</button>)}
+                {areas.flatMap((a) => SUGERENCIAS[a] ?? []).map((s) => <button key={s} className="asis-chip" onClick={() => void enviar(s)} disabled={busy || !configurado}>{s}</button>)}
               </div>
             </div>
           )}

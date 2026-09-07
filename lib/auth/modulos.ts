@@ -1,7 +1,8 @@
 // ════════════════════════════════════════════════════════════════════
 // Módulos de la plataforma y roles por sección.
-//   · superadmin → todo (incluye Usuarios y roles y el Asistente de gerencia,
-//     que además puede otorgarse como módulo extra a otra persona de gerencia).
+//   · superadmin → todo (incluye Usuarios y roles y Configuración IA).
+//   · El Asistente IA lo ven todos; su alcance de datos lo fija el rol
+//     (lib/asistente/alcance.ts).
 //   · operacion  → Resumen, Cartera, Bitácora, Recaudo, Vendedores.
 //   · comercial  → Marketing y leads.
 //   · finanzas   → Proyecto Triple A, Transporte AAA.
@@ -21,7 +22,7 @@ export const ROL_LABELS: Record<RolPlataforma, string> = {
 };
 
 export const ROL_DESC: Record<RolPlataforma, string> = {
-  superadmin: "Acceso total a todos los módulos, al Asistente de gerencia y a la administración de usuarios.",
+  superadmin: "Acceso total a todos los módulos, a toda la información del Asistente IA y a la administración de usuarios.",
   operacion: "Resumen, Cartera, Bitácora, Recaudo y Vendedores.",
   comercial: "Marketing y gestión de leads.",
   finanzas: "Proyecto Triple A, Transporte AAA y Contrato de Alquiler.",
@@ -46,16 +47,17 @@ export const MODULOS: Modulo[] = [
   { id: "aaa", label: "Proyecto Triple A", href: "/aaa", seccion: "Finanzas" },
   { id: "transporte", label: "Transporte AAA", href: "/aaa/transporte", seccion: "Finanzas" },
   { id: "alquiler", label: "Contrato de Alquiler", href: "/aaa/contrato-alquiler", seccion: "Finanzas" },
-  { id: "asistente", label: "Asistente de gerencia (IA)", href: "/asistente", seccion: "Administración" },
+  { id: "asistente", label: "Asistente IA", href: "/asistente", seccion: "Administración" },
+  { id: "configuracion_ia", label: "Configuración IA", href: "/configuracion-ia", seccion: "Administración", soloSuperadmin: true },
   { id: "usuarios", label: "Usuarios y roles", href: "/usuarios", seccion: "Administración", soloSuperadmin: true },
 ];
 
 /** Módulos que cada rol ve por defecto. */
 export const ROL_MODULOS: Record<RolPlataforma, string[]> = {
   superadmin: MODULOS.map((m) => m.id),
-  operacion: ["resumen", "cartera", "bitacora", "recaudo", "vendedores"],
-  comercial: ["marketing"],
-  finanzas: ["aaa", "transporte", "alquiler"],
+  operacion: ["resumen", "cartera", "bitacora", "recaudo", "vendedores", "asistente"],
+  comercial: ["marketing", "asistente"],
+  finanzas: ["aaa", "transporte", "alquiler", "asistente"],
 };
 
 /** Módulos otorgables como extra (todos menos los exclusivos de superadmin). */
