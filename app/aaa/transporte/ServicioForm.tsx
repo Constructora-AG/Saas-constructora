@@ -36,6 +36,7 @@ interface Campos {
   plateOtro: string;
   driverSel: string;
   operario: string;
+  transporteEquipo: boolean;
   driverOtro: string;
   equipmentSel: string;
   equipmentOtro: string;
@@ -96,7 +97,7 @@ function buildInit(args: {
     interventorSel: "", interventorOtro: "",
     areaAAASel: "", areaAAAOtro: "",
     plateSel: "", plateOtro: "",
-    driverSel: "", driverOtro: "", operario: "",
+    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false,
     equipmentSel: "", equipmentOtro: "",
     capacity: "", weight: "",
     pickup: "", destination: "", area: "",
@@ -126,6 +127,7 @@ function buildInit(args: {
       plateSel: sp.sel, plateOtro: sp.otro,
       driverSel: sd.sel, driverOtro: sd.otro,
       operario: src.operario ?? "",
+      transporteEquipo: !!src.transporteEquipo,
       equipmentSel: se.sel, equipmentOtro: se.otro,
       capacity: sv(src.capacity), weight: sv(src.weight),
       pickup: src.pickup ?? "", destination: src.destination ?? "", area: src.area ?? "",
@@ -251,6 +253,10 @@ export function ServicioForm({
   /** Alquiler: unitario de la tarifa elegida (valor hora máquina o valor del viaje de transporte). */
   const tarifaSel = (c: Campos) => tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas.find((r) => r.id === c.tarifaRuta) ?? null;
   const esPorHora = (c: Campos) => { const r = tarifaSel(c); return !!r && /\(HR\)|hora/i.test(r.label); };
+  /** Alquiler: la "ruta" guardada es la tarifa POR HORA de la zona; la de transporte se deriva por zona. */
+  const zonaDe = (label: string) => (/municipio/i.test(label) ? "Municipios" : "Barranquilla y área metropolitana");
+  const rutasHora = (c: Campos) => (tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas ?? []).filter((r) => /\(HR\)|hora/i.test(r.label));
+  const tarifaTransporte = (c: Campos) => { const h = tarifaSel(c); if (!h) return null; const z = zonaDe(h.label); return (tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas ?? []).find((r) => /transporte/i.test(r.label) && zonaDe(r.label) === z) ?? null; };
   const conValor = (next: Campos): Campos => {
     if (!tarifario) return next;
     if (esAlquiler) {
@@ -258,14 +264,15 @@ export function ServicioForm({
       if (!r) { setTarifaHint(null); return next; }
       const unit = num(r.unitario);
       const horas = respHours(next.hourReq, next.hourAtt);
-      if (esPorHora(next)) {
-        if (horas == null) { setTarifaHint(`Valor hora máquina: ${fmtCOP(unit)} — indica hora solicitada y atendida para calcular las horas.`); return { ...next, tolls: "0" }; }
-        const total = Math.round(unit * horas);
-        setTarifaHint(`${horas} h × ${fmtCOP(unit)} (hora máquina) = ${fmtCOP(total)}`);
-        return { ...next, value: String(total), tolls: "0" };
+      const tr = next.transporteEquipo ? tarifaTransporte(next) : null;
+      const vTr = tr ? num(tr.unitario) : 0;
+      if (horas == null) {
+        setTarifaHint(`Valor hora máquina: ${fmtCOP(unit)}${tr ? ` · transporte del equipo: ${fmtCOP(vTr)} por viaje` : ""} — indica hora solicitada y atendida para calcular las horas.`);
+        return { ...next, value: tr ? String(vTr) : next.value, tolls: "0" };
       }
-      setTarifaHint(`Transporte del equipo: ${fmtCOP(unit)} por viaje`);
-      return { ...next, value: String(unit), tolls: "0" };
+      const total = Math.round(unit * horas) + vTr;
+      setTarifaHint(`${horas} h × ${fmtCOP(unit)} (hora máquina)${tr ? ` + ${fmtCOP(vTr)} (transporte del equipo, 1 viaje)` : ""} = ${fmtCOP(total)}`);
+      return { ...next, value: String(total), tolls: "0" };
     }
     const c = computeValor(tarifario, next.tarifaCategoria || null, next.tarifaRuta || null, next.recNocturno, next.recDominical);
     if (!c) { setTarifaHint(null); return next; }
@@ -386,6 +393,8 @@ export function ServicioForm({
       tolls: esAlquiler ? "0" : f.tolls,
       horasMaquina: esAlquiler ? (respHours(f.hourReq, f.hourAtt) ?? "") : undefined,
       valorHora: esAlquiler && esPorHora(f) ? String(num(tarifaSel(f)?.unitario ?? 0)) : undefined,
+      transporteEquipo: esAlquiler ? f.transporteEquipo : undefined,
+      valorTransporte: esAlquiler && f.transporteEquipo ? String(num(tarifaTransporte(f)?.unitario ?? 0)) : undefined,
       photo: f.photo,
       approved: f.approved,
       invoiced: f.invoiced,
@@ -494,13 +503,13 @@ export function ServicioForm({
 
             {seccion(esAlquiler ? "Tarifa del contrato (equipo y zona — calcula el valor automáticamente)" : "Tarifa del pliego (opcional — calcula el valor automáticamente)")}
             <div style={gridAuto}>
-              <label className="field">Categoría del tarifario
+              <label className="field">{esAlquiler ? "Equipo (tarifario del contrato)" : "Categoría del tarifario"}
                 <select value={f.tarifaCategoria} onChange={(e) => cambiaCategoria(e.target.value)}>
                   <option value="">Tarifa manual (digitar el valor)</option>
                   {(tarifario?.categorias ?? []).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
               </label>
-              {catSel && (
+              {catSel && !esAlquiler && (
                 <label className="field">Ruta del pliego
                   <select value={f.tarifaRuta} onChange={(e) => cambiaRuta(e.target.value)}>
                     <option value="">— Selecciona la ruta —</option>
@@ -508,6 +517,24 @@ export function ServicioForm({
                       <option key={rt.id} value={rt.id}>{rt.id} · {rt.label} — {fmtCOP(num(rt.unitario))}</option>
                     ))}
                   </select>
+                </label>
+              )}
+              {catSel && esAlquiler && (
+                <label className="field">Zona del servicio
+                  <select value={f.tarifaRuta} onChange={(e) => cambiaRuta(e.target.value)}>
+                    <option value="">— Selecciona la zona —</option>
+                    {rutasHora(f).map((rt) => (
+                      <option key={rt.id} value={rt.id}>{zonaDe(rt.label)} — {fmtCOP(num(rt.unitario))} / hora</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {catSel && esAlquiler && f.tarifaRuta && (
+                <label className="field" style={{ justifyContent: "flex-end" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, marginTop: 20 }}>
+                    <input type="checkbox" checked={f.transporteEquipo} onChange={(e) => setF(conValor({ ...f, transporteEquipo: e.target.checked }))} />
+                    Incluye transporte del equipo{tarifaTransporte(f) ? ` (+${fmtCOP(num(tarifaTransporte(f)!.unitario))} por viaje)` : ""}
+                  </span>
                 </label>
               )}
             </div>
@@ -594,7 +621,7 @@ export function ServicioForm({
             <div style={gridAuto}>
               {esAlquiler && (
                 <label className="field">Valor hora máquina (COP) <span className="muted" style={{ fontWeight: 400 }}>· del tarifario</span>
-                  <input className="input num" readOnly value={tarifaSel(f) ? (esPorHora(f) ? fmtCOP(num(tarifaSel(f)!.unitario)) : `${fmtCOP(num(tarifaSel(f)!.unitario))} / viaje`) : "Selecciona equipo y zona"}
+                  <input className="input num" readOnly value={tarifaSel(f) ? `${fmtCOP(num(tarifaSel(f)!.unitario))} / hora` : "Selecciona equipo y zona"}
                     style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
                 </label>
               )}
