@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { catalogoDe, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
+import { ResponsiveTables } from "./ResponsiveTables";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
@@ -88,6 +89,12 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
   const [ok, setOk] = useState<string | null>(null);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [subiendo, setSubiendo] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    const cerrar = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.(".rowmenu")) setMenuId(null); };
+    document.addEventListener("mousedown", cerrar);
+    return () => document.removeEventListener("mousedown", cerrar);
+  }, []);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const pendienteSubida = useRef<{ id: string; campo: "acta" | "migo" | "factura" } | null>(null);
 
@@ -229,26 +236,23 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
   }
 
   const LABEL_ADJ = { acta: "Acta", migo: "Migo", factura: "Factura" } as const;
+  const puedeCargar = (r: PrefacturaRow, campo: "acta" | "migo" | "factura") =>
+    campo === "factura" ? r.estado === "por_facturar" || r.estado === "pendiente_pago" : ACTIVAS.has(r.estado);
   const Adjunto = ({ r, campo }: { r: PrefacturaRow; campo: "acta" | "migo" | "factura" }) => {
     const a = r[campo];
     const label = LABEL_ADJ[campo];
-    // La factura solo se adjunta cuando ya está "Por facturar" (acta y migo listos)
-    const puedeCargar = campo === "factura" ? r.estado === "por_facturar" || r.estado === "pendiente_pago" : ACTIVAS.has(r.estado);
     const busy = subiendo === `${r.id}:${campo}`;
+    if (busy) return <span className="badge" style={{ background: "var(--surface-2)", color: "var(--text-2)" }}>Subiendo {label}…</span>;
     return a ? (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-        <button className="badge ok" style={{ border: "none", cursor: "pointer", font: "inherit" }} title={`Abrir ${a.name}`} onClick={() => abrirAdjunto(a)}>✓ {label}</button>
-        {puedeCargar && <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} title={`Quitar ${label.toLowerCase()}`} onClick={() => void quitarAdjunto(r, campo)}>×</button>}
-      </span>
+      <button className="badge ok" style={{ border: "none", cursor: "pointer", font: "inherit" }} title={`Abrir ${a.name}`} onClick={() => abrirAdjunto(a)}>✓ {label}</button>
     ) : (
-      <button className="btn btn-ghost btn-sm" disabled={busy || demo || !puedeCargar} onClick={() => pedirArchivo(r.id, campo)} title={campo === "factura" && !puedeCargar ? "Primero carga el acta y el migo" : `Cargar ${label.toLowerCase()} (PDF o imagen)`}>
-        {busy ? "Subiendo…" : `Cargar ${label}`}
-      </button>
+      <span className="badge" style={{ background: "var(--surface-2)", color: "var(--muted)" }} title={`${label} pendiente`}>{label}</span>
     );
   };
 
   return (
-    <>
+    <div className="tx-mod">
+      <ResponsiveTables />
       <input ref={fileRef} type="file" accept="application/pdf,image/*" hidden onChange={(e) => void archivoElegido(e)} />
 
       <div className="kpis">
@@ -400,20 +404,31 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                         <Adjunto r={r} campo="factura" />
                       </span>
                     </td>
-                    <td style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
-                      <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
-                        {r.estado === "pendiente_pago" && (
-                          <button className="btn btn-primary btn-sm" onClick={() => void cambiarEstado(r, "pagada")}>Marcar pagada</button>
+                    <td className="row-actions" style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                      <div className={`rowmenu${menuId === r.id ? " open" : ""}`}>
+                        <button className="btn btn-ghost btn-sm rowmenu-btn" onClick={() => setMenuId(menuId === r.id ? null : r.id)} title="Acciones" aria-label="Acciones">⋯</button>
+                        {menuId === r.id && (
+                          <div className="rowmenu-list">
+                            {(["acta", "migo", "factura"] as const).map((campo) => (
+                              r[campo] ? (
+                                <button key={campo} onClick={() => { setMenuId(null); abrirAdjunto(r[campo]!); }}>Ver {LABEL_ADJ[campo].toLowerCase()}</button>
+                              ) : (
+                                <button key={campo} disabled={demo || !puedeCargar(r, campo)} title={campo === "factura" && !puedeCargar(r, campo) ? "Primero carga el acta y el migo" : ""} onClick={() => { setMenuId(null); pedirArchivo(r.id, campo); }}>Cargar {LABEL_ADJ[campo].toLowerCase()}</button>
+                              )
+                            ))}
+                            {(["acta", "migo", "factura"] as const).filter((c) => r[c] && puedeCargar(r, c)).map((campo) => (
+                              <button key={"q-" + campo} onClick={() => { setMenuId(null); void quitarAdjunto(r, campo); }}>Quitar {LABEL_ADJ[campo].toLowerCase()}</button>
+                            ))}
+                            {r.estado === "pendiente_pago" && <button onClick={() => { setMenuId(null); void cambiarEstado(r, "pagada"); }}>Marcar pagada</button>}
+                            {(r.estado === "rechazada" || r.estado === "pagada") && (
+                              <button onClick={() => { setMenuId(null); void cambiarEstado(r, r.factura ? "pendiente_pago" : r.acta && r.migo ? "por_facturar" : "pendiente_acta_migo"); }}>Reabrir</button>
+                            )}
+                            <button onClick={() => { setMenuId(null); abrirEdicion(r); }}>Editar</button>
+                            {activa && <button className="danger" onClick={() => { setMenuId(null); void cambiarEstado(r, "rechazada"); }}>Rechazar</button>}
+                            <button className="danger" onClick={() => { setMenuId(null); void eliminar(r); }}>Eliminar</button>
+                          </div>
                         )}
-                        {activa && (
-                          <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void cambiarEstado(r, "rechazada")}>Rechazar</button>
-                        )}
-                        {(r.estado === "rechazada" || r.estado === "pagada") && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => void cambiarEstado(r, r.factura ? "pendiente_pago" : r.acta && r.migo ? "por_facturar" : "pendiente_acta_migo")}>Reabrir</button>
-                        )}
-                        <button className="btn btn-ghost btn-sm" onClick={() => abrirEdicion(r)}>Editar</button>
-                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void eliminar(r)}>Eliminar</button>
-                      </span>
+                      </div>
                     </td>
                   </tr>
                   {open && (
@@ -446,7 +461,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
           </tbody>
         </table>
       </div>
-    </>
+    </div>
   );
 }
 
