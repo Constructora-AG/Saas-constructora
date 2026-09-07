@@ -66,10 +66,20 @@ export interface PrefacturaRow {
   lugar: string | null;
   items: PrefacturaItem[];
   valor_base: number;
+  /** pendiente_acta_migo (default) → pendiente_pago (al cargar acta y migo) → pagada | rechazada */
   estado: string;
   numero_factura: string | null;
   fecha_factura: string | null;
   nota: string | null;
+  /** Documentos cargados (base64) */
+  acta?: AdjuntoPrefactura | null;
+  migo?: AdjuntoPrefactura | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AdjuntoPrefactura {
+  name: string;
+  type: string;
+  dataUrl: string;
 }
