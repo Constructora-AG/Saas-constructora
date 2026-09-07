@@ -50,24 +50,29 @@ export async function GET(req: NextRequest) {
       todas((a, b) => supa.from("sh_prospectos").select(PROSP_COLS).eq("es_venta", true).order("fecha_creacion", { ascending: false }).range(a, b)),
       supa.from("mk_inversion").select("id, mes, proyecto, canal, monto, nota").order("mes", { ascending: false }),
       supa.from("mk_sync_estado").select("ultimo_ok, detalle").eq("clave", "marketing").maybeSingle(),
-      supa.from("cartera").select("prospect_id, project_name, module, total_valor"),
+      supa.from("cartera").select("prospect_id, project_name, module, total_valor, cliente"),
     ]);
     // ── Ventas reales (cartera) → fuente de verdad. Se cruzan con prospectos y leads ──
-    const filasCartera = (cartera ?? []) as Array<{ prospect_id: string | null; project_name: string; module: string; total_valor: number | null }>;
+    const filasCartera = (cartera ?? []) as Array<{ prospect_id: string | null; project_name: string; module: string; total_valor: number | null; cliente: string | null }>;
     const idsCartera = [...new Set(filasCartera.map((c) => c.prospect_id).filter((x): x is string => !!x))];
-    const [{ data: prosVenta }, { data: leadsVenta }] = idsCartera.length
+    const [{ data: prosVenta }, { data: leadsVenta }, { data: abonos }] = idsCartera.length
       ? await Promise.all([
-          supa.from("sh_prospectos").select("prospect_id, digital, fecha_creacion").in("prospect_id", idsCartera),
+          supa.from("sh_prospectos").select("prospect_id, digital, fecha_creacion, fecha_cierre").in("prospect_id", idsCartera),
           supa.from("mk_leads").select("prospect_id").in("prospect_id", idsCartera),
+          supa.from("sh_abonos").select("prospect_id, fecha").in("prospect_id", idsCartera).order("fecha", { ascending: true }),
         ])
-      : [{ data: [] }, { data: [] }];
-    const infoPros = new Map((prosVenta ?? []).map((p) => [p.prospect_id as string, p as { digital: boolean | null; fecha_creacion: string | null }]));
+      : [{ data: [] }, { data: [] }, { data: [] }];
+    const infoPros = new Map((prosVenta ?? []).map((p) => [p.prospect_id as string, p as { digital: boolean | null; fecha_creacion: string | null; fecha_cierre: string | null }]));
+    const primerAbono = new Map<string, string>();
+    (abonos ?? []).forEach((a) => { const id = a.prospect_id as string; if (id && !primerAbono.has(id)) primerAbono.set(id, String(a.fecha)); });
     const conLead = new Set((leadsVenta ?? []).map((l) => l.prospect_id as string));
     const setVenta = new Set(idsCartera);
     const ventas: MarketingData["ventas"] = filasCartera.map((c) => ({
       prospect_id: c.prospect_id, project_name: c.project_name, module: c.module, total_valor: c.total_valor,
       digital: !!(c.prospect_id && infoPros.get(c.prospect_id)?.digital), lead: !!(c.prospect_id && conLead.has(c.prospect_id)),
       fecha_creacion: (c.prospect_id && infoPros.get(c.prospect_id)?.fecha_creacion) || null,
+      fecha_venta: (c.prospect_id && (infoPros.get(c.prospect_id)?.fecha_cierre || primerAbono.get(c.prospect_id))) || null,
+      cliente: c.cliente ?? null,
     }));
     const marcar = <T extends { prospect_id: string | null; es_venta?: boolean | null }>(arr: T[]) =>
       arr.map((x) => (x.prospect_id && setVenta.has(x.prospect_id) ? { ...x, es_venta: true } : x));

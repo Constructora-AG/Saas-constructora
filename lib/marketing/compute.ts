@@ -301,7 +301,7 @@ export function nombreLead(p: { nombre?: string | null; celular?: string | null;
 
 // ── Ventas reales por proyecto y agrupación (torre / bloque / etapa / manzana) ──
 import type { VentaCartera } from "./types";
-export interface GrupoVentas { grupo: string; total: number; digitales: number; leads: number; valor: number; unidades: string[] }
+export interface GrupoVentas { grupo: string; total: number; digitales: number; leads: number; valor: number; unidades: string[]; ultima: string | null }
 export interface ProyectoVentas { proyecto: string; total: number; digitales: number; leads: number; valor: number; grupos: GrupoVentas[] }
 
 /** "TORRE 5 APTO 419" → { grupo: "Torre 5", unidad: "Apto 419" }; "MANZANA 4 LOTE 10" → { grupo: "Manzana 4", unidad: "Lote 10" }. */
@@ -322,7 +322,8 @@ export function ventasPorProyecto(ventas: VentaCartera[]): ProyectoVentas[] {
     if (!p) { p = { proyecto: pr, total: 0, digitales: 0, leads: 0, valor: 0, grupos: [] }; map.set(pr, p); }
     const { grupo, unidad } = partirModulo(v.module);
     let g = p.grupos.find((x) => x.grupo === grupo);
-    if (!g) { g = { grupo, total: 0, digitales: 0, leads: 0, valor: 0, unidades: [] }; p.grupos.push(g); }
+    if (!g) { g = { grupo, total: 0, digitales: 0, leads: 0, valor: 0, unidades: [], ultima: null }; p.grupos.push(g); }
+    if (v.fecha_venta && (!g.ultima || v.fecha_venta > g.ultima)) g.ultima = v.fecha_venta;
     p.total++; g.total++;
     if (v.digital) { p.digitales++; g.digitales++; }
     if (v.lead) { p.leads++; g.leads++; }

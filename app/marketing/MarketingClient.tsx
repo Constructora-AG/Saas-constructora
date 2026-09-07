@@ -6,8 +6,9 @@ import { useUsuario } from "@/lib/auth/useUsuario";
 import type { Inversion, Lead, MarketingData, Prospecto, VentaCartera } from "@/lib/marketing/types";
 import {
   agruparLeads, canalCorto, cpaPorMes, distribucion, embudo, esCompra, esContactado, esDescartado,
-  gestionPorAsesor, normGenero, pct, porCreativo, rangoEdad, totalGestion, SEGUIMIENTO_LABEL, nombreLead, ventasPorProyecto } from "@/lib/marketing/compute";
+  gestionPorAsesor, normGenero, pct, porCreativo, rangoEdad, totalGestion, SEGUIMIENTO_LABEL, nombreLead, ventasPorProyecto, partirModulo } from "@/lib/marketing/compute";
 
+const fechaCorta = (iso: string) => { const d = new Date(iso); return isNaN(d.getTime()) ? iso.slice(0, 10) : d.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" }); };
 const NUM = new Intl.NumberFormat("es-CO");
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 const PCT = (v: number) => `${Math.round(v * 100)}%`;
@@ -284,7 +285,7 @@ function VistaMarketing({ leads, compradores, ventas }: { leads: Lead[]; comprad
                 </tr>
                 {abierto === p.proyecto && p.grupos.map((g) => (
                   <tr key={p.proyecto + g.grupo}>
-                    <td style={{ paddingLeft: 32 }}>{g.grupo} <span className="muted" style={{ fontSize: 12 }}>· {g.unidades.slice(0, 12).join(", ")}{g.unidades.length > 12 ? ` y ${g.unidades.length - 12} más` : ""}</span></td>
+                    <td style={{ paddingLeft: 32 }}>{g.grupo} <span className="muted" style={{ fontSize: 12 }}>· {g.unidades.slice(0, 12).join(", ")}{g.unidades.length > 12 ? ` y ${g.unidades.length - 12} más` : ""}{g.ultima ? ` · última venta ${fechaCorta(g.ultima)}` : ""}</span></td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.total)}</td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.digitales)}</td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.leads)}</td>
@@ -304,6 +305,27 @@ function VistaMarketing({ leads, compradores, ventas }: { leads: Lead[]; comprad
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="section-title">Últimas ventas (por fecha de cierre)</div>
+      <div className="table-wrap" style={{ marginBottom: 18 }}>
+        <table className="clean">
+          <thead><tr><th>Fecha de venta</th><th>Proyecto</th><th>Unidad</th><th>Cliente</th><th>Canal</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
+          <tbody>
+            {[...ventas].sort((a, b) => (b.fecha_venta ?? "").localeCompare(a.fecha_venta ?? "")).slice(0, 20).map((v, i) => (
+              <tr key={(v.prospect_id ?? "") + v.module + i}>
+                <td><b>{v.fecha_venta ? fechaCorta(v.fecha_venta) : "—"}</b></td>
+                <td>{v.project_name}</td>
+                <td>{partirModulo(v.module).grupo} · {partirModulo(v.module).unidad}</td>
+                <td className="muted">{v.cliente ?? "—"}</td>
+                <td>{v.digital ? <span className="badge ok">Digital{v.lead ? " · campaña" : ""}</span> : <span className="badge" style={{ background: "var(--surface-2)", color: "var(--muted)" }}>Otro canal</span>}</td>
+                <td className="num" style={{ textAlign: "right" }}>{COP.format(Number(v.total_valor ?? 0))}</td>
+              </tr>
+            ))}
+            {ventas.length === 0 && <tr><td colSpan={6} className="muted" style={{ padding: 18 }}>Sin ventas registradas.</td></tr>}
+          </tbody>
+        </table>
+        {ventas.length > 20 && <div className="muted" style={{ fontSize: 12, padding: "8px 14px" }}>Se muestran las 20 más recientes de {NUM.format(ventas.length)}.</div>}
       </div>
 
       <div className="section-title">Ángulo de venta: leads y conversión por anuncio / creativo</div>

@@ -79,6 +79,9 @@ export interface VentaCartera {
   digital: boolean;      // el prospecto llegó por canal digital (Smarthome)
   lead: boolean;         // existe como lead digital en mk_leads (campañas sincronizadas)
   fecha_creacion: string | null; // del prospecto
+  /** Fecha de la venta: cierre del prospecto o, si falta, primer abono. */
+  fecha_venta: string | null;
+  cliente?: string | null;
 }
 
 export interface MarketingData {
