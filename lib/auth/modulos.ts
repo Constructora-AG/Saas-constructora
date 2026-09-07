@@ -23,7 +23,7 @@ export const ROL_DESC: Record<RolPlataforma, string> = {
   superadmin: "Acceso total a todos los módulos y a la administración de usuarios.",
   operacion: "Resumen, Cartera, Bitácora, Recaudo y Vendedores.",
   comercial: "Marketing y gestión de leads.",
-  finanzas: "Proyecto Triple A y Transporte AAA.",
+  finanzas: "Proyecto Triple A, Transporte AAA y Contrato de Alquiler.",
 };
 
 export interface Modulo {
@@ -44,6 +44,7 @@ export const MODULOS: Modulo[] = [
   { id: "marketing", label: "Marketing y leads", href: "/marketing", seccion: "Comercial" },
   { id: "aaa", label: "Proyecto Triple A", href: "/aaa", seccion: "Finanzas" },
   { id: "transporte", label: "Transporte AAA", href: "/aaa/transporte", seccion: "Finanzas" },
+  { id: "alquiler", label: "Contrato de Alquiler", href: "/aaa/contrato-alquiler", seccion: "Finanzas" },
   { id: "usuarios", label: "Usuarios y roles", href: "/usuarios", seccion: "Administración", soloSuperadmin: true },
 ];
 
@@ -52,7 +53,7 @@ export const ROL_MODULOS: Record<RolPlataforma, string[]> = {
   superadmin: MODULOS.map((m) => m.id),
   operacion: ["resumen", "cartera", "bitacora", "recaudo", "vendedores"],
   comercial: ["marketing"],
-  finanzas: ["aaa", "transporte"],
+  finanzas: ["aaa", "transporte", "alquiler"],
 };
 
 /** Módulos otorgables como extra (todos menos los exclusivos de superadmin). */

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 const SECCIONES: Record<string, { tab: AaaTab; titulo: string; sub: string }> = {
   consolidado: { tab: "consolidado", titulo: "Consolidado", sub: "Presupuesto contractual vs. consumido, facturado y prefacturas de ambos contratos." },
-  alquiler: { tab: "alquiler", titulo: "Contrato Alquiler", sub: "Contrato de alquiler de maquinaria con Triple A: presupuesto, consumido y facturación." },
+  alquiler: { tab: "alquiler", titulo: "Contrato Alquiler (Old)", sub: "Contrato de alquiler de maquinaria con Triple A: presupuesto, consumido y facturación." },
   emergencia: { tab: "emergencia", titulo: "Otro Sí / Emergencia", sub: "Otro sí de emergencia: presupuesto, consumido y facturación." },
   prefacturas: { tab: "prefacturas", titulo: "Prefacturas", sub: "Trabajo ejecutado y pagado por AG que aún no tiene orden de facturación." },
 };

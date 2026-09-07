@@ -41,9 +41,9 @@ function periodoTexto(desde: unknown, hasta: unknown, fallback: unknown): string
 }
 
 /** Valida los ítems contra el catálogo del contrato; devuelve los ítems normalizados o un error legible. */
-function validarItems(contrato: string, rawItems: ItemBody[]): { items: Array<Record<string, unknown>>; valorBase: number } | { error: string } {
+function validarItems(contrato: string, rawItems: ItemBody[], libres = false): { items: Array<Record<string, unknown>>; valorBase: number } | { error: string } {
   if (rawItems.length === 0) return { error: "La prefactura necesita al menos un ítem" };
-  if (contrato === "transporte") {
+  if (contrato === "transporte" || libres) {
     // Transporte AAA: ítems libres (un servicio registrado por ítem)
     const items: Array<Record<string, unknown>> = [];
     for (const it of rawItems as Array<ItemBody & { maquina?: unknown; unidad?: unknown }>) {
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
   // Vencimiento: SIEMPRE 30 días calendario después de la generación (regla AG)
   b.fecha_vencimiento = mas30Dias(String(b.fecha_generacion)) ?? b.fecha_vencimiento ?? null;
 
-  const v = validarItems(String(b.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : []);
+  const v = validarItems(String(b.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : [], b.origen === "modulo" || b.origen === "transporte");
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 400 });
   const { items, valorBase } = v;
   // Soporte obligatorio (imagen o PDF). Las creadas automáticamente desde
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Soporte inválido" }, { status: 400 });
   }
-  if (!soporte && b.contrato !== "transporte") {
+  if (!soporte && b.contrato !== "transporte" && b.origen !== "modulo") {
     return NextResponse.json({ error: "Adjunta el documento de soporte (imagen o PDF) de la prefactura" }, { status: 400 });
   }
 
@@ -198,7 +198,7 @@ export async function PATCH(req: NextRequest) {
     patch.periodo = periodoTexto(patch.periodo_desde ?? actual.periodo_desde, patch.periodo_hasta ?? actual.periodo_hasta, patch.periodo ?? actual.periodo);
   }
   if (b.items !== undefined) {
-    const v = validarItems(String(patch.contrato ?? actual.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : []);
+    const v = validarItems(String(patch.contrato ?? actual.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : [], Array.isArray(actual.servicios) && actual.servicios.length > 0);
     if ("error" in v) return NextResponse.json({ error: v.error }, { status: 400 });
     patch.items = v.items;
     patch.valor_base = v.valorBase;

@@ -51,9 +51,13 @@ import {
   saveTarifario,
   storageAvailable,
   validateBackup,
+  setStorageNamespace,
+  type ModuloNs,
 } from "./storage";
 
 export interface UseTransporte {
+  /** Módulo (espacio de datos): "transporte" = Transporte AAA, "alquiler" = Contrato de Alquiler. */
+  ns: ModuloNs;
   // Estado de carga y sincronización
   loading: boolean;
   error: string | null;
@@ -103,7 +107,9 @@ export interface UseTransporte {
   restoreFromBackup: (payload: unknown) => Promise<number>;
 }
 
-export function useTransporte(): UseTransporte {
+export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
+  // Fija el espacio de datos ANTES de cualquier lectura (render sincrónico).
+  setStorageNamespace(ns);
   const demo = !storageAvailable();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -406,6 +412,7 @@ export function useTransporte(): UseTransporte {
   const status = useMemo(() => contractStatus(contract.start, contract.endExclusive), [contract]);
 
   return {
+    ns,
     loading,
     error,
     demo,

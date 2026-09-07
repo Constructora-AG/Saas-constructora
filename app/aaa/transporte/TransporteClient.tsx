@@ -43,6 +43,7 @@ import { ResponsiveTables } from "../ResponsiveTables";
 import { IconInfo } from "../../icons";
 import { useTransporte, syncLabel, type UseTransporte } from "@/lib/transporte/useTransporte";
 import { TransporteSessionProvider, useTransporteSession } from "@/lib/transporte/session";
+import type { ModuloNs } from "@/lib/transporte/storage";
 import { AdminView } from "./AdminView";
 import { FlotaView } from "./FlotaView";
 import { PersonalView } from "./PersonalView";
@@ -64,16 +65,23 @@ const TABS: Array<{ id: Tab; label: string }> = [
 ];
 
 
-export function TransporteClient() {
-  const t = useTransporte();
+export interface TransporteClientProps {
+  /** Espacio de datos del módulo (por defecto Transporte AAA). */
+  ns?: ModuloNs;
+  titulo?: string;
+  subtitulo?: string;
+}
+
+export function TransporteClient({ ns = "transporte", titulo, subtitulo }: TransporteClientProps) {
+  const t = useTransporte(ns);
   return (
     <TransporteSessionProvider admin={t.admin}>
-      <TransporteShell t={t} />
+      <TransporteShell t={t} titulo={titulo} subtitulo={subtitulo} />
     </TransporteSessionProvider>
   );
 }
 
-function TransporteShell({ t }: { t: UseTransporte }) {
+function TransporteShell({ t, titulo, subtitulo }: { t: UseTransporte; titulo?: string; subtitulo?: string }) {
   const ses = useTransporteSession();
   const [tab, setTab] = useState<Tab>("resumen");
 
@@ -81,10 +89,9 @@ function TransporteShell({ t }: { t: UseTransporte }) {
     <div className="tx-mod">
       <ResponsiveTables />
       <div className="page-head">
-        <h1 className="page-title">Control Transporte AAA</h1>
+        <h1 className="page-title">{titulo ?? "Control Transporte AAA"}</h1>
         <p className="page-sub">
-          Contrato IS No. 04-2026 — transporte de equipos y maquinaria Triple A / Anaya Giraldo:
-          registro de servicios, tarifario del pliego, reportes y avance del contrato.
+          {subtitulo ?? "Contrato IS No. 04-2026 — transporte de equipos y maquinaria Triple A / Anaya Giraldo: registro de servicios, tarifario del pliego, reportes y avance del contrato."}
         </p>
       </div>
 

@@ -150,21 +150,21 @@ export function RegistrosView({ t }: ViewProps) {
   const crearPrefactura = async (lista: Servicio[]) => {
     if (!mes || !lista.length) return;
     const total = lista.reduce((a, s) => a + num(s.value), 0);
-    if (!window.confirm(`Se creará una prefactura de Transporte AAA con ${lista.length} servicio(s) por ${fmtCOP(total)} (sin peajes). ¿Continuar?`)) return;
+    if (!window.confirm(`Se creará una prefactura de ${t.ns === "alquiler" ? "Contrato de Alquiler" : "Transporte AAA"} con ${lista.length} servicio(s) por ${fmtCOP(total)} (sin peajes). ¿Continuar?`)) return;
     setPrefacturando(true); setPrefMsg(null);
     try {
       const fechas = lista.map((s) => s.date).filter(Boolean).sort();
       const moda = (arr: string[]) => { const m = new Map<string, number>(); arr.forEach((v) => v && m.set(v, (m.get(v) || 0) + 1)); return [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ""; };
       const body = {
-        contrato: "transporte",
-        origen: "transporte",
+        contrato: t.ns === "alquiler" ? "alquiler" : "transporte",
+        origen: "modulo",
         fecha_generacion: new Date().toISOString().slice(0, 10),
         periodo_desde: fechas[0] || null,
         periodo_hasta: fechas[fechas.length - 1] || null,
         area_aaa: moda(lista.map((s) => areaAAADe(s))) || null,
         interventor: moda(lista.map((s) => s.interventor || "")) || null,
         lugar: moda(lista.map((s) => s.area || "")) || null,
-        nota: `Generada desde Registros de Transporte AAA (${mes.label})`,
+        nota: `Generada desde Registros de ${t.ns === "alquiler" ? "Contrato de Alquiler" : "Transporte AAA"} (${mes.label})`,
         items: lista.map((s) => ({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value) })),
         servicios: lista.map((s) => ({ monthKey: mes.key, id: s.id, date: s.date, plate: s.plate })),
       };

@@ -20,6 +20,20 @@ import { normalizeAdmin } from "./constants";
 
 const API = "/api/aaa/transporte";
 
+// ── Espacio de datos (namespace) ───────────────────────────────────
+// El mismo código sirve a varios módulos (Transporte AAA, Contrato de
+// Alquiler…). Cada uno guarda sus claves con su propio prefijo en
+// transporte_kv: "" para Transporte (claves históricas sin prefijo) y
+// "alquiler:" para Contrato de Alquiler. useTransporte(ns) lo fija al
+// renderizar; los módulos nunca están montados a la vez.
+export type ModuloNs = "transporte" | "alquiler";
+let NS_PREFIX = "";
+export function setStorageNamespace(ns: ModuloNs): void {
+  NS_PREFIX = ns === "transporte" ? "" : `${ns}:`;
+}
+export function storageNamespacePrefix(): string { return NS_PREFIX; }
+const nsKey = (key: string) => `${NS_PREFIX}${key}`;
+
 /** true cuando hay backend real (Supabase); false = modo demo en memoria. */
 export function storageAvailable(): boolean {
   return supabaseConfigured();
@@ -46,29 +60,36 @@ async function api<T>(path: string, init?: RequestInit, etiqueta = "storage", ms
 // ── Contrato get/set/delete/list (valores string JSON) ─────────────
 
 export async function kvGet(key: string): Promise<string | null> {
-  if (!storageAvailable()) return demoStore.get(key) ?? null;
-  const r = await api<{ key: string; value: string | null }>(`${API}?key=${encodeURIComponent(key)}`, undefined, `get ${key}`);
+  const k = nsKey(key);
+  if (!storageAvailable()) return demoStore.get(k) ?? null;
+  const r = await api<{ key: string; value: string | null }>(`${API}?key=${encodeURIComponent(k)}`, undefined, `get ${key}`);
   return r.value;
 }
 
 export async function kvSet(key: string, value: string, timeoutMs = STORAGE_TIMEOUT_MS): Promise<void> {
-  if (!storageAvailable()) { demoStore.set(key, value); return; }
+  const k = nsKey(key);
+  if (!storageAvailable()) { demoStore.set(k, value); return; }
   await api(`${API}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key, value }),
+    body: JSON.stringify({ key: k, value }),
   }, `set ${key}`, timeoutMs);
 }
 
 export async function kvDelete(key: string): Promise<void> {
-  if (!storageAvailable()) { demoStore.delete(key); return; }
-  await api(`${API}?key=${encodeURIComponent(key)}`, { method: "DELETE" }, `delete ${key}`);
+  const k = nsKey(key);
+  if (!storageAvailable()) { demoStore.delete(k); return; }
+  await api(`${API}?key=${encodeURIComponent(k)}`, { method: "DELETE" }, `delete ${key}`);
 }
 
 export async function kvList(): Promise<string[]> {
-  if (!storageAvailable()) return [...demoStore.keys()];
+  // Solo las claves de ESTE módulo, sin su prefijo (Transporte excluye las de otros módulos)
+  const propias = (keys: string[]) => keys
+    .filter((k) => (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z]+:(adminconfig|tarifario|services:)/.test(k)))
+    .map((k) => (NS_PREFIX ? k.slice(NS_PREFIX.length) : k));
+  if (!storageAvailable()) return propias([...demoStore.keys()]);
   const r = await api<{ keys: string[] }>(`${API}?list=1`, undefined, "list");
-  return r.keys;
+  return propias(r.keys);
 }
 
 // ── Claves ─────────────────────────────────────────────────────────

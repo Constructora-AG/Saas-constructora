@@ -174,17 +174,21 @@ function buildInit(args: {
 
 // ── Componente ─────────────────────────────────────────────────────
 
-/** Prefijo de las órdenes de Transporte (las prefacturas usan PF). */
+/** Prefijo de las órdenes: TP (Transporte AAA) o AL (Contrato de Alquiler); las prefacturas usan PF. */
 export const PREFIJO_ORDEN = "TP";
+export const prefijoOrdenDe = (ns: string) => (ns === "alquiler" ? "AL" : PREFIJO_ORDEN);
 
 /** Siguiente N° de orden consecutivo (TP0001, TP0002, …) considerando todos los meses cargados. */
-export function siguienteOrden(servicesByMonth: Record<string, Servicio[]>): string {
+export function siguienteOrden(servicesByMonth: Record<string, Servicio[]>, ns = "transporte"): string {
+  return prefijoOrdenDe(ns) + siguienteNumero(servicesByMonth);
+}
+function siguienteNumero(servicesByMonth: Record<string, Servicio[]>): string {
   let max = 0;
   Object.values(servicesByMonth).forEach((arr) => (arr ?? []).forEach((s) => {
     const n = parseInt(String(s.orderNo ?? "").replace(/\D/g, ""), 10);
     if (Number.isFinite(n) && n > max) max = n;
   }));
-  return PREFIJO_ORDEN + String(max + 1).padStart(4, "0");
+  return String(max + 1).padStart(4, "0");
 }
 
 export function ServicioForm({
@@ -209,7 +213,7 @@ export function ServicioForm({
   const [init] = useState(() => buildInit({ editing, dup: dupFrom, month, admin, tarifario }));
   // N° de orden automático y consecutivo (0001, 0002, …) sobre TODOS los meses;
   // al editar se conserva el existente.
-  const [f, setF] = useState<Campos>(() => (editing ? init.campos : { ...init.campos, orderNo: siguienteOrden(t.servicesByMonth) }));
+  const [f, setF] = useState<Campos>(() => (editing ? init.campos : { ...init.campos, orderNo: siguienteOrden(t.servicesByMonth, t.ns) }));
   const [autoNota, setAutoNota] = useState<string | null>(init.nota);
   const [tarifaHint, setTarifaHint] = useState<string | null>(init.hint);
   const [error, setError] = useState<string | null>(null);
@@ -345,7 +349,7 @@ export function ServicioForm({
     const item: Servicio = {
       id: editing?.id ?? nuevoServicioId(),
       date: f.date,
-      orderNo: editing ? f.orderNo.trim() : siguienteOrden(t.servicesByMonth),
+      orderNo: editing ? f.orderNo.trim() : siguienteOrden(t.servicesByMonth, t.ns),
       serviceType: f.serviceType,
       interventor: resolver(f.interventorSel, f.interventorOtro),
       areaAAA: resolver(f.areaAAASel, f.areaAAAOtro),
