@@ -87,7 +87,9 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
       text(`${f[0]} ${f[1]}`, M + 4, yy + 9, 8, bold);
     } else {
       rect(M, yy, col1, rowH, fondo); text(f[0], M + 4, yy + 9, 7, bold);
-      rect(M + col1, yy, col2, rowH); text(wrap(f[1], font, 7.5, col2 - 6)[0], M + col1 + 4, yy + 9, 7.5);
+      rect(M + col1, yy, col2, rowH);
+      const v1 = f[1]; const s1 = font.widthOfTextAtSize(sane(v1), 7.5) <= col2 - 8 ? 7.5 : 6.5;
+      text(v1, M + col1 + 4, yy + 9, s1);
       rect(M + col1 + col2, yy, col3, rowH, fondo);
       const l2 = wrap(f[2], bold, 7, col3 - 6); l2.forEach((ln, k) => text(ln, M + col1 + col2 + 3, yy + (l2.length > 1 ? 12 - k * 8 : 8), 7, bold));
       const col4 = leftW - col1 - col2 - col3;
