@@ -82,7 +82,7 @@ export function ResumenView({ t }: ViewProps) {
   );
 
   // Ejecución mensual: barra = ejecutado del mes, track = presupuesto promedio
-  const presupuestoMes = t.months.length > 0 ? CONTRACT_VALUE / t.months.length : 0;
+  const presupuestoMes = t.allMonths.length > 0 ? CONTRACT_VALUE / t.allMonths.length : 0;
   const ejecucionMensual = useMemo(
     () =>
       t.months.map((m) => ({

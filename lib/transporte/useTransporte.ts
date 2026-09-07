@@ -65,7 +65,10 @@ export interface UseTransporte {
   // Datos
   admin: AdminConfig | null;
   tarifario: Tarifario | null;
+  /** Meses visibles: la vigencia SIN los meses iniciales ya pasados y sin registros (p. ej. julio 2026). */
   months: MonthInfo[];
+  /** Todos los meses calendario de la vigencia (para presupuestos/promedios). */
+  allMonths: MonthInfo[];
   servicesByMonth: Record<string, Servicio[]>;
 
   // Mes activo
@@ -362,7 +365,22 @@ export function useTransporte(): UseTransporte {
 
   // ── Derivados ────────────────────────────────────────────────────
 
-  const activeMonth = months[activeMonthIdx] ?? null;
+  // Meses visibles: se ocultan los meses INICIALES de la vigencia que ya pasaron y
+  // no tienen ningún registro (p. ej. julio 2026, antes del primer servicio), para
+  // que las pestañas y gráficas arranquen donde arranca la operación real.
+  // Los meses del contrato completos siguen en `allMonths` para los promedios.
+  const hiddenCount = useMemo(() => {
+    const now = new Date();
+    const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    let i = 0;
+    while (i < months.length - 1 && months[i].key < nowKey && (servicesByMonth[months[i].key] ?? []).length === 0) i++;
+    return i;
+  }, [months, servicesByMonth]);
+  const visibleMonths = useMemo(() => months.slice(hiddenCount), [months, hiddenCount]);
+  const fullActiveIdx = Math.max(activeMonthIdx, hiddenCount);
+  const setVisibleActiveIdx = useCallback((i: number) => setActiveMonthIdx(i + hiddenCount), [hiddenCount]);
+
+  const activeMonth = months[fullActiveIdx] ?? null;
   const activeServices = useMemo(
     () => (activeMonth ? servicesByMonth[activeMonth.key] ?? [] : []),
     [activeMonth, servicesByMonth],
@@ -377,10 +395,11 @@ export function useTransporte(): UseTransporte {
     saving,
     admin,
     tarifario,
-    months,
+    months: visibleMonths,
+    allMonths: months,
     servicesByMonth,
-    activeMonthIdx,
-    setActiveMonthIdx,
+    activeMonthIdx: fullActiveIdx - hiddenCount,
+    setActiveMonthIdx: setVisibleActiveIdx,
     activeMonth,
     activeServices,
     contractStart: contract.start,
