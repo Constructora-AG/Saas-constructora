@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Soporte inválido" }, { status: 400 });
   }
-  if (!soporte && b.origen !== "transporte") {
+  if (!soporte && b.contrato !== "transporte") {
     return NextResponse.json({ error: "Adjunta el documento de soporte (imagen o PDF) de la prefactura" }, { status: 400 });
   }
 
@@ -204,9 +204,11 @@ export async function PATCH(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Adjunto inválido" }, { status: 400 });
   }
-  // Bloqueo: sin soporte no se cargan documentos ni cambia el estado
+  // Bloqueo: sin soporte no se cargan documentos ni cambia el estado.
+  // Excepción: las de Transporte AAA, cuyo soporte son las evidencias fotográficas de los servicios.
   const soporteFinal = "soporte" in patch ? patch.soporte : actual.soporte;
-  if (!soporteFinal && ("acta" in patch || "migo" in patch || "factura" in patch || "estado" in patch)) {
+  const contratoFinal = String(patch.contrato ?? actual.contrato);
+  if (contratoFinal !== "transporte" && !soporteFinal && ("acta" in patch || "migo" in patch || "factura" in patch || "estado" in patch)) {
     return NextResponse.json({ error: "La prefactura está bloqueada: primero carga el documento de soporte" }, { status: 400 });
   }
   // Transiciones automáticas:

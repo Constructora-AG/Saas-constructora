@@ -174,7 +174,7 @@ export function RegistrosView({ t }: ViewProps) {
       const numero = String(j.prefactura?.numero ?? "");
       await t.markPrefacturada(lista.map((s) => ({ monthKey: mes.key, id: s.id })), numero);
       setSel(new Set());
-      setPrefMsg({ ok: `Prefactura ${numero} creada con ${lista.length} servicio(s). Queda BLOQUEADA hasta que cargues su documento de soporte en Proyecto Triple A → Prefacturas.` });
+      setPrefMsg({ ok: `Prefactura ${numero} creada con ${lista.length} servicio(s); su soporte son las evidencias fotográficas de los servicios. Puedes verla en Proyecto Triple A → Prefacturas.` });
     } catch (e) {
       setPrefMsg({ error: e instanceof Error ? e.message : "No se pudo crear la prefactura." });
     } finally {

@@ -149,7 +149,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     e.preventDefault();
     setError(null); setOk(null);
     if (demo) { setError("Modo demostración: conecta Supabase para registrar prefacturas reales."); return; }
-    if (!soporteForm) { setError("Adjunta el documento de soporte (imagen o PDF)."); return; }
+    if (!soporteForm && form.contrato !== "transporte") { setError("Adjunta el documento de soporte (imagen o PDF)."); return; }
     setSaving(true);
     try {
       const payload = {
@@ -244,8 +244,11 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
 
   const LABEL_ADJ = { soporte: "Soporte", acta: "Acta", migo: "Migo", factura: "Factura" } as const;
   type Campo = "soporte" | "acta" | "migo" | "factura";
+  // Las de Transporte AAA no requieren soporte propio (su soporte son las evidencias de los servicios)
+  const requiereSoporte = (r: PrefacturaRow) => r.contrato !== "transporte";
+  const bloqueada = (r: PrefacturaRow) => requiereSoporte(r) && !r.soporte;
   const puedeCargar = (r: PrefacturaRow, campo: Campo) =>
-    campo === "soporte" ? r.estado !== "pagada" : !r.soporte ? false : campo === "factura" ? r.estado === "por_facturar" || r.estado === "pendiente_pago" : ACTIVAS.has(r.estado);
+    campo === "soporte" ? r.estado !== "pagada" : bloqueada(r) ? false : campo === "factura" ? r.estado === "por_facturar" || r.estado === "pendiente_pago" : ACTIVAS.has(r.estado);
   const Adjunto = ({ r, campo }: { r: PrefacturaRow; campo: Campo }) => {
     const a = r[campo];
     const label = LABEL_ADJ[campo];
@@ -332,6 +335,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
             <label className="field">Centro de costo AAA<input className="input" placeholder="Ej. MANTENIMIENTO, ASEO" value={form.centro_costo} onChange={setF("centro_costo")} /></label>
             <label className="field">Lugar del servicio<input className="input" placeholder="Ej. POCITOS" value={form.lugar} onChange={setF("lugar")} /></label>
             <label className="field" style={{ gridColumn: "1 / -1" }}>Nota / observaciones<input className="input" value={form.nota} onChange={setF("nota")} /></label>
+            {form.contrato !== "transporte" && (
             <div className="field" style={{ gridColumn: "1 / -1" }}>
               <span>Documento de soporte (imagen o PDF) *</span>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
@@ -347,6 +351,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                 <span className="muted" style={{ fontSize: 11.5 }}>Obligatorio. Es distinto de la evidencia fotográfica de Transporte.</span>
               </div>
             </div>
+            )}
           </div>
 
           <div className="section-title" style={{ margin: "4px 0 0" }}>Ítems — nombres exactos de Herpro (así cruzan al facturar)</div>
@@ -423,7 +428,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                     <td>{activa ? <span className={`badge ${agingCls(dias)}`}>{dias} días</span> : <span className="muted">—</span>}</td>
                     <td>
                       <span className={`badge ${est.cls}`}>{est.label}</span>
-                      {!r.soporte && <span className="cc-dias" style={{ color: "var(--high)", fontWeight: 600 }}>Bloqueada: falta el soporte</span>}
+                      {bloqueada(r) && <span className="cc-dias" style={{ color: "var(--high)", fontWeight: 600 }}>Bloqueada: falta el soporte</span>}
                       {r.numero_factura && <span className="cc-dias">Fact. {r.numero_factura} · {fmtF(r.fecha_factura)}</span>}
                       {!r.numero_factura && r.fecha_factura && <span className="cc-dias">Facturada {fmtF(r.fecha_factura)}</span>}
                       {r.estado === "pendiente_pago" && (() => {
@@ -442,7 +447,9 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                        <Adjunto r={r} campo="soporte" />
+                        {requiereSoporte(r) ? <Adjunto r={r} campo="soporte" /> : (
+                          <span className="badge ok" title="El soporte son las evidencias fotográficas de los servicios de Transporte" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>✓ Soporte: evidencias</span>
+                        )}
                         <Adjunto r={r} campo="acta" />
                         <Adjunto r={r} campo="migo" />
                         <Adjunto r={r} campo="factura" />
@@ -453,22 +460,22 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                         <button className="btn btn-ghost btn-sm rowmenu-btn" onClick={() => setMenuId(menuId === r.id ? null : r.id)} title="Acciones" aria-label="Acciones">⋯</button>
                         {menuId === r.id && (
                           <div className="rowmenu-list">
-                            {(["soporte", "acta", "migo", "factura"] as const).map((campo) => (
+                            {(["soporte", "acta", "migo", "factura"] as const).filter((campo) => campo !== "soporte" || requiereSoporte(r)).map((campo) => (
                               r[campo] ? (
                                 <button key={campo} onClick={() => { setMenuId(null); abrirAdjunto(r[campo]!); }}>Ver {LABEL_ADJ[campo].toLowerCase()}</button>
                               ) : (
-                                <button key={campo} disabled={demo || !puedeCargar(r, campo)} title={!r.soporte && campo !== "soporte" ? "Bloqueada: primero carga el soporte" : campo === "factura" && !puedeCargar(r, campo) ? "Primero carga el acta y el migo" : ""} onClick={() => { setMenuId(null); pedirArchivo(r.id, campo); }}>Cargar {LABEL_ADJ[campo].toLowerCase()}{campo === "soporte" ? " (obligatorio)" : ""}</button>
+                                <button key={campo} disabled={demo || !puedeCargar(r, campo)} title={bloqueada(r) && campo !== "soporte" ? "Bloqueada: primero carga el soporte" : campo === "factura" && !puedeCargar(r, campo) ? "Primero carga el acta y el migo" : ""} onClick={() => { setMenuId(null); pedirArchivo(r.id, campo); }}>Cargar {LABEL_ADJ[campo].toLowerCase()}{campo === "soporte" ? " (obligatorio)" : ""}</button>
                               )
                             ))}
                             {(["acta", "migo", "factura"] as const).filter((c) => r[c] && puedeCargar(r, c)).map((campo) => (
                               <button key={"q-" + campo} onClick={() => { setMenuId(null); void quitarAdjunto(r, campo); }}>Quitar {LABEL_ADJ[campo].toLowerCase()}</button>
                             ))}
-                            {r.estado === "pendiente_pago" && <button disabled={!r.soporte} onClick={() => { setMenuId(null); void cambiarEstado(r, "pagada"); }}>Marcar pagada</button>}
+                            {r.estado === "pendiente_pago" && <button disabled={bloqueada(r)} onClick={() => { setMenuId(null); void cambiarEstado(r, "pagada"); }}>Marcar pagada</button>}
                             {(r.estado === "rechazada" || r.estado === "pagada") && (
                               <button onClick={() => { setMenuId(null); void cambiarEstado(r, r.factura ? "pendiente_pago" : r.acta && r.migo ? "por_facturar" : "pendiente_acta_migo"); }}>Reabrir</button>
                             )}
                             <button onClick={() => { setMenuId(null); abrirEdicion(r); }}>Editar</button>
-                            {activa && <button className="danger" disabled={!r.soporte} onClick={() => { setMenuId(null); void cambiarEstado(r, "rechazada"); }}>Rechazar</button>}
+                            {activa && <button className="danger" disabled={bloqueada(r)} onClick={() => { setMenuId(null); void cambiarEstado(r, "rechazada"); }}>Rechazar</button>}
                             <button className="danger" onClick={() => { setMenuId(null); void eliminar(r); }}>Eliminar</button>
                           </div>
                         )}
