@@ -56,8 +56,11 @@ export function TransporteSessionProvider({ admin, children }: { admin: AdminCon
   // Mientras carga (o si la cuenta no tiene fila en `usuarios`) se asume
   // "jesus" como perfil de MÍNIMO privilegio (sus permisos salen de la
   // matriz `perms` de adminconfig; nunca se asume gerencia por defecto).
+  // Plataforma → perfil de Transporte: superadmin = gerencia (todo); cualquier
+  // otro rol con acceso al módulo usa el perfil operativo ("jesus" es la clave
+  // interna del perfil operativo en adminconfig; su matriz `perms` manda).
   const { usuario } = useUsuario();
-  const currentProfile: PerfilKey = usuario?.rol ?? "jesus";
+  const currentProfile: PerfilKey = usuario?.rol === "superadmin" ? "gerencia" : "jesus";
 
   const profileLabel = useCallback(
     (k: PerfilKey) => admin?.profiles[k]?.label ?? (k === "gerencia" ? "Gerencia" : k === "renzo" ? "Renzo" : "Jesús"),

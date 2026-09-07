@@ -2,37 +2,35 @@
 // ════════════════════════════════════════════════════════════════════
 // Sesión de plataforma — usuario logueado (Supabase Auth + tabla `usuarios`).
 // Un solo Provider en el layout raíz; `useUsuario()` en cualquier client
-// component. Del ROL del usuario (gerencia/renzo/jesus) sale qué ve cada
-// quien; NO hay selectores de rol en la UI.
-//   · gerencia = administrador total de la plataforma.
+// component. Del ROL del usuario (superadmin/operacion/comercial/finanzas)
+// más sus módulos extra sale qué ve cada quien (lib/auth/modulos.ts).
 // Modo demo (Supabase sin configurar, lib/demo.supabaseConfigured):
-// devuelve un usuario ficticio con rol gerencia para no romper desarrollo.
+// devuelve un usuario ficticio superadmin para no romper desarrollo.
 // ════════════════════════════════════════════════════════════════════
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import type { AuthChangeEvent, Session, UserResponse } from "@supabase/supabase-js";
 
-export type RolPlataforma = "gerencia" | "renzo" | "jesus";
+import { esRol, ROL_LABELS, type RolPlataforma } from "@/lib/auth/modulos";
+export { ROL_LABELS };
+export type { RolPlataforma };
 
 export interface UsuarioPlataforma {
   id: string;
   email: string;
   nombre: string;
   rol: RolPlataforma;
+  /** Módulos extra otorgados por el super admin (ids de lib/auth/modulos). */
+  modulos: string[];
 }
-
-export const ROL_LABELS: Record<RolPlataforma, string> = {
-  gerencia: "Gerencia",
-  renzo: "Renzo",
-  jesus: "Jesús",
-};
 
 const USUARIO_DEMO: UsuarioPlataforma = {
   id: "demo",
   email: "demo@agconstructora.com.co",
-  nombre: "Gerencia (demo)",
-  rol: "gerencia",
+  nombre: "Super admin (demo)",
+  rol: "superadmin",
+  modulos: [],
 };
 
 interface UsuarioCtx {
@@ -42,10 +40,6 @@ interface UsuarioCtx {
 }
 
 const Ctx = createContext<UsuarioCtx | null>(null);
-
-function esRol(v: unknown): v is RolPlataforma {
-  return v === "gerencia" || v === "renzo" || v === "jesus";
-}
 
 export function UsuarioProvider({ children }: { children: ReactNode }) {
   const supa = supabaseBrowser(); // null → modo demo
@@ -61,7 +55,7 @@ export function UsuarioProvider({ children }: { children: ReactNode }) {
         if (vivo) { setUsuario(null); setCargando(false); }
         return;
       }
-      const { data } = await supa.from("usuarios").select("id, email, nombre, rol").eq("id", userId).maybeSingle();
+      const { data } = await supa.from("usuarios").select("id, email, nombre, rol, modulos").eq("id", userId).maybeSingle();
       if (!vivo) return;
       const rolRaw = data?.rol;
       const rol = esRol(rolRaw) ? rolRaw : null;
@@ -72,6 +66,7 @@ export function UsuarioProvider({ children }: { children: ReactNode }) {
               email: (data?.email as string) || email || "",
               nombre: (data?.nombre as string) || (data?.email as string) || email || "Usuario",
               rol,
+              modulos: Array.isArray(data?.modulos) ? (data!.modulos as string[]) : [],
             }
           : null, // sin fila en `usuarios` → sin rol: no se le concede nada
       );

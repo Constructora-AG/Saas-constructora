@@ -558,7 +558,11 @@ export function AdminView({ t }: ViewProps) {
         )}
 
 
-        {esGerencia && <CuentasSeccion />}
+        {esGerencia && (
+          <Seccion titulo="Cuentas de la plataforma" sub="Las cuentas y roles ahora se administran en el módulo Usuarios y roles.">
+            <a className="btn btn-ghost btn-sm" href="/usuarios">Ir a Usuarios y roles</a>
+          </Seccion>
+        )}
 
         {esGerencia && (
           <Seccion

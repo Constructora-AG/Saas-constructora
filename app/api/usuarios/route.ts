@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
 
 // ════════════════════════════════════════════════════════════════════
-// Gestión de cuentas de la plataforma — SOLO rol `gerencia`.
+// Gestión de cuentas de la plataforma — SOLO rol `superadmin`.
 //   GET    → lista las cuentas (usuarios + fila de rol)
 //   POST   → crea una cuenta   { email, nombre, rol, password }
 //   PATCH  → actualiza { id, password? | rol? | nombre? }
@@ -11,7 +11,12 @@ import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
 // leyendo la fila del solicitante con la service_role.
 // ════════════════════════════════════════════════════════════════════
 
-const ROLES = ["gerencia", "renzo", "jesus"] as const;
+import { ROLES, MODULOS_OTORGABLES } from "@/lib/auth/modulos";
+
+function limpiarModulos(v: unknown): string[] {
+  const ok = new Set(MODULOS_OTORGABLES.map((m) => m.id));
+  return Array.isArray(v) ? [...new Set(v.map(String).filter((id) => ok.has(id)))] : [];
+}
 
 async function exigirGerencia(): Promise<{ uid: string } | NextResponse> {
   const ses = await supabaseServer();
@@ -19,8 +24,8 @@ async function exigirGerencia(): Promise<{ uid: string } | NextResponse> {
   const { data: { user } } = await ses.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const { data } = await supabaseAdmin().from("usuarios").select("rol").eq("id", user.id).maybeSingle();
-  if (data?.rol !== "gerencia") {
-    return NextResponse.json({ error: "Solo Gerencia puede administrar cuentas" }, { status: 403 });
+  if (data?.rol !== "superadmin") {
+    return NextResponse.json({ error: "Solo el Super admin puede administrar cuentas" }, { status: 403 });
   }
   return { uid: user.id };
 }
@@ -30,7 +35,7 @@ export async function GET() {
   if (g instanceof NextResponse) return g;
   const { data, error } = await supabaseAdmin()
     .from("usuarios")
-    .select("id, email, nombre, rol, creado_en")
+    .select("id, email, nombre, rol, modulos, creado_en")
     .order("creado_en", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ usuarios: data ?? [], yo: g.uid });
@@ -40,7 +45,7 @@ export async function POST(req: NextRequest) {
   const g = await exigirGerencia();
   if (g instanceof NextResponse) return g;
 
-  let b: { email?: string; nombre?: string; rol?: string; password?: string };
+  let b: { email?: string; nombre?: string; rol?: string; password?: string; modulos?: unknown };
   try {
     b = await req.json();
   } catch {
@@ -49,6 +54,7 @@ export async function POST(req: NextRequest) {
   const email = b.email?.trim().toLowerCase();
   const nombre = b.nombre?.trim();
   const rol = b.rol as (typeof ROLES)[number];
+  const modulos = limpiarModulos(b.modulos);
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Email inválido" }, { status: 400 });
   }
@@ -63,24 +69,24 @@ export async function POST(req: NextRequest) {
     email,
     password: b.password,
     email_confirm: true, // las crea el admin: sin flujo de confirmación
-    user_metadata: { nombre, rol },
+    user_metadata: { nombre, rol, modulos },
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   const { error: e2 } = await supa
     .from("usuarios")
-    .upsert({ id: data.user.id, email, nombre, rol }, { onConflict: "id" });
+    .upsert({ id: data.user.id, email, nombre, rol, modulos }, { onConflict: "id" });
   if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, usuario: { id: data.user.id, email, nombre, rol } });
+  return NextResponse.json({ ok: true, usuario: { id: data.user.id, email, nombre, rol, modulos } });
 }
 
 export async function PATCH(req: NextRequest) {
   const g = await exigirGerencia();
   if (g instanceof NextResponse) return g;
 
-  // Actualiza cualquiera de: contraseña, rol, nombre. { id, password?, rol?, nombre? }
-  let b: { id?: string; password?: string; rol?: string; nombre?: string };
+  // Actualiza cualquiera de: contraseña, rol, nombre, módulos extra. { id, password?, rol?, nombre?, modulos? }
+  let b: { id?: string; password?: string; rol?: string; nombre?: string; modulos?: unknown };
   try {
     b = await req.json();
   } catch {
@@ -99,12 +105,12 @@ export async function PATCH(req: NextRequest) {
     cambios.push("password");
   }
 
-  const patch: { rol?: string; nombre?: string } = {};
+  const patch: { rol?: string; nombre?: string; modulos?: string[] } = {};
   if (b.rol !== undefined) {
     const rol = b.rol as (typeof ROLES)[number];
     if (!ROLES.includes(rol)) return NextResponse.json({ error: "Rol inválido" }, { status: 400 });
-    if (b.id === g.uid && rol !== "gerencia") {
-      return NextResponse.json({ error: "No puedes quitarte a ti mismo el rol de Gerencia" }, { status: 400 });
+    if (b.id === g.uid && rol !== "superadmin") {
+      return NextResponse.json({ error: "No puedes quitarte a ti mismo el rol de Super admin" }, { status: 400 });
     }
     patch.rol = rol;
   }
@@ -113,6 +119,7 @@ export async function PATCH(req: NextRequest) {
     if (!nombre) return NextResponse.json({ error: "El nombre no puede quedar vacío" }, { status: 400 });
     patch.nombre = nombre;
   }
+  if (b.modulos !== undefined) patch.modulos = limpiarModulos(b.modulos);
   if (Object.keys(patch).length) {
     const { error } = await supa.from("usuarios").update(patch).eq("id", b.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

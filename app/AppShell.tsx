@@ -3,43 +3,44 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout, IconMegaphone } from "./icons";
 import { useUsuario, ROL_LABELS } from "@/lib/auth/useUsuario";
+import { moduloDeRuta, puedeVer, rutaInicial } from "@/lib/auth/modulos";
 
 interface NavItem {
   href: string;
   label: string;
   icon: ReactNode;
-  /** Solo visible para el rol Gerencia. */
-  soloGerencia?: boolean;
+  /** id del módulo en lib/auth/modulos.ts (controla visibilidad por rol). */
+  modulo: string;
 }
 
 const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Operación",
     items: [
-      { href: "/", label: "Resumen", icon: <IconHome /> },
-      { href: "/cartera", label: "Cartera", icon: <IconWallet /> },
-      { href: "/cobranza", label: "Bitácora", icon: <IconMessage /> },
-      { href: "/recaudo", label: "Recaudo", icon: <IconChart /> },
-      { href: "/supervision", label: "Vendedores", icon: <IconActivity /> },
+      { href: "/", label: "Resumen", icon: <IconHome />, modulo: "resumen" },
+      { href: "/cartera", label: "Cartera", icon: <IconWallet />, modulo: "cartera" },
+      { href: "/cobranza", label: "Bitácora", icon: <IconMessage />, modulo: "bitacora" },
+      { href: "/recaudo", label: "Recaudo", icon: <IconChart />, modulo: "recaudo" },
+      { href: "/supervision", label: "Vendedores", icon: <IconActivity />, modulo: "vendedores" },
     ],
   },
   {
     section: "Comercial",
     items: [
-      { href: "/marketing", label: "Marketing y leads", icon: <IconMegaphone /> },
+      { href: "/marketing", label: "Marketing y leads", icon: <IconMegaphone />, modulo: "marketing" },
     ],
   },
   {
     section: "Finanzas",
     items: [
-      { href: "/aaa", label: "Proyecto Triple A", icon: <IconBuilding /> },
-      { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck /> },
+      { href: "/aaa", label: "Proyecto Triple A", icon: <IconBuilding />, modulo: "aaa" },
+      { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte" },
     ],
   },
   {
     section: "Administración",
     items: [
-      { href: "/usuarios", label: "Usuarios y roles", icon: <IconActivity />, soloGerencia: true },
+      { href: "/usuarios", label: "Usuarios y roles", icon: <IconActivity />, modulo: "usuarios" },
     ],
   },
 ];
@@ -92,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV.map((group) => ({ ...group, items: group.items.filter((i) => !i.soloGerencia || usuario?.rol === "gerencia") }))
+          {NAV.map((group) => ({ ...group, items: group.items.filter((i) => puedeVer(usuario, i.modulo)) }))
             .filter((group) => group.items.length > 0)
             .map((group) => (
             <div key={group.section} className="nav-group">
@@ -138,7 +139,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="topbar-env"><span className="dot" style={{ background: "currentColor" }} /> Datos en vivo</span>
         </header>
 
-        <div className="container">{children}</div>
+        <div className="container">
+          {(() => {
+            const mod = moduloDeRuta(path);
+            if (!usuario || !mod || puedeVer(usuario, mod.id)) return children;
+            return (
+              <div className="table-wrap" style={{ padding: 24 }}>
+                <b>Acceso restringido.</b>{" "}
+                <span className="muted">Tu rol ({ROL_LABELS[usuario.rol]}) no incluye el módulo «{mod.label}». Pide acceso al Super admin.</span>
+                <div style={{ marginTop: 12 }}><a className="btn btn-ghost btn-sm" href={rutaInicial(usuario)}>Ir a mi inicio</a></div>
+              </div>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );

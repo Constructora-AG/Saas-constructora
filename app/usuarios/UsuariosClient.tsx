@@ -10,16 +10,10 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useState } from "react";
-import { useUsuario, ROL_LABELS, type RolPlataforma } from "@/lib/auth/useUsuario";
+import { useUsuario } from "@/lib/auth/useUsuario";
+import { ROLES, ROL_LABELS, ROL_DESC, ROL_MODULOS, MODULOS_OTORGABLES, type RolPlataforma } from "@/lib/auth/modulos";
 
-type Cuenta = { id: string; email: string; nombre: string; rol: string; creado_en?: string };
-
-const ROLES: RolPlataforma[] = ["gerencia", "renzo", "jesus"];
-const ROL_DESC: Record<RolPlataforma, string> = {
-  gerencia: "Administrador total: ve y puede todo, incluida esta pantalla.",
-  renzo: "Perfil operativo de Transporte AAA; permisos finos desde Administración de Transporte.",
-  jesus: "Perfil operativo de Transporte AAA; permisos finos desde Administración de Transporte.",
-};
+type Cuenta = { id: string; email: string; nombre: string; rol: string; modulos?: string[]; creado_en?: string };
 
 function generarPassword(len = 12): string {
   const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -32,13 +26,14 @@ const fFecha = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("es-CO"
 
 export function UsuariosClient() {
   const { usuario, cargando } = useUsuario();
-  const esGerencia = usuario?.rol === "gerencia";
+  const esGerencia = usuario?.rol === "superadmin";
 
   const [cuentas, setCuentas] = useState<Cuenta[] | null>(null);
   const [yo, setYo] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
-  const [nuevo, setNuevo] = useState({ nombre: "", email: "", rol: "renzo" as RolPlataforma, password: generarPassword() });
+  const [nuevo, setNuevo] = useState({ nombre: "", email: "", rol: "operacion" as RolPlataforma, password: generarPassword(), modulos: [] as string[] });
+  const [modulosDe, setModulosDe] = useState<{ id: string; modulos: string[] } | null>(null);
   const [verPass, setVerPass] = useState(true);
   const [editNombre, setEditNombre] = useState<{ id: string; nombre: string } | null>(null);
   const [resetPass, setResetPass] = useState<{ id: string; password: string } | null>(null);
@@ -78,7 +73,7 @@ export function UsuariosClient() {
     e.preventDefault();
     const ok = await llamar("nuevo", { method: "POST", body: JSON.stringify(nuevo) },
       `Cuenta ${nuevo.email} creada con rol ${ROL_LABELS[nuevo.rol]}. Contraseña: ${nuevo.password} — cópiala ahora, no se vuelve a mostrar.`);
-    if (ok) setNuevo({ nombre: "", email: "", rol: "renzo", password: generarPassword() });
+    if (ok) setNuevo({ nombre: "", email: "", rol: "operacion", password: generarPassword(), modulos: [] });
   };
 
   const cambiarRol = (c: Cuenta, rol: string) =>
@@ -88,6 +83,12 @@ export function UsuariosClient() {
     if (!editNombre) return;
     const ok = await llamar(editNombre.id, { method: "PATCH", body: JSON.stringify({ id: editNombre.id, nombre: editNombre.nombre }) }, "Nombre actualizado.");
     if (ok) setEditNombre(null);
+  };
+
+  const guardarModulos = async () => {
+    if (!modulosDe) return;
+    const ok = await llamar(modulosDe.id, { method: "PATCH", body: JSON.stringify({ id: modulosDe.id, modulos: modulosDe.modulos }) }, "Accesos a módulos actualizados.");
+    if (ok) setModulosDe(null);
   };
 
   const guardarPass = async () => {
@@ -106,7 +107,7 @@ export function UsuariosClient() {
   if (!esGerencia) {
     return (
       <div className="table-wrap" style={{ padding: 18 }}>
-        <b>Acceso restringido.</b> <span className="muted">Solo el rol Gerencia puede administrar usuarios.</span>
+        <b>Acceso restringido.</b> <span className="muted">Solo el Super admin puede administrar usuarios.</span>
       </div>
     );
   }
@@ -158,6 +159,22 @@ export function UsuariosClient() {
             </div>
           </label>
         </div>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>Módulos adicionales <span className="muted" style={{ fontWeight: 400 }}>(además de los que ya incluye el rol)</span></div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px" }}>
+            {MODULOS_OTORGABLES.map((m) => {
+              const incluido = ROL_MODULOS[nuevo.rol].includes(m.id) || nuevo.rol === "superadmin";
+              const marcado = incluido || nuevo.modulos.includes(m.id);
+              return (
+                <label key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: incluido ? "var(--muted)" : "var(--text)" }} title={incluido ? "Incluido en el rol" : "Otorgar acceso"}>
+                  <input type="checkbox" checked={marcado} disabled={incluido}
+                    onChange={(e) => setNuevo((f) => ({ ...f, modulos: e.target.checked ? [...f.modulos, m.id] : f.modulos.filter((x) => x !== m.id) }))} />
+                  {m.label} <span className="muted" style={{ fontSize: 11 }}>· {m.seccion}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
           <button className="btn btn-primary" type="submit" disabled={ocupado === "nuevo"}>{ocupado === "nuevo" ? "Creando…" : "+ Crear cuenta"}</button>
         </div>
@@ -171,13 +188,14 @@ export function UsuariosClient() {
               <th>Nombre</th>
               <th>Email</th>
               <th>Rol</th>
+              <th>Módulos</th>
               <th>Alta</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {cuentas === null && <tr><td colSpan={5} className="muted" style={{ padding: 18 }}>Cargando cuentas…</td></tr>}
-            {cuentas?.length === 0 && <tr><td colSpan={5} className="muted" style={{ padding: 18 }}>No hay cuentas.</td></tr>}
+            {cuentas === null && <tr><td colSpan={6} className="muted" style={{ padding: 18 }}>Cargando cuentas…</td></tr>}
+            {cuentas?.length === 0 && <tr><td colSpan={6} className="muted" style={{ padding: 18 }}>No hay cuentas.</td></tr>}
             {cuentas?.map((c) => {
               const esYo = c.id === yo;
               const busy = ocupado === c.id;
@@ -202,6 +220,34 @@ export function UsuariosClient() {
                       onChange={(e) => void cambiarRol(c, e.target.value)} style={{ minWidth: 130 }}>
                       {ROLES.map((r) => <option key={r} value={r}>{ROL_LABELS[r]}</option>)}
                     </select>
+                  </td>
+                  <td>
+                    {modulosDe?.id === c.id ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {MODULOS_OTORGABLES.map((m) => {
+                          const incluido = c.rol === "superadmin" || (ROL_MODULOS[c.rol as RolPlataforma] ?? []).includes(m.id);
+                          return (
+                            <label key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: incluido ? "var(--muted)" : "var(--text)" }}>
+                              <input type="checkbox" checked={incluido || modulosDe.modulos.includes(m.id)} disabled={incluido}
+                                onChange={(e) => setModulosDe({ id: c.id, modulos: e.target.checked ? [...modulosDe.modulos, m.id] : modulosDe.modulos.filter((x) => x !== m.id) })} />
+                              {m.label}
+                            </label>
+                          );
+                        })}
+                        <span style={{ display: "inline-flex", gap: 6, marginTop: 4 }}>
+                          <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void guardarModulos()}>Guardar</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setModulosDe(null)}>Cancelar</button>
+                        </span>
+                      </div>
+                    ) : c.rol === "superadmin" ? (
+                      <span className="muted" style={{ fontSize: 12.5 }}>Todos</span>
+                    ) : (
+                      <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                        {(ROL_MODULOS[c.rol as RolPlataforma] ?? []).map((id) => <span key={id} className="badge" style={{ background: "var(--surface-2)", color: "var(--text-2)" }}>{MODULOS_OTORGABLES.find((m) => m.id === id)?.label ?? id}</span>)}
+                        {(c.modulos ?? []).filter((id) => !(ROL_MODULOS[c.rol as RolPlataforma] ?? []).includes(id)).map((id) => <span key={id} className="badge ok" title="Acceso adicional">{MODULOS_OTORGABLES.find((m) => m.id === id)?.label ?? id} +</span>)}
+                        <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setModulosDe({ id: c.id, modulos: c.modulos ?? [] })} title="Otorgar o quitar módulos adicionales">Editar</button>
+                      </span>
+                    )}
                   </td>
                   <td className="muted">{fFecha(c.creado_en)}</td>
                   <td className="row-actions" style={{ whiteSpace: "nowrap" }}>

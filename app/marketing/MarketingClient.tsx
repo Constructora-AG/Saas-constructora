@@ -144,7 +144,7 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
       {vista === "gestion" && <VistaGestion prospectos={prospectos} />}
       {vista === "inversion" && (
         <VistaInversion leads={leads} inversion={data?.inversion ?? []} proyectos={proyectos} proyecto={proyecto} canal={canal}
-          puedeEditar={usuario?.rol === "gerencia"} onChange={() => cargar(range)} />
+          puedeEditar={usuario?.rol === "superadmin"} onChange={() => cargar(range)} />
       )}
     </>
   );
