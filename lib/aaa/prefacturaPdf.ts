@@ -7,8 +7,8 @@
 // ════════════════════════════════════════════════════════════════════
 import type { PrefacturaItem, PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
-import { CLIENTE_AAA, EMPRESA } from "@/lib/aaa/empresa";
-import { HEADER_PNG_B64, b64ToBytes, downloadBlob } from "@/lib/transporte/export";
+import { CLIENTE_AAA, EMPRESA, LOGO_AG_PNG_B64 } from "@/lib/aaa/empresa";
+import { b64ToBytes, downloadBlob } from "@/lib/transporte/export";
 
 const COP0 = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 });
 const COP2 = new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -52,25 +52,23 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
     if (cur) out.push(cur); return out.length ? out : [""];
   };
 
-  // ── Membrete AG ──
+  // ── Encabezado: datos de la empresa + logo AG (como el formato oficial) ──
+  const yTop = y;
+  text(`Pagina 1 de 1`, M, y - 6, 6.5, font, gris);
+  text(EMPRESA.nombre, M, y - 20, 10.5, bold);
+  text(`NIT : ${EMPRESA.nit}`, M, y - 32, 8);
+  text(`${EMPRESA.correo}  ${EMPRESA.regimen} - ${EMPRESA.actividad}`, M, y - 44, 7.5, font, rgb(0.05, 0.2, 0.6));
   try {
-    const img = await doc.embedPng(b64ToBytes(HEADER_PNG_B64));
-    const h = (img.height / img.width) * W;
-    page.drawImage(img, { x: M, y: y - h, width: W, height: h });
-    y -= h + 8;
-  } catch { y -= 4; }
-
-  // ── Empresa ──
-  text(`Pagina 1 de 1`, M, y, 6.5, font, gris); y -= 10;
-  text(EMPRESA.nombre, M, y, 10.5, bold); y -= 12;
-  text(`NIT : ${EMPRESA.nit}`, M, y, 8); y -= 10;
-  text(EMPRESA.direccion, M, y, 8); y -= 10;
-  text(`${EMPRESA.correo}  ${EMPRESA.regimen} - ${EMPRESA.actividad}`, M, y, 7.5, font, rgb(0.05, 0.2, 0.6)); y -= 14;
+    const logo = await doc.embedPng(b64ToBytes(LOGO_AG_PNG_B64));
+    const lh = 40, lw = (logo.width / logo.height) * lh;
+    page.drawImage(logo, { x: M + W / 2 - lw / 2 + 40, y: yTop - lh - 2, width: lw, height: lh });
+  } catch { /* sin logo */ }
+  y = yTop - 60;
 
   // ── Bloque cliente (izquierda) + recuadro prefactura (derecha) ──
-  const rowH = 22;
-  const leftW = W * 0.71, rightX = M + leftW, rightW = W - leftW;
-  const col1 = 110, col2 = 120, col3 = 78; // etiqueta | valor | etiqueta2 (valor2 ocupa el resto)
+  const rowH = 24;
+  const leftW = W * 0.72, rightX = M + leftW, rightW = W - leftW;
+  const col1 = 62, col2 = 118, col3 = 66; // etiqueta | valor | etiqueta2 (valor2 ocupa el resto, ~137pt)
   const filas: Array<[string, string, string, string]> = [
     ["Cliente:", `${CLIENTE_AAA.nombre}`, "", ""],
     ["NIT:", CLIENTE_AAA.nit, "Teléfono", CLIENTE_AAA.telefono],
@@ -83,14 +81,16 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
     const yy = topY - rowH * (i + 1);
     if (i === 0) {
       rect(M, yy, leftW, rowH, fondo);
-      text(`${f[0]} ${f[1]}`, M + 4, yy + 8, 8, bold);
+      text(`${f[0]} ${f[1]}`, M + 4, yy + 9, 8, bold);
     } else {
-      rect(M, yy, col1, rowH, fondo); text(f[0], M + 4, yy + 8, 7.5, bold);
-      rect(M + col1, yy, col2, rowH); text(f[1], M + col1 + 4, yy + 8, 7.5);
+      rect(M, yy, col1, rowH, fondo); text(f[0], M + 4, yy + 9, 7, bold);
+      rect(M + col1, yy, col2, rowH); text(wrap(f[1], font, 7.5, col2 - 6)[0], M + col1 + 4, yy + 9, 7.5);
       rect(M + col1 + col2, yy, col3, rowH, fondo);
       const l2 = wrap(f[2], bold, 7, col3 - 6); l2.forEach((ln, k) => text(ln, M + col1 + col2 + 3, yy + (l2.length > 1 ? 12 - k * 8 : 8), 7, bold));
-      rect(M + col1 + col2 + col3, yy, leftW - col1 - col2 - col3, rowH);
-      const partes = String(f[3]).split("\n"); partes.forEach((ln, k) => text(ln, M + col1 + col2 + col3 + 4, yy + (partes.length > 1 ? 12 - k * 9 : 8), 7.5));
+      const col4 = leftW - col1 - col2 - col3;
+      rect(M + col1 + col2 + col3, yy, col4, rowH);
+      const partes = String(f[3]).split("\n").flatMap((s) => wrap(s, font, 7, col4 - 6)).slice(0, 2);
+      partes.forEach((ln, k) => text(ln, M + col1 + col2 + col3 + 3, yy + (partes.length > 1 ? 13 - k * 9 : 9), 7));
     }
   });
   // Recuadro derecho

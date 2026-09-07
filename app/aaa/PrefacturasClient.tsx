@@ -56,6 +56,8 @@ function leerArchivo(f: File): Promise<AdjuntoPrefactura> {
 
 interface ItemForm { item: string; cantidad: string; vr_unit: string }
 const ITEM0: ItemForm = { item: "", cantidad: "", vr_unit: "" };
+/** Vencimiento = generación + 30 días calendario (regla AG). */
+const mas30 = (iso: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); if (!m) return ""; const d = new Date(+m[1], +m[2] - 1, +m[3] + 30); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const FORM0 = { contrato: "alquiler" as "alquiler" | "emergencia" | "transporte", fecha_generacion: "", fecha_vencimiento: "", centro_costo: "", area_aaa: "", interventor: "", periodo_desde: "", periodo_hasta: "", lugar: "", nota: "" };
 
 const OTRO = "__otro__";
@@ -327,8 +329,13 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                 <option value="transporte">Transporte AAA</option>
               </select>
             </label>
-            <label className="field">Fecha de generación *<input className="input" required type="date" value={form.fecha_generacion} onChange={setF("fecha_generacion")} /></label>
-            <label className="field">Fecha de vencimiento<input className="input" type="date" value={form.fecha_vencimiento} onChange={setF("fecha_vencimiento")} /></label>
+            <label className="field">Fecha de generación *
+              <input className="input" required type="date" value={form.fecha_generacion}
+                onChange={(e) => { const g = e.target.value; setForm((f) => ({ ...f, fecha_generacion: g, fecha_vencimiento: mas30(g) })); }} />
+            </label>
+            <label className="field">Fecha de vencimiento <span className="muted" style={{ fontWeight: 400 }}>(30 días)</span>
+              <input className="input" type="date" value={form.fecha_vencimiento} onChange={setF("fecha_vencimiento")} />
+            </label>
             <label className="field">Período · desde<input className="input" type="date" value={form.periodo_desde} max={form.periodo_hasta || undefined} onChange={setF("periodo_desde")} /></label>
             <label className="field">Período · hasta<input className="input" type="date" value={form.periodo_hasta} min={form.periodo_desde || undefined} onChange={setF("periodo_hasta")} /></label>
             <SelectMaestro label="Área AAA solicitante" opciones={areasAAA} value={form.area_aaa} onChange={(v) => setForm((f) => ({ ...f, area_aaa: v }))} placeholder="Nombre del área" />

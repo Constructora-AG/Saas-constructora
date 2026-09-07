@@ -95,6 +95,11 @@ export async function POST(req: NextRequest) {
   if (b.contrato !== "alquiler" && b.contrato !== "emergencia" && b.contrato !== "transporte")
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
   if (!b.fecha_generacion) return NextResponse.json({ error: "Falta la fecha de generación" }, { status: 400 });
+  // Vencimiento: si no viene, 30 días calendario después de la generación (regla AG)
+  if (!b.fecha_vencimiento) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(b.fecha_generacion));
+    if (m) { const d = new Date(+m[1], +m[2] - 1, +m[3] + 30); b.fecha_vencimiento = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+  }
 
   const v = validarItems(String(b.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : []);
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 400 });
