@@ -49,6 +49,11 @@ export function catalogoDe(contrato: string): ItemCatalogo[] {
 
 export const CONTRATO_LABEL: Record<string, string> = { alquiler: "Alquiler", emergencia: "Emergencia", transporte: "Transporte AAA" };
 
+/** IVA aplicable según el contrato: el transporte NO lleva IVA (solo el arrendamiento de maquinaria). */
+export function ivaPctDe(contrato: string, ivaBase: number): number {
+  return contrato === "transporte" ? 0 : ivaBase;
+}
+
 export interface PrefacturaItem {
   item: string;
   maquina: string;

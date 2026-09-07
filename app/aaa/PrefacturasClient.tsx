@@ -7,7 +7,7 @@
 // - Crear, editar (mismo formulario), eliminar; cargar/abrir acta y migo.
 // ════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useRef, useState } from "react";
-import { catalogoDe, CONTRATO_LABEL, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
+import { catalogoDe, CONTRATO_LABEL, ivaPctDe, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { DIAS_HABILES_PAGO, diasHasta, sumarDiasHabiles } from "@/lib/aaa/pago";
 import { descargarPrefacturaPdf } from "@/lib/aaa/prefacturaPdf";
@@ -106,6 +106,8 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
   const catalogo = catalogoDe(form.contrato);
   const activas = useMemo(() => rows.filter((r) => ACTIVAS.has(r.estado)), [rows]);
   const totalActivo = activas.reduce((s, r) => s + Number(r.valor_base), 0);
+  const conIvaDe = (r: PrefacturaRow) => Number(r.valor_base) * (1 + ivaPctDe(r.contrato, CORTE.iva_pct));
+  const totalActivoConIva = activas.reduce((s, r) => s + conIvaDe(r), 0);
   const totalPendientePago = activas.filter((r) => r.estado === "pendiente_pago").reduce((s, r) => s + Number(r.valor_base), 0);
   const masAntigua = activas.reduce((m, r) => Math.max(m, diasDesde(r.fecha_generacion)), 0);
   // Pendientes de pago con fecha estimada (factura + 45 días hábiles) ya vencida
@@ -276,8 +278,9 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
           <div className="kpi-foot">{activas.length} prefactura{activas.length === 1 ? "" : "s"} pendiente{activas.length === 1 ? "" : "s"} de acta/migo o de pago</div>
         </div>
         <div className="kpi">
-          <div className="kpi-head"><span className="kpi-ico"><IconChart /></span><span className="kpi-label">Con IVA (19%)</span></div>
-          <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(totalActivo * (1 + CORTE.iva_pct))}</div>
+          <div className="kpi-head"><span className="kpi-ico"><IconChart /></span><span className="kpi-label">Con IVA</span></div>
+          <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(totalActivoConIva)}</div>
+          <div className="kpi-foot">19% en alquiler y emergencia · transporte sin IVA</div>
         </div>
         <div className="kpi">
           <div className="kpi-head"><span className="kpi-ico s-ok"><IconCheck /></span><span className="kpi-label">Pendiente de pago</span></div>
@@ -389,7 +392,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setItems((arr) => [...arr, { ...ITEM0 }])}>+ Agregar ítem</button>
             <span className="topbar-spacer" style={{ flex: 1 }} />
             <span className="muted" style={{ fontSize: 13 }}>
-              Subtotal <b className="num">{COP.format(totalForm)}</b> · IVA <b className="num">{COP.format(totalForm * CORTE.iva_pct)}</b> · Total <b className="num">{COP.format(totalForm * (1 + CORTE.iva_pct))}</b>
+              Subtotal <b className="num">{COP.format(totalForm)}</b> · IVA <b className="num">{COP.format(totalForm * ivaPctDe(form.contrato, CORTE.iva_pct))}</b>{form.contrato === "transporte" && <span className="muted"> (transporte sin IVA)</span>} · Total <b className="num">{COP.format(totalForm * (1 + ivaPctDe(form.contrato, CORTE.iva_pct)))}</b>
             </span>
             <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Guardando…" : editando ? "Guardar cambios" : "Guardar prefactura"}</button>
           </div>
@@ -432,7 +435,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                     <td className="muted">{CONTRATO_LABEL[r.contrato] ?? r.contrato}{r.servicios?.length ? <span className="cc-dias">{r.servicios.length} servicio(s) de Transporte</span> : null}{r.centro_costo ? <span className="cc-dias">{r.centro_costo}</span> : null}{r.area_aaa ? <span className="cc-dias">{r.area_aaa}</span> : null}{r.interventor ? <span className="cc-dias">Interv.: {r.interventor}</span> : null}</td>
                     <td className="muted">{r.periodo ?? "—"}{r.lugar ? ` · ${r.lugar}` : ""}{r.fecha_vencimiento ? <span className="cc-dias">vence {fmtF(r.fecha_vencimiento)}</span> : null}</td>
                     <td className="num" style={{ textAlign: "right" }}><b>{COP.format(Number(r.valor_base))}</b></td>
-                    <td className="num muted" style={{ textAlign: "right" }}>{COP.format(Number(r.valor_base) * (1 + CORTE.iva_pct))}</td>
+                    <td className="num muted" style={{ textAlign: "right" }}>{COP.format(conIvaDe(r))}{r.contrato === "transporte" && <span className="cc-dias">sin IVA</span>}</td>
                     <td>{activa ? <span className={`badge ${agingCls(dias)}`}>{dias} días</span> : <span className="muted">—</span>}</td>
                     <td>
                       <span className={`badge ${est.cls}`}>{est.label}</span>

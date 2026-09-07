@@ -5,7 +5,7 @@
 // VALOR TOTAL, Cant. Items, SUBTOTAL / IVA / TOTAL, "APROBAR O RECHAZAR" y
 // OBSERVACIONES. pdf-lib se importa dinámicamente (solo en el navegador).
 // ════════════════════════════════════════════════════════════════════
-import type { PrefacturaItem, PrefacturaRow } from "@/lib/aaa/catalogo";
+import { ivaPctDe, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { CLIENTE_AAA, EMPRESA, LOGO_AG_PNG_B64 } from "@/lib/aaa/empresa";
 import { b64ToBytes, downloadBlob } from "@/lib/transporte/export";
@@ -35,7 +35,7 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
   const W = PW - M * 2;
   const ink = rgb(0.1, 0.1, 0.1), gris = rgb(0.45, 0.45, 0.45), linea = rgb(0.2, 0.2, 0.2);
   const fondo = rgb(0.85, 0.85, 0.85), fondoClaro = rgb(0.93, 0.93, 0.93), blanco = rgb(1, 1, 1);
-  const ivaPct = CORTE.iva_pct;
+  const ivaPct = ivaPctDe(r.contrato, CORTE.iva_pct); // transporte: 0
   const items = (r.items ?? []) as PrefacturaItem[];
 
   let page = doc.addPage([PW, PH]);
@@ -156,7 +156,7 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
   const subtotal = items.reduce((s, it) => s + (Number(it.valor_base) || Number(it.cantidad) * Number(it.vr_unit)), 0);
   const iva = subtotal * ivaPct;
   const tw = 150, tx = M + W - tw, lw = 60;
-  [["SUBTOTAL", money(subtotal)], ["IVA", money(iva)], ["TOTAL", money(subtotal + iva)]].forEach(([l, v], i) => {
+  [["SUBTOTAL", money(subtotal)], [ivaPct ? "IVA" : "IVA (excluido)", money(iva)], ["TOTAL", money(subtotal + iva)]].forEach(([l, v], i) => {
     const yy = y - 13 * (i + 1);
     rect(tx, yy, lw, 13, i === 2 ? fondoClaro : blanco); textR(l, tx + lw - 3, yy + 4, 7, bold);
     rect(tx + lw, yy, tw - lw, 13); textR(v, tx + tw - 3, yy + 4, 7, i === 2 ? bold : font);
