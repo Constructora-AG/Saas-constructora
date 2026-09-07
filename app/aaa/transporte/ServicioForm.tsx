@@ -172,6 +172,16 @@ function buildInit(args: {
 
 // ── Componente ─────────────────────────────────────────────────────
 
+/** Siguiente N° de orden consecutivo (4 dígitos) considerando todos los meses cargados. */
+export function siguienteOrden(servicesByMonth: Record<string, Servicio[]>): string {
+  let max = 0;
+  Object.values(servicesByMonth).forEach((arr) => (arr ?? []).forEach((s) => {
+    const n = parseInt(String(s.orderNo ?? "").replace(/\D/g, ""), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }));
+  return String(max + 1).padStart(4, "0");
+}
+
 export function ServicioForm({
   t,
   month,
@@ -192,7 +202,9 @@ export function ServicioForm({
   const tarifario = t.tarifario;
 
   const [init] = useState(() => buildInit({ editing, dup: dupFrom, month, admin, tarifario }));
-  const [f, setF] = useState<Campos>(init.campos);
+  // N° de orden automático y consecutivo (0001, 0002, …) sobre TODOS los meses;
+  // al editar se conserva el existente.
+  const [f, setF] = useState<Campos>(() => (editing ? init.campos : { ...init.campos, orderNo: siguienteOrden(t.servicesByMonth) }));
   const [autoNota, setAutoNota] = useState<string | null>(init.nota);
   const [tarifaHint, setTarifaHint] = useState<string | null>(init.hint);
   const [error, setError] = useState<string | null>(null);
@@ -328,7 +340,7 @@ export function ServicioForm({
     const item: Servicio = {
       id: editing?.id ?? nuevoServicioId(),
       date: f.date,
-      orderNo: f.orderNo.trim(),
+      orderNo: editing ? f.orderNo.trim() : siguienteOrden(t.servicesByMonth),
       serviceType: f.serviceType,
       interventor: resolver(f.interventorSel, f.interventorOtro),
       areaAAA: resolver(f.areaAAASel, f.areaAAAOtro),
@@ -423,7 +435,8 @@ export function ServicioForm({
                   onChange={(e) => cambiaTiempo({ date: e.target.value })} />
               </label>
               <label className="field">N° Orden / Remisión
-                <input className="input" placeholder="Ej. OT-0231" value={f.orderNo}
+                <input className="input" value={f.orderNo} readOnly={!editing} title={editing ? "" : "Se asigna automáticamente de forma consecutiva"}
+                  style={editing ? undefined : { background: "var(--surface-2)", color: "var(--text-2)" }}
                   onChange={(e) => setF({ ...f, orderNo: e.target.value })} />
               </label>
               <label className="field">Tipo de servicio

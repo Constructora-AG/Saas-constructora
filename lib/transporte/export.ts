@@ -120,12 +120,45 @@ export async function exportServicios(
     const rows = pairs.map((p) => toExportRow(p.monthLabel, p.item));
     downloadBlob(rowsToCSV(rows), `${filenameBase}.csv`, "text/csv;charset=utf-8;");
   } else if (format === "xlsx") {
-    const XLSX = await import("xlsx");
+    // Excel con las fotos de soporte INCRUSTADAS en la fila (ExcelJS), como el
+    // control manual del equipo: hasta 3 evidencias por servicio en columnas al final.
+    const ExcelJSMod = await import("exceljs");
+    const ExcelJS = (ExcelJSMod as unknown as { default?: typeof ExcelJSMod }).default ?? ExcelJSMod;
     const rows = pairs.map((p) => toExportRow(p.monthLabel, p.item));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Servicios");
-    XLSX.writeFile(wb, `${filenameBase}.xlsx`);
+    const headers = Object.keys(rows[0]);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Control Transporte AAA";
+    const ws = wb.addWorksheet("Servicios", { views: [{ state: "frozen", ySplit: 1 }] });
+    const MAX_FOTOS = 3;
+    const fotoHeaders = Array.from({ length: MAX_FOTOS }, (_, i) => `Evidencia ${i + 1}`);
+    ws.columns = [
+      ...headers.map((h) => ({ header: h, key: h, width: Math.min(38, Math.max(12, h.length + 4)) })),
+      ...fotoHeaders.map((h) => ({ header: h, key: h, width: 20 })),
+    ];
+    rows.forEach((r) => ws.addRow(r));
+    const head = ws.getRow(1);
+    head.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    head.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123A7A" } };
+    head.alignment = { vertical: "middle", wrapText: true };
+    head.height = 30;
+    pairs.forEach((p, i) => {
+      const fotos = (p.item.photoFiles || []).filter((f) => /image\//.test(f.type) && f.dataUrl).slice(0, MAX_FOTOS);
+      const excelRow = i + 2; // 1 = encabezado
+      const row = ws.getRow(excelRow);
+      row.alignment = { vertical: "top", wrapText: true };
+      if (!fotos.length) return;
+      row.height = 96;
+      fotos.forEach((f, j) => {
+        const base64 = f.dataUrl.split(",")[1] || "";
+        if (!base64) return;
+        const id = wb.addImage({ base64, extension: /png/.test(f.type) ? "png" : "jpeg" });
+        // Anclaje en la celda (col/row base 0), tamaño fijo en píxeles
+        ws.addImage(id, { tl: { col: headers.length + j, row: excelRow - 1 }, ext: { width: 130, height: 122 }, editAs: "oneCell" });
+      });
+    });
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
+    const buf = await wb.xlsx.writeBuffer();
+    downloadBlob(new Blob([buf as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${filenameBase}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   } else {
     try {
       const bytes = await buildReportPdf(pairs, scopeLabel, ctx);
@@ -232,7 +265,6 @@ export async function buildReportPdf(
     approvalFile: p.item.approvalFile ? adjuntoBytes(p.item.approvalFile) : null,
   }));
   const scopedValue = rows.reduce((s, r) => s + num(r.item.value), 0);
-  const scopedTolls = rows.reduce((s, r) => s + num(r.item.tolls), 0);
   const pendientes = rows.filter((r) => !r.item.invoiced).length;
 
   const pdfDoc = await PDFDocument.create();
@@ -306,7 +338,6 @@ export async function buildReportPdf(
       ["Valor ejecutado", fmtCOP(scopedValue)],
       ["Saldo disponible", fmtCOP(CONTRACT_VALUE - ctx.totalGlobalValue)],
       ["Servicios en este reporte", String(rows.length)],
-      ["Peajes acumulados", fmtCOP(scopedTolls)],
       ["Pendientes por facturar", String(pendientes)],
     ];
     const cellW = (width - MARGIN * 2) / kpiCells.length;
@@ -330,14 +361,13 @@ export async function buildReportPdf(
   // ── Tabla resumen ──
   const cols: Array<{ key: string; label: string; w: number }> = [
     { key: "date", label: "Fecha", w: 55 },
-    { key: "serviceType", label: "Tipo", w: 58 },
     { key: "plate", label: "Placa", w: 52 },
     { key: "capacity", label: "Cap.T", w: 34 },
     { key: "driver", label: "Conductor", w: 82 },
     { key: "equipment", label: "Equipo", w: 92 },
-    { key: "areaDest", label: "Área / Destino", w: 108 },
+    { key: "pickup", label: "Lugar de Recogida", w: 112 },
+    { key: "destination", label: "Lugar de Destino", w: 112 },
     { key: "value", label: "Valor", w: 68 },
-    { key: "tolls", label: "Peajes", w: 58 },
     { key: "photo", label: "Foto", w: 28 },
     { key: "approved", label: "V°B°", w: 28 },
     { key: "invoiced", label: "Fact.", w: 34 },
@@ -369,14 +399,13 @@ export async function buildReportPdf(
       const it = r.item;
       const vals: Record<string, string> = {
         date: it.date || "—",
-        serviceType: it.serviceType || "—",
         plate: it.plate || "—",
         capacity: it.capacity ? it.capacity + "T" : "—",
         driver: it.driver || "—",
         equipment: it.equipment || "—",
-        areaDest: it.area || it.destination || "—",
+        pickup: it.pickup || "—",
+        destination: it.destination || "—",
         value: fmtCOP(it.value),
-        tolls: fmtCOP(it.tolls),
         photo: r.photoFiles.length ? "Sí" : "No",
         approved: it.approved ? "Sí" : "No",
         invoiced: it.invoiced ? "Sí" : "No",
@@ -415,7 +444,7 @@ export async function buildReportPdf(
       ["Peso Equipo (Ton)", it.weight ? it.weight + " Ton" : "—", "Municipio / Área", it.area || "—"],
       ["Lugar de Recogida", it.pickup || "—", "Lugar de Destino", it.destination || "—"],
       ["Hora Solicitud", it.hourReq || "—", "Hora Atención", it.hourAtt || "—"],
-      ["Valor Servicio", fmtCOP(it.value), "Peajes", fmtCOP(it.tolls)],
+      ["Valor Servicio", fmtCOP(it.value), "Recargos", [it.recargoNocturno ? "Nocturno" : "", it.recargoDominical ? "Dominical / festivo" : ""].filter(Boolean).join(", ") || "Ninguno"],
       [
         "Evidencia Fotográfica",
         r.photoFiles.length ? `Sí (${r.photoFiles.length})` : "No",
