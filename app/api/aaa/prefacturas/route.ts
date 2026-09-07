@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const valorBase = items.reduce((s, it) => s + it.valor_base, 0);
 
   const supa = supabaseAdmin();
-  // N° de prefactura AUTOMÁTICO y consecutivo (0001, 0002, …), como en
+  // N° de prefactura AUTOMÁTICO y consecutivo (PF0001, PF0002, …), como en
   // Transporte AAA. Se calcula en el servidor sobre el máximo existente; si
   // dos registros coinciden (23505) se reintenta con el siguiente número.
   const siguienteNumero = async (): Promise<string> => {
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       const n = parseInt(String(r.numero ?? "").replace(/\D/g, ""), 10);
       if (Number.isFinite(n) && n > max) max = n;
     });
-    return String(max + 1).padStart(4, "0");
+    return "PF" + String(max + 1).padStart(4, "0");
   };
   let data: Record<string, unknown> | null = null;
   let error: { code?: string; message: string } | null = null;

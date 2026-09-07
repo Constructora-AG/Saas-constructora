@@ -174,14 +174,17 @@ function buildInit(args: {
 
 // ── Componente ─────────────────────────────────────────────────────
 
-/** Siguiente N° de orden consecutivo (4 dígitos) considerando todos los meses cargados. */
+/** Prefijo de las órdenes de Transporte (las prefacturas usan PF). */
+export const PREFIJO_ORDEN = "TP";
+
+/** Siguiente N° de orden consecutivo (TP0001, TP0002, …) considerando todos los meses cargados. */
 export function siguienteOrden(servicesByMonth: Record<string, Servicio[]>): string {
   let max = 0;
   Object.values(servicesByMonth).forEach((arr) => (arr ?? []).forEach((s) => {
     const n = parseInt(String(s.orderNo ?? "").replace(/\D/g, ""), 10);
     if (Number.isFinite(n) && n > max) max = n;
   }));
-  return String(max + 1).padStart(4, "0");
+  return PREFIJO_ORDEN + String(max + 1).padStart(4, "0");
 }
 
 export function ServicioForm({

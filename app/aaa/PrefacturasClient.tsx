@@ -40,7 +40,7 @@ const FORM0 = { numero: "", contrato: "alquiler" as "alquiler" | "emergencia", f
 export function PrefacturasClient({ initialRows, demo }: { initialRows: PrefacturaRow[]; demo: boolean }) {
   const [rows, setRows] = useState<PrefacturaRow[]>(initialRows);
   // N° consecutivo automático (informativo; el servidor asigna el definitivo)
-  const proximoNumero = `N° ${String(Math.max(0, ...rows.map((r) => parseInt(String(r.numero ?? "").replace(/\D/g, ""), 10) || 0)) + 1).padStart(4, "0")} (automático)`;
+  const proximoNumero = `PF${String(Math.max(0, ...rows.map((r) => parseInt(String(r.numero ?? "").replace(/\D/g, ""), 10) || 0)) + 1).padStart(4, "0")} (automático)`;
   const [form, setForm] = useState(FORM0);
   const [items, setItems] = useState<ItemForm[]>([{ ...ITEM0 }]);
   const [mostrarForm, setMostrarForm] = useState(false);
