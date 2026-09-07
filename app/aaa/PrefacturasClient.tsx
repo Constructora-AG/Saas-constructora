@@ -264,10 +264,18 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     const label = LABEL_ADJ[campo];
     const busy = subiendo === `${r.id}:${campo}`;
     if (busy) return <span className="badge" style={{ background: "var(--surface-2)", color: "var(--text-2)" }}>Subiendo {label}…</span>;
-    return a ? (
-      <button className="badge ok" style={{ border: "none", cursor: "pointer", font: "inherit" }} title={`Abrir ${a.name}`} onClick={() => abrirAdjunto(a)}>✓ {label}</button>
-    ) : (
-      <span className="badge" style={{ background: "var(--surface-2)", color: "var(--muted)" }} title={`${label} pendiente`}>{label}</span>
+    if (a) {
+      return <button className="badge ok" style={{ border: "none", cursor: "pointer", font: "inherit" }} title={`Abrir ${a.name}`} onClick={() => abrirAdjunto(a)}>✓ {label}</button>;
+    }
+    // Pendiente: el chip es un botón que abre el selector de archivo (si ya se puede cargar)
+    const cargable = !demo && puedeCargar(r, campo);
+    return (
+      <button className="badge" disabled={!cargable}
+        style={{ background: campo === "soporte" && !r.soporte ? "var(--warn-soft)" : "var(--surface-2)", color: cargable ? (campo === "soporte" ? "var(--warn)" : "var(--text-2)") : "var(--muted)", border: cargable ? "1px dashed currentColor" : "none", cursor: cargable ? "pointer" : "default", font: "inherit" }}
+        title={cargable ? `Cargar ${label.toLowerCase()} (PDF o imagen)` : campo === "factura" ? "Primero carga el acta y el migo" : bloqueada(r) ? "Primero carga el soporte" : `${label} pendiente`}
+        onClick={() => cargable && pedirArchivo(r.id, campo)}>
+        {cargable ? "⬆ " : ""}{label}{campo === "soporte" && !r.soporte ? " *" : ""}
+      </button>
     );
   };
 
