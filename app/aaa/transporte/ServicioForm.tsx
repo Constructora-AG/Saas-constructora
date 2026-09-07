@@ -38,6 +38,7 @@ interface Campos {
   operario: string;
   transporteEquipo: boolean;
   viajesEquipo: string;
+  horasMaquina: string;
   driverOtro: string;
   equipmentSel: string;
   equipmentOtro: string;
@@ -98,7 +99,7 @@ function buildInit(args: {
     interventorSel: "", interventorOtro: "",
     areaAAASel: "", areaAAAOtro: "",
     plateSel: "", plateOtro: "",
-    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false, viajesEquipo: "0",
+    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false, viajesEquipo: "0", horasMaquina: "",
     equipmentSel: "", equipmentOtro: "",
     capacity: "", weight: "",
     pickup: "", destination: "", area: "",
@@ -130,6 +131,7 @@ function buildInit(args: {
       operario: src.operario ?? "",
       transporteEquipo: !!src.transporteEquipo,
       viajesEquipo: String(src.viajesEquipo ?? (src.transporteEquipo ? 1 : 0)),
+      horasMaquina: src.horasMaquina != null && src.horasMaquina !== "" ? String(src.horasMaquina) : "",
       equipmentSel: se.sel, equipmentOtro: se.otro,
       capacity: sv(src.capacity), weight: sv(src.weight),
       pickup: src.pickup ?? "", destination: src.destination ?? "", area: src.area ?? "",
@@ -265,13 +267,13 @@ export function ServicioForm({
       const r = tarifaSel(next);
       if (!r) { setTarifaHint(null); return next; }
       const unit = num(r.unitario);
-      const horas = respHours(next.hourReq, next.hourAtt);
+      const horas = next.horasMaquina.trim() === "" ? null : num(next.horasMaquina);
       const viajes = Math.max(0, Math.floor(num(next.viajesEquipo)));
       const tr = viajes > 0 ? tarifaTransporte(next) : null;
       const vTr = tr ? num(tr.unitario) * viajes : 0;
       const txTr = tr ? ` + ${viajes} viaje(s) × ${fmtCOP(num(tr.unitario))} (transporte del equipo) = ${fmtCOP(vTr)}` : "";
       if (horas == null) {
-        setTarifaHint(`Valor hora máquina: ${fmtCOP(unit)}${txTr} — indica hora solicitada y atendida para calcular las horas.`);
+        setTarifaHint(`Valor hora máquina: ${fmtCOP(unit)}${txTr} — indica las horas máquina usadas para calcular el alquiler.`);
         return { ...next, value: tr ? String(vTr) : next.value, tolls: "0", transporteEquipo: viajes > 0 };
       }
       const alq = Math.round(unit * horas);
@@ -387,7 +389,7 @@ export function ServicioForm({
       capacity: f.capacity,
       driver: resolver(f.driverSel, f.driverOtro),
       operario: f.operario.trim(),
-      equipment: resolver(f.equipmentSel, f.equipmentOtro),
+      equipment: esAlquiler ? (catSel?.label.replace(/^Ítem \d+ · Servicio de Alquiler de /i, "").trim() || resolver(f.equipmentSel, f.equipmentOtro)) : resolver(f.equipmentSel, f.equipmentOtro),
       weight: f.weight,
       pickup: f.pickup.trim(),
       destination: f.destination.trim(),
@@ -396,7 +398,7 @@ export function ServicioForm({
       hourAtt: f.hourAtt,
       value: f.value,
       tolls: esAlquiler ? "0" : f.tolls,
-      horasMaquina: esAlquiler ? (respHours(f.hourReq, f.hourAtt) ?? "") : undefined,
+      horasMaquina: esAlquiler ? f.horasMaquina.trim() : undefined,
       valorHora: esAlquiler && esPorHora(f) ? String(num(tarifaSel(f)?.unitario ?? 0)) : undefined,
       transporteEquipo: esAlquiler ? num(f.viajesEquipo) > 0 : undefined,
       viajesEquipo: esAlquiler ? String(Math.max(0, Math.floor(num(f.viajesEquipo)))) : undefined,
@@ -555,9 +557,9 @@ export function ServicioForm({
             </div>}
             {!esAlquiler && autoNota && <div style={{ color: "var(--warn)", fontSize: 12.5 }}>{autoNota}</div>}
 
-            {seccion("Vehículo y carga")}
+            {seccion(esAlquiler ? "Operario" : "Vehículo y carga")}
             <div style={gridAuto}>
-              {selectMaestro(
+              {!esAlquiler && selectMaestro(
                 "Placa del vehículo", f.plateSel, f.plateOtro,
                 vehiculosActivos.map((v) => ({ value: v.plate, label: `${v.plate} · ${num(v.capacity)} T · ${v.driver || "sin conductor"}` })),
                 "Otra placa (digitar)",
@@ -565,11 +567,11 @@ export function ServicioForm({
                 (v) => setF({ ...f, plateOtro: v.toUpperCase() }),
                 "ABC-123",
               )}
-              <label className="field">Capacidad del vehículo (Ton)
+              {!esAlquiler && <label className="field">Capacidad del vehículo (Ton)
                 <input className="input num" type="number" step="0.1" min="0" value={f.capacity}
                   onChange={(e) => setF({ ...f, capacity: e.target.value })} />
-              </label>
-              {selectMaestro(
+              </label>}
+              {!esAlquiler && selectMaestro(
                 "Conductor", f.driverSel, f.driverOtro,
                 conductores.map((d) => ({ value: d, label: d === designado ? `${d} (designado)` : d })),
                 "Otro conductor (digitar)",
@@ -577,7 +579,7 @@ export function ServicioForm({
                 (v) => setF({ ...f, driverOtro: v }),
                 "Nombre del conductor",
               )}
-              {selectMaestro(
+              {!esAlquiler && selectMaestro(
                 "Equipo / máquina transportada", f.equipmentSel, f.equipmentOtro,
                 equipos.map((eq) => ({ value: eq.name, label: `${eq.name} · ${eq.clase || "equipo"} · ${num(eq.weight)} T` })),
                 "Otro equipo (digitar)",
@@ -585,50 +587,68 @@ export function ServicioForm({
                 (v) => setF({ ...f, equipmentOtro: v }),
                 "Equipo transportado",
               )}
-              <label className="field">Peso del equipo (Ton)
+              {!esAlquiler && <label className="field">Peso del equipo (Ton)
                 <input className="input num" type="number" step="0.01" min="0" value={f.weight}
                   onChange={(e) => setF({ ...f, weight: e.target.value })} />
-              </label>
+              </label>}
               <label className="field">Nombre del operario
                 <input className="input" value={f.operario} placeholder="Operario del equipo"
                   onChange={(e) => setF({ ...f, operario: e.target.value })} />
               </label>
             </div>
 
-            {seccion("Ruta")}
+            {seccion(esAlquiler ? "Lugar del servicio" : "Ruta")}
             <div style={gridAuto}>
-              <label className="field">Lugar de recogida
+              {!esAlquiler && <label className="field">Lugar de recogida
                 <input className="input" value={f.pickup} onChange={(e) => setF({ ...f, pickup: e.target.value })} />
-              </label>
-              <label className="field">Lugar de destino
+              </label>}
+              {!esAlquiler && <label className="field">Lugar de destino
                 <input className="input" value={f.destination} onChange={(e) => setF({ ...f, destination: e.target.value })} />
-              </label>
+              </label>}
               <label className="field">Municipio / área de prestación
                 <input className="input" value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })} />
               </label>
             </div>
 
-            {seccion("Tiempos de atención")}
+            {seccion(esAlquiler ? "Horas máquina" : "Tiempos de atención")}
             <div style={gridAuto}>
-              <label className="field">Hora solicitada
+              {esAlquiler && (
+                <label className="field">Horas máquina usadas *
+                  <input className="input num" type="number" min="0" step="0.5" required value={f.horasMaquina} placeholder="Ej. 8"
+                    onChange={(e) => setF(conValor({ ...f, horasMaquina: e.target.value }))} />
+                </label>
+              )}
+              {!esAlquiler && <label className="field">Hora solicitada
                 <input className="input" type="time" value={f.hourReq} onChange={(e) => cambiaTiempo({ hourReq: e.target.value })} />
-              </label>
-              <label className="field">Hora atendida
+              </label>}
+              {!esAlquiler && <label className="field">Hora atendida
                 <input className="input" type="time" value={f.hourAtt} onChange={(e) => cambiaTiempo({ hourAtt: e.target.value })} />
-              </label>
-              <label className="field">{esAlquiler ? "Horas máquina (solicitada → atendida)" : "Tiempo de respuesta"}
+              </label>}
+              {!esAlquiler && <label className="field">Tiempo de respuesta
                 <input className="input num" readOnly value={(() => { const h = respHours(f.hourReq, f.hourAtt); if (h == null) return ""; const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return `${h} h (${hh}:${String(mm).padStart(2, "0")})`; })()} style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
-              </label>
+              </label>}
             </div>
 
             {seccion("Financiero")}
+            {esAlquiler && (() => {
+              const r = tarifaSel(f); const unit = r ? num(r.unitario) : 0;
+              const horas = f.horasMaquina.trim() === "" ? 0 : num(f.horasMaquina);
+              const viajes = Math.max(0, Math.floor(num(f.viajesEquipo)));
+              const tr = tarifaTransporte(f); const vViaje = tr ? num(tr.unitario) : 0;
+              const alq = Math.round(unit * horas), trans = vViaje * viajes;
+              const ro: React.CSSProperties = { background: "var(--surface-2)", color: "var(--text-2)" };
+              return (
+                <div style={gridAuto}>
+                  <label className="field">Valor hora máquina <span className="muted" style={{ fontWeight: 400 }}>· tarifario</span>
+                    <input className="input num" readOnly style={ro} value={r ? fmtCOP(unit) : "Selecciona equipo y zona"} /></label>
+                  <label className="field">Horas × valor hora
+                    <input className="input num" readOnly style={ro} value={r ? `${horas} h × ${fmtCOP(unit)} = ${fmtCOP(alq)}` : "—"} /></label>
+                  <label className="field">Viajes × valor viaje
+                    <input className="input num" readOnly style={ro} value={viajes > 0 && tr ? `${viajes} × ${fmtCOP(vViaje)} = ${fmtCOP(trans)}` : "Sin transporte del equipo"} /></label>
+                </div>
+              );
+            })()}
             <div style={gridAuto}>
-              {esAlquiler && (
-                <label className="field">Valor hora máquina (COP) <span className="muted" style={{ fontWeight: 400 }}>· del tarifario</span>
-                  <input className="input num" readOnly value={tarifaSel(f) ? `${fmtCOP(num(tarifaSel(f)!.unitario))} / hora` : "Selecciona equipo y zona"}
-                    style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
-                </label>
-              )}
               <label className="field">Valor del servicio (COP){esAlquiler && tarifaSel(f) && <span className="muted" style={{ fontWeight: 400 }}> · calculado</span>}
                 <input className="input num" type="number" step="1" min="0" value={f.value}
                   onChange={(e) => setF({ ...f, value: e.target.value })} />
