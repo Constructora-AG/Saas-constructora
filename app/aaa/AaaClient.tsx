@@ -241,7 +241,7 @@ function MaquinasTable({ machines, conIva }: { machines: Maquina[]; conIva: bool
 export type AaaTab = Tab;
 
 /** Vista de Proyecto Triple A. `tab` viene de la ruta (/aaa/<seccion>): cada sección es un módulo interno. */
-export function AaaClient({ data, prefacturas, demo, tab }: { data: CorteAaa; prefacturas: PrefacturaRow[]; demo: boolean; tab: Tab }) {
+export function AaaClient({ data, prefacturas, demo, tab, maestros }: { data: CorteAaa; prefacturas: PrefacturaRow[]; demo: boolean; tab: Tab; maestros?: { areas: string[]; interventores: string[] } }) {
   const [conIva, setConIva] = useState(false);
 
   const cons = data.consolidado;
@@ -261,7 +261,7 @@ export function AaaClient({ data, prefacturas, demo, tab }: { data: CorteAaa; pr
         )}
       </div>
 
-      {tab === "prefacturas" && <PrefacturasClient initialRows={prefacturas} demo={demo} />}
+      {tab === "prefacturas" && <PrefacturasClient initialRows={prefacturas} demo={demo} maestros={maestros} />}
 
       {tab === "alquiler" && (
         <div className="estado-panel">

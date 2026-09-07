@@ -26,6 +26,7 @@ export default async function AaaSeccionPage({ params }: { params: Promise<{ sec
   if (!cfg) notFound();
   const demo = !supabaseConfigured();
   let prefacturas: PrefacturaRow[] = [];
+  let maestros: { areas: string[]; interventores: string[] } = { areas: [], interventores: [] };
   let loadError: string | null = null;
 
   if (demo) {
@@ -38,6 +39,15 @@ export default async function AaaSeccionPage({ params }: { params: Promise<{ sec
       .order("fecha_generacion", { ascending: false });
     if (error) loadError = error.message;
     prefacturas = (data ?? []) as PrefacturaRow[];
+    // Listas maestras de Transporte AAA (adminconfig en transporte_kv): áreas AAA e interventores
+    const { data: kv } = await supa.from("transporte_kv").select("value").eq("key", "adminconfig").maybeSingle();
+    try {
+      const adm = kv?.value ? (JSON.parse(String(kv.value)) as { areas?: unknown; interventores?: unknown }) : null;
+      maestros = {
+        areas: Array.isArray(adm?.areas) ? (adm!.areas as string[]).filter(Boolean) : [],
+        interventores: Array.isArray(adm?.interventores) ? (adm!.interventores as string[]).filter(Boolean) : [],
+      };
+    } catch { /* sin listas: el formulario permite digitar */ }
   }
 
   const corte = new Date(CORTE.fecha_corte + "T00:00:00").toLocaleDateString("es-CO", {
@@ -72,7 +82,7 @@ export default async function AaaSeccionPage({ params }: { params: Promise<{ sec
         </div>
       )}
 
-      <AaaClient data={CORTE} prefacturas={prefacturas} demo={demo} tab={cfg.tab} />
+      <AaaClient data={CORTE} prefacturas={prefacturas} demo={demo} tab={cfg.tab} maestros={maestros} />
     </>
   );
 }

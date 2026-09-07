@@ -111,6 +111,8 @@ export async function POST(req: NextRequest) {
       fecha_generacion: b.fecha_generacion,
       fecha_vencimiento: b.fecha_vencimiento ?? null,
       centro_costo: b.centro_costo ?? null,
+      area_aaa: b.area_aaa ? String(b.area_aaa).trim() || null : null,
+      interventor: b.interventor ? String(b.interventor).trim() || null : null,
       periodo_desde: b.periodo_desde || null,
       periodo_hasta: b.periodo_hasta || null,
       periodo: periodoTexto(b.periodo_desde, b.periodo_hasta, b.periodo),
@@ -151,7 +153,7 @@ export async function PATCH(req: NextRequest) {
   if (e0 || !actual) return NextResponse.json({ error: "Prefactura no encontrada" }, { status: 404 });
 
   const patch: Record<string, unknown> = {};
-  for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "periodo", "periodo_desde", "periodo_hasta", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
+  for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "area_aaa", "interventor", "periodo", "periodo_desde", "periodo_hasta", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
     if (k in b) patch[k] = b[k];
   }
   if ("periodo_desde" in b || "periodo_hasta" in b) {

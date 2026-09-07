@@ -75,6 +75,9 @@ export interface PrefacturaRow {
   acta?: AdjuntoPrefactura | null;
   migo?: AdjuntoPrefactura | null;
   factura?: AdjuntoPrefactura | null;
+  /** Área AAA solicitante e interventor / funcionario (listas maestras de Transporte) */
+  area_aaa?: string | null;
+  interventor?: string | null;
   /** Período del servicio (calendario) */
   periodo_desde?: string | null;
   periodo_hasta?: string | null;
