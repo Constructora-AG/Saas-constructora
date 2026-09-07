@@ -150,6 +150,8 @@ export interface Servicio {
   valorHora?: NumLike;
   /** Contrato de Alquiler: el servicio incluye el transporte del equipo (viaje del tarifario). */
   transporteEquipo?: boolean;
+  /** N° de viajes de transporte del equipo y valor unitario del viaje (tarifario). */
+  viajesEquipo?: NumLike;
   valorTransporte?: NumLike;
   /** N° de la prefactura (PF0001…) en la que quedó incluido el servicio; null/undefined = sin prefacturar. */
   prefactura?: string | null;

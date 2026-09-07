@@ -37,6 +37,7 @@ interface Campos {
   driverSel: string;
   operario: string;
   transporteEquipo: boolean;
+  viajesEquipo: string;
   driverOtro: string;
   equipmentSel: string;
   equipmentOtro: string;
@@ -97,7 +98,7 @@ function buildInit(args: {
     interventorSel: "", interventorOtro: "",
     areaAAASel: "", areaAAAOtro: "",
     plateSel: "", plateOtro: "",
-    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false,
+    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false, viajesEquipo: "0",
     equipmentSel: "", equipmentOtro: "",
     capacity: "", weight: "",
     pickup: "", destination: "", area: "",
@@ -128,6 +129,7 @@ function buildInit(args: {
       driverSel: sd.sel, driverOtro: sd.otro,
       operario: src.operario ?? "",
       transporteEquipo: !!src.transporteEquipo,
+      viajesEquipo: String(src.viajesEquipo ?? (src.transporteEquipo ? 1 : 0)),
       equipmentSel: se.sel, equipmentOtro: se.otro,
       capacity: sv(src.capacity), weight: sv(src.weight),
       pickup: src.pickup ?? "", destination: src.destination ?? "", area: src.area ?? "",
@@ -264,15 +266,18 @@ export function ServicioForm({
       if (!r) { setTarifaHint(null); return next; }
       const unit = num(r.unitario);
       const horas = respHours(next.hourReq, next.hourAtt);
-      const tr = next.transporteEquipo ? tarifaTransporte(next) : null;
-      const vTr = tr ? num(tr.unitario) : 0;
+      const viajes = Math.max(0, Math.floor(num(next.viajesEquipo)));
+      const tr = viajes > 0 ? tarifaTransporte(next) : null;
+      const vTr = tr ? num(tr.unitario) * viajes : 0;
+      const txTr = tr ? ` + ${viajes} viaje(s) × ${fmtCOP(num(tr.unitario))} (transporte del equipo) = ${fmtCOP(vTr)}` : "";
       if (horas == null) {
-        setTarifaHint(`Valor hora máquina: ${fmtCOP(unit)}${tr ? ` · transporte del equipo: ${fmtCOP(vTr)} por viaje` : ""} — indica hora solicitada y atendida para calcular las horas.`);
-        return { ...next, value: tr ? String(vTr) : next.value, tolls: "0" };
+        setTarifaHint(`Valor hora máquina: ${fmtCOP(unit)}${txTr} — indica hora solicitada y atendida para calcular las horas.`);
+        return { ...next, value: tr ? String(vTr) : next.value, tolls: "0", transporteEquipo: viajes > 0 };
       }
-      const total = Math.round(unit * horas) + vTr;
-      setTarifaHint(`${horas} h × ${fmtCOP(unit)} (hora máquina)${tr ? ` + ${fmtCOP(vTr)} (transporte del equipo, 1 viaje)` : ""} = ${fmtCOP(total)}`);
-      return { ...next, value: String(total), tolls: "0" };
+      const alq = Math.round(unit * horas);
+      const total = alq + vTr;
+      setTarifaHint(`${horas} h × ${fmtCOP(unit)} (hora máquina) = ${fmtCOP(alq)}${txTr}${tr ? ` → total ${fmtCOP(total)}` : ""}`);
+      return { ...next, value: String(total), tolls: "0", transporteEquipo: viajes > 0 };
     }
     const c = computeValor(tarifario, next.tarifaCategoria || null, next.tarifaRuta || null, next.recNocturno, next.recDominical);
     if (!c) { setTarifaHint(null); return next; }
@@ -393,8 +398,9 @@ export function ServicioForm({
       tolls: esAlquiler ? "0" : f.tolls,
       horasMaquina: esAlquiler ? (respHours(f.hourReq, f.hourAtt) ?? "") : undefined,
       valorHora: esAlquiler && esPorHora(f) ? String(num(tarifaSel(f)?.unitario ?? 0)) : undefined,
-      transporteEquipo: esAlquiler ? f.transporteEquipo : undefined,
-      valorTransporte: esAlquiler && f.transporteEquipo ? String(num(tarifaTransporte(f)?.unitario ?? 0)) : undefined,
+      transporteEquipo: esAlquiler ? num(f.viajesEquipo) > 0 : undefined,
+      viajesEquipo: esAlquiler ? String(Math.max(0, Math.floor(num(f.viajesEquipo)))) : undefined,
+      valorTransporte: esAlquiler && num(f.viajesEquipo) > 0 ? String(num(tarifaTransporte(f)?.unitario ?? 0)) : undefined,
       photo: f.photo,
       approved: f.approved,
       invoiced: f.invoiced,
@@ -530,11 +536,9 @@ export function ServicioForm({
                 </label>
               )}
               {catSel && esAlquiler && f.tarifaRuta && (
-                <label className="field" style={{ justifyContent: "flex-end" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, marginTop: 20 }}>
-                    <input type="checkbox" checked={f.transporteEquipo} onChange={(e) => setF(conValor({ ...f, transporteEquipo: e.target.checked }))} />
-                    Incluye transporte del equipo{tarifaTransporte(f) ? ` (+${fmtCOP(num(tarifaTransporte(f)!.unitario))} por viaje)` : ""}
-                  </span>
+                <label className="field">Viajes de transporte del equipo{tarifaTransporte(f) ? <span className="muted" style={{ fontWeight: 400 }}> · {fmtCOP(num(tarifaTransporte(f)!.unitario))} por viaje</span> : null}
+                  <input className="input num" type="number" min="0" step="1" value={f.viajesEquipo}
+                    onChange={(e) => setF(conValor({ ...f, viajesEquipo: e.target.value }))} placeholder="0" />
                 </label>
               )}
             </div>
