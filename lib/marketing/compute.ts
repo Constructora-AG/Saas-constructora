@@ -298,3 +298,39 @@ export function nombreLead(p: { nombre?: string | null; celular?: string | null;
   limpio = palabras.map((w) => (w.length > 2 && w === w.toUpperCase() ? w[0] + w.slice(1).toLowerCase() : w)).join(" ");
   return { texto: limpio, sinNombre: false, original };
 }
+
+// ── Ventas reales por proyecto y agrupación (torre / bloque / etapa / manzana) ──
+import type { VentaCartera } from "./types";
+export interface GrupoVentas { grupo: string; total: number; digitales: number; leads: number; valor: number; unidades: string[] }
+export interface ProyectoVentas { proyecto: string; total: number; digitales: number; leads: number; valor: number; grupos: GrupoVentas[] }
+
+/** "TORRE 5 APTO 419" → { grupo: "Torre 5", unidad: "Apto 419" }; "MANZANA 4 LOTE 10" → { grupo: "Manzana 4", unidad: "Lote 10" }. */
+export function partirModulo(module: string): { grupo: string; unidad: string } {
+  const m = String(module ?? "").trim();
+  const re = /^(TORRE|BLOQUE|ETAPA|MANZANA|MZ|SECTOR|CONJUNTO)\s*([A-Z0-9-]+)\s*(.*)$/i;
+  const x = re.exec(m);
+  const cap = (s: string) => s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+  if (x) return { grupo: cap(`${x[1] === "MZ" ? "Manzana" : x[1]} ${x[2]}`), unidad: cap(x[3] || "") || "—" };
+  return { grupo: "Sin agrupación", unidad: cap(m) || "—" };
+}
+
+export function ventasPorProyecto(ventas: VentaCartera[]): ProyectoVentas[] {
+  const map = new Map<string, ProyectoVentas>();
+  for (const v of ventas) {
+    const pr = v.project_name || "Sin proyecto";
+    let p = map.get(pr);
+    if (!p) { p = { proyecto: pr, total: 0, digitales: 0, leads: 0, valor: 0, grupos: [] }; map.set(pr, p); }
+    const { grupo, unidad } = partirModulo(v.module);
+    let g = p.grupos.find((x) => x.grupo === grupo);
+    if (!g) { g = { grupo, total: 0, digitales: 0, leads: 0, valor: 0, unidades: [] }; p.grupos.push(g); }
+    p.total++; g.total++;
+    if (v.digital) { p.digitales++; g.digitales++; }
+    if (v.lead) { p.leads++; g.leads++; }
+    p.valor += Number(v.total_valor ?? 0); g.valor += Number(v.total_valor ?? 0);
+    g.unidades.push(unidad);
+  }
+  const num = (s: string) => Number((s.match(/\d+/) ?? ["0"])[0]);
+  return [...map.values()]
+    .map((p) => ({ ...p, grupos: p.grupos.sort((a, b) => num(a.grupo) - num(b.grupo) || a.grupo.localeCompare(b.grupo)) }))
+    .sort((a, b) => b.total - a.total);
+}

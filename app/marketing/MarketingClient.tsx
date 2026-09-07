@@ -1,12 +1,12 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { DateRange, rangeFor, type Range } from "../DateRange";
 import { IconUsers, IconCheck, IconKey, IconAlert, IconRefresh, IconCoins, IconActivity, IconInfo } from "../icons";
 import { useUsuario } from "@/lib/auth/useUsuario";
-import type { Inversion, Lead, MarketingData, Prospecto } from "@/lib/marketing/types";
+import type { Inversion, Lead, MarketingData, Prospecto, VentaCartera } from "@/lib/marketing/types";
 import {
   agruparLeads, canalCorto, cpaPorMes, distribucion, embudo, esCompra, esContactado, esDescartado,
-  gestionPorAsesor, normGenero, pct, porCreativo, rangoEdad, totalGestion, SEGUIMIENTO_LABEL, nombreLead } from "@/lib/marketing/compute";
+  gestionPorAsesor, normGenero, pct, porCreativo, rangoEdad, totalGestion, SEGUIMIENTO_LABEL, nombreLead, ventasPorProyecto } from "@/lib/marketing/compute";
 
 const NUM = new Intl.NumberFormat("es-CO");
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -102,6 +102,8 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
   const leads = useMemo(() => (data?.leads ?? []).filter((l) => (!proyecto || l.proyecto === proyecto) && (!canal || l.canal === canal)), [data, proyecto, canal]);
   const prospectos = useMemo(() => (data?.prospectos ?? []).filter((p) => !proyecto || p.proyecto === proyecto), [data, proyecto]);
   const compradores = useMemo(() => (data?.compradores ?? []).filter((p) => !proyecto || p.proyecto === proyecto), [data, proyecto]);
+  // Ventas reales (cartera): sin filtro de fecha; se respeta el filtro de proyecto
+  const ventas = useMemo(() => (data?.ventas ?? []).filter((v) => !proyecto || v.project_name === proyecto), [data, proyecto]);
   const canales = useMemo(() => [...new Set((data?.leads ?? []).map((l) => l.canal).filter(Boolean))].sort(), [data]);
 
   return (
@@ -162,7 +164,7 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
         <div className="info-bar"><IconInfo /><div>Todavía no hay datos espejo. Pulsa <b>Actualizar desde Smarthome</b> para traer los leads y prospectos.</div></div>
       )}
 
-      {vista === "marketing" && <VistaMarketing leads={leads} compradores={compradores} />}
+      {vista === "marketing" && <VistaMarketing leads={leads} compradores={compradores} ventas={ventas} />}
       {vista === "gestion" && <VistaGestion prospectos={prospectos} />}
       {vista === "inversion" && (
         <VistaInversion leads={leads} inversion={data?.inversion ?? []} proyectos={proyectos} proyecto={proyecto} canal={canal}
@@ -175,7 +177,9 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Vista Marketing: embudo, canal, anuncio/creativo, perfil de quien compra
 // ═══════════════════════════════════════════════════════════════════════════
-function VistaMarketing({ leads, compradores }: { leads: Lead[]; compradores: Prospecto[] }) {
+function VistaMarketing({ leads, compradores, ventas }: { leads: Lead[]; compradores: Prospecto[]; ventas: VentaCartera[] }) {
+  const porProyecto = useMemo(() => ventasPorProyecto(ventas), [ventas]);
+  const [abierto, setAbierto] = useState<string | null>(null);
   const e = useMemo(() => embudo(leads), [leads]);
   const creativos = useMemo(() => porCreativo(leads), [leads]);
   const canales = useMemo(() => agruparLeads(leads, (l) => l.canal), [leads]);
@@ -255,6 +259,41 @@ function VistaMarketing({ leads, compradores }: { leads: Lead[]; compradores: Pr
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="section-title">Ventas reales por proyecto (cartera) · {NUM.format(ventas.length)} unidades</div>
+      <div className="muted" style={{ fontSize: 12.5, margin: "-6px 0 10px" }}>
+        Fuente de verdad: unidades con cartera activa en Smarthome. «Digitales» = el comprador entró por canal digital; «De campañas» = además figura como lead en las campañas sincronizadas desde enero de 2026. Clic en un proyecto para ver torres, manzanas o etapas.
+      </div>
+      <div className="table-wrap" style={{ marginBottom: 18 }}>
+        <table className="clean">
+          <thead>
+            <tr><th>Proyecto / agrupación</th><th style={{ textAlign: "right" }}>Unidades vendidas</th><th style={{ textAlign: "right" }}>Digitales</th><th style={{ textAlign: "right" }}>De campañas</th><th style={{ textAlign: "right" }}>Valor total</th></tr>
+          </thead>
+          <tbody>
+            {porProyecto.length === 0 && <tr><td colSpan={5} className="muted" style={{ padding: 18 }}>Sin ventas en cartera para el filtro actual.</td></tr>}
+            {porProyecto.map((p) => (
+              <Fragment key={p.proyecto}>
+                <tr style={{ cursor: "pointer", background: "var(--surface-2)" }} onClick={() => setAbierto(abierto === p.proyecto ? null : p.proyecto)}>
+                  <td><b>{abierto === p.proyecto ? "▾" : "▸"} {p.proyecto}</b> <span className="muted" style={{ fontSize: 12 }}>· {p.grupos.length} {/manzana/i.test(p.grupos[0]?.grupo ?? "") ? "manzanas" : /torre/i.test(p.grupos[0]?.grupo ?? "") ? "torres" : "grupos"}</span></td>
+                  <td className="num" style={{ textAlign: "right" }}><b>{NUM.format(p.total)}</b></td>
+                  <td className="num" style={{ textAlign: "right" }}>{NUM.format(p.digitales)} <span className="muted">({PCT(pct(p.digitales, p.total))})</span></td>
+                  <td className="num" style={{ textAlign: "right" }}>{NUM.format(p.leads)}</td>
+                  <td className="num" style={{ textAlign: "right" }}>{COP.format(p.valor)}</td>
+                </tr>
+                {abierto === p.proyecto && p.grupos.map((g) => (
+                  <tr key={p.proyecto + g.grupo}>
+                    <td style={{ paddingLeft: 32 }}>{g.grupo} <span className="muted" style={{ fontSize: 12 }}>· {g.unidades.slice(0, 12).join(", ")}{g.unidades.length > 12 ? ` y ${g.unidades.length - 12} más` : ""}</span></td>
+                    <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.total)}</td>
+                    <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.digitales)}</td>
+                    <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.leads)}</td>
+                    <td className="num" style={{ textAlign: "right" }}>{COP.format(g.valor)}</td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className="section-title">Ángulo de venta: leads y conversión por anuncio / creativo</div>

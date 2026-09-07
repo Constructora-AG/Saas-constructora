@@ -70,10 +70,23 @@ export interface Inversion {
   nota: string | null;
 }
 
+/** Venta real (unidad en cartera) cruzada con el prospecto y el lead digital. */
+export interface VentaCartera {
+  prospect_id: string | null;
+  project_name: string;
+  module: string;
+  total_valor: number | null;
+  digital: boolean;      // el prospecto llegó por canal digital (Smarthome)
+  lead: boolean;         // existe como lead digital en mk_leads (campañas sincronizadas)
+  fecha_creacion: string | null; // del prospecto
+}
+
 export interface MarketingData {
   leads: Lead[];
   prospectos: Prospecto[];
   compradores: Prospecto[]; // todos los que compraron (sin filtro de fecha) — perfil del comprador
+  /** Ventas reales (tabla cartera): la fuente de verdad de unidades vendidas. */
+  ventas: VentaCartera[];
   inversion: Inversion[];
   ultimoSync: string | null;
   syncDetalle: Record<string, unknown> | null;

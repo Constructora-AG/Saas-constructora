@@ -27,14 +27,14 @@ async function todas<T>(build: (from: number, to: number) => PromiseLike<{ data:
 // Devuelve leads y prospectos (por fecha de creación) + inversión + estado del sync.
 export async function GET(req: NextRequest) {
   if (!supabaseConfigured()) {
-    return NextResponse.json({ leads: [], prospectos: [], compradores: [], inversion: [], ultimoSync: null, syncDetalle: null } satisfies MarketingData);
+    return NextResponse.json({ leads: [], prospectos: [], compradores: [], ventas: [], inversion: [], ultimoSync: null, syncDetalle: null } satisfies MarketingData);
   }
   const desde = req.nextUrl.searchParams.get("desde");
   const hasta = req.nextUrl.searchParams.get("hasta");
   const supa = supabaseAdmin();
 
   try {
-    const [leads, prospectos, compradores, { data: inv }, { data: sync }] = await Promise.all([
+    const [leads, prospectos, compradores, { data: inv }, { data: sync }, { data: cartera }] = await Promise.all([
       todas((a, b) => {
         let q = supa.from("mk_leads").select(LEAD_COLS).order("fecha_creacion", { ascending: false }).range(a, b);
         if (desde) q = q.gte("fecha_creacion", desde);
@@ -50,11 +50,32 @@ export async function GET(req: NextRequest) {
       todas((a, b) => supa.from("sh_prospectos").select(PROSP_COLS).eq("es_venta", true).order("fecha_creacion", { ascending: false }).range(a, b)),
       supa.from("mk_inversion").select("id, mes, proyecto, canal, monto, nota").order("mes", { ascending: false }),
       supa.from("mk_sync_estado").select("ultimo_ok, detalle").eq("clave", "marketing").maybeSingle(),
+      supa.from("cartera").select("prospect_id, project_name, module, total_valor"),
     ]);
+    // ── Ventas reales (cartera) → fuente de verdad. Se cruzan con prospectos y leads ──
+    const filasCartera = (cartera ?? []) as Array<{ prospect_id: string | null; project_name: string; module: string; total_valor: number | null }>;
+    const idsCartera = [...new Set(filasCartera.map((c) => c.prospect_id).filter((x): x is string => !!x))];
+    const [{ data: prosVenta }, { data: leadsVenta }] = idsCartera.length
+      ? await Promise.all([
+          supa.from("sh_prospectos").select("prospect_id, digital, fecha_creacion").in("prospect_id", idsCartera),
+          supa.from("mk_leads").select("prospect_id").in("prospect_id", idsCartera),
+        ])
+      : [{ data: [] }, { data: [] }];
+    const infoPros = new Map((prosVenta ?? []).map((p) => [p.prospect_id as string, p as { digital: boolean | null; fecha_creacion: string | null }]));
+    const conLead = new Set((leadsVenta ?? []).map((l) => l.prospect_id as string));
+    const setVenta = new Set(idsCartera);
+    const ventas: MarketingData["ventas"] = filasCartera.map((c) => ({
+      prospect_id: c.prospect_id, project_name: c.project_name, module: c.module, total_valor: c.total_valor,
+      digital: !!(c.prospect_id && infoPros.get(c.prospect_id)?.digital), lead: !!(c.prospect_id && conLead.has(c.prospect_id)),
+      fecha_creacion: (c.prospect_id && infoPros.get(c.prospect_id)?.fecha_creacion) || null,
+    }));
+    const marcar = <T extends { prospect_id: string | null; es_venta?: boolean | null }>(arr: T[]) =>
+      arr.map((x) => (x.prospect_id && setVenta.has(x.prospect_id) ? { ...x, es_venta: true } : x));
     const body: MarketingData = {
-      leads: leads as MarketingData["leads"],
-      prospectos: prospectos as MarketingData["prospectos"],
-      compradores: compradores as MarketingData["prospectos"],
+      leads: marcar(leads as MarketingData["leads"]),
+      prospectos: marcar(prospectos as MarketingData["prospectos"]),
+      compradores: marcar(compradores as MarketingData["prospectos"]),
+      ventas,
       inversion: (inv ?? []) as MarketingData["inversion"],
       ultimoSync: (sync?.ultimo_ok as string) ?? null,
       syncDetalle: (sync?.detalle as Record<string, unknown>) ?? null,
