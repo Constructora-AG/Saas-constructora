@@ -52,18 +52,21 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
     if (cur) out.push(cur); return out.length ? out : [""];
   };
 
-  // ── Encabezado: datos de la empresa + logo AG (como el formato oficial) ──
+  // ── Encabezado: datos de la empresa a la izquierda, logo AG arriba a la derecha ──
   const yTop = y;
+  let logoW = 0;
+  try {
+    const logo = await doc.embedPng(b64ToBytes(LOGO_AG_PNG_B64));
+    const lh = 42; logoW = (logo.width / logo.height) * lh;
+    page.drawImage(logo, { x: M + W - logoW, y: yTop - lh, width: logoW, height: lh });
+  } catch { /* sin logo */ }
+  const textoW = W - logoW - 16; // el texto nunca invade la zona del logo
   text(`Pagina 1 de 1`, M, y - 6, 6.5, font, gris);
   text(EMPRESA.nombre, M, y - 20, 10.5, bold);
   text(`NIT : ${EMPRESA.nit}`, M, y - 32, 8);
-  text(`${EMPRESA.correo}  ${EMPRESA.regimen} - ${EMPRESA.actividad}`, M, y - 44, 7.5, font, rgb(0.05, 0.2, 0.6));
-  try {
-    const logo = await doc.embedPng(b64ToBytes(LOGO_AG_PNG_B64));
-    const lh = 40, lw = (logo.width / logo.height) * lh;
-    page.drawImage(logo, { x: M + W / 2 - lw / 2 + 40, y: yTop - lh - 2, width: lw, height: lh });
-  } catch { /* sin logo */ }
-  y = yTop - 60;
+  const fiscal = wrap(`${EMPRESA.correo}  ${EMPRESA.regimen} - ${EMPRESA.actividad}`, font, 7.5, textoW);
+  fiscal.forEach((ln, k) => text(ln, M, y - 44 - k * 9.5, 7.5, font, rgb(0.05, 0.2, 0.6)));
+  y = yTop - 52 - fiscal.length * 9.5;
 
   // ── Bloque cliente (izquierda) + recuadro prefactura (derecha) ──
   const rowH = 24;

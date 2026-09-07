@@ -333,8 +333,8 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
               <input className="input" required type="date" value={form.fecha_generacion}
                 onChange={(e) => { const g = e.target.value; setForm((f) => ({ ...f, fecha_generacion: g, fecha_vencimiento: mas30(g) })); }} />
             </label>
-            <label className="field">Fecha de vencimiento <span className="muted" style={{ fontWeight: 400 }}>(30 días)</span>
-              <input className="input" type="date" value={form.fecha_vencimiento} onChange={setF("fecha_vencimiento")} />
+            <label className="field">Fecha de vencimiento <span className="muted" style={{ fontWeight: 400 }}>(automática: generación + 30 días)</span>
+              <input className="input" type="date" value={form.fecha_vencimiento} readOnly style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
             </label>
             <label className="field">Período · desde<input className="input" type="date" value={form.periodo_desde} max={form.periodo_hasta || undefined} onChange={setF("periodo_desde")} /></label>
             <label className="field">Período · hasta<input className="input" type="date" value={form.periodo_hasta} min={form.periodo_desde || undefined} onChange={setF("periodo_hasta")} /></label>

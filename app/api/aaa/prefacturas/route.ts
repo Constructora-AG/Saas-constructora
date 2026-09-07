@@ -17,6 +17,14 @@ function limpiarAdjunto(v: unknown): { name: string; type: string; dataUrl: stri
   return { name: String(a.name ?? "archivo"), type: String(a.type ?? "application/octet-stream"), dataUrl };
 }
 
+/** Fecha ISO + 30 días calendario (vencimiento de la prefactura). */
+function mas30Dias(iso: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3] + 30);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** Texto legible del período a partir de las fechas (para tabla y exportes). */
 function periodoTexto(desde: unknown, hasta: unknown, fallback: unknown): string | null {
   const f = (s: unknown) => {
@@ -95,11 +103,8 @@ export async function POST(req: NextRequest) {
   if (b.contrato !== "alquiler" && b.contrato !== "emergencia" && b.contrato !== "transporte")
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
   if (!b.fecha_generacion) return NextResponse.json({ error: "Falta la fecha de generación" }, { status: 400 });
-  // Vencimiento: si no viene, 30 días calendario después de la generación (regla AG)
-  if (!b.fecha_vencimiento) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(b.fecha_generacion));
-    if (m) { const d = new Date(+m[1], +m[2] - 1, +m[3] + 30); b.fecha_vencimiento = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
-  }
+  // Vencimiento: SIEMPRE 30 días calendario después de la generación (regla AG)
+  b.fecha_vencimiento = mas30Dias(String(b.fecha_generacion)) ?? b.fecha_vencimiento ?? null;
 
   const v = validarItems(String(b.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : []);
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 400 });
@@ -188,6 +193,7 @@ export async function PATCH(req: NextRequest) {
   for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "area_aaa", "interventor", "servicios", "periodo", "periodo_desde", "periodo_hasta", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
     if (k in b) patch[k] = b[k];
   }
+  if ("fecha_generacion" in b) patch.fecha_vencimiento = mas30Dias(String(b.fecha_generacion)) ?? patch.fecha_vencimiento ?? actual.fecha_vencimiento;
   if ("periodo_desde" in b || "periodo_hasta" in b) {
     patch.periodo = periodoTexto(patch.periodo_desde ?? actual.periodo_desde, patch.periodo_hasta ?? actual.periodo_hasta, patch.periodo ?? actual.periodo);
   }
