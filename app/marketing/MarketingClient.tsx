@@ -1,9 +1,11 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { DateRange, rangeFor, type Range } from "../DateRange";
-import { IconUsers, IconCheck, IconKey, IconAlert, IconRefresh, IconCoins, IconActivity, IconInfo } from "../icons";
+import { IconUsers, IconCheck, IconKey, IconAlert, IconRefresh, IconCoins, IconActivity, IconInfo, IconDownload } from "../icons";
+import { exportarExcel, exportarPdf, nombreArchivo, type Reporte } from "@/lib/marketing/exportar";
 import { useUsuario } from "@/lib/auth/useUsuario";
 import type { Inversion, Lead, MarketingData, Prospecto, VentaCartera } from "@/lib/marketing/types";
+import type { GestionAsesor } from "@/lib/marketing/compute";
 import {
   agruparLeads, canalCorto, cpaPorMes, distribucion, embudo, esCompra, esContactado, esDescartado,
   gestionPorAsesor, normGenero, pct, porCreativo, rangoEdad, totalGestion, SEGUIMIENTO_LABEL, nombreLead, ventasPorProyecto, partirModulo } from "@/lib/marketing/compute";
@@ -106,6 +108,12 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
   // Ventas reales (cartera): sin filtro de fecha; se respeta el filtro de proyecto
   const ventas = useMemo(() => (data?.ventas ?? []).filter((v) => !proyecto || v.project_name === proyecto), [data, proyecto]);
   const canales = useMemo(() => [...new Set((data?.leads ?? []).map((l) => l.canal).filter(Boolean))].sort(), [data]);
+  // Contexto de filtros que acompaña a cada exportación (Excel/PDF)
+  const contexto = useMemo(() => {
+    const f = (d: Date | null) => (d ? d.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" }) : null);
+    const per = range.from || range.to ? `Período (llegada del lead): ${f(range.from) ?? "inicio"} – ${f(range.to) ?? "hoy"}` : "Período: todo el histórico";
+    return [per, `Proyecto: ${proyecto || "Todos"}`, vista !== "gestion" ? `Canal: ${canal ? canalCorto(canal) : "Todos"}` : "", data?.ultimoSync ? `Datos de Smarthome actualizados: ${fechaCorta(data.ultimoSync)}` : ""].filter(Boolean);
+  }, [range, proyecto, canal, vista, data?.ultimoSync]);
 
   return (
     <>
@@ -165,11 +173,11 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
         <div className="info-bar"><IconInfo /><div>Todavía no hay datos espejo. Pulsa <b>Actualizar desde Smarthome</b> para traer los leads y prospectos.</div></div>
       )}
 
-      {vista === "marketing" && <VistaMarketing leads={leads} compradores={compradores} ventas={ventas} />}
-      {vista === "gestion" && <VistaGestion prospectos={prospectos} />}
+      {vista === "marketing" && <VistaMarketing leads={leads} compradores={compradores} ventas={ventas} contexto={contexto} />}
+      {vista === "gestion" && <VistaGestion prospectos={prospectos} contexto={contexto} />}
       {vista === "inversion" && (
         <VistaInversion leads={leads} inversion={data?.inversion ?? []} proyectos={proyectos} proyecto={proyecto} canal={canal}
-          puedeEditar={usuario?.rol === "superadmin"} onChange={() => cargar(range)} />
+          puedeEditar={usuario?.rol === "superadmin"} onChange={() => cargar(range)} contexto={contexto} />
       )}
     </>
   );
@@ -178,7 +186,7 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Vista Marketing: embudo, canal, anuncio/creativo, perfil de quien compra
 // ═══════════════════════════════════════════════════════════════════════════
-function VistaMarketing({ leads, compradores, ventas }: { leads: Lead[]; compradores: Prospecto[]; ventas: VentaCartera[] }) {
+function VistaMarketing({ leads, compradores, ventas, contexto }: { leads: Lead[]; compradores: Prospecto[]; ventas: VentaCartera[]; contexto: string[] }) {
   const porProyecto = useMemo(() => ventasPorProyecto(ventas), [ventas]);
   const [abierto, setAbierto] = useState<string | null>(null);
   const e = useMemo(() => embudo(leads), [leads]);
@@ -216,8 +224,42 @@ function VistaMarketing({ leads, compradores, ventas }: { leads: Lead[]; comprad
 
   const filas = verTodos ? creativos : creativos.slice(0, 12);
 
+  const reporte = useMemo<Reporte>(() => {
+    const totalVendido = ventas.reduce((s, v) => s + Number(v.total_valor ?? 0), 0);
+    const dist = (titulo: string, d: ReturnType<typeof distribucion>) => d.valores.map((x) => [titulo, x.valor, x.n, x.pct] as (string | number)[]);
+    return {
+      titulo: "Marketing y leads",
+      contexto,
+      kpis: [
+        ["Leads recibidos", NUM.format(e.contactos)], ["Calificados", `${NUM.format(e.calificados)} (${PCT(pct(e.calificados, e.contactos))})`],
+        ["Oportunidades", NUM.format(e.oportunidades)], ["Ventas (leads del período)", NUM.format(e.ventas)],
+        ["Vendido total (cartera)", COP.format(totalVendido)], ["Descartados", NUM.format(e.descartados)],
+      ],
+      tablas: [
+        { titulo: "Embudo de conversión", columnas: [{ titulo: "Etapa", ancho: 3 }, { titulo: "Leads", tipo: "n" }, { titulo: "% del total", tipo: "pct" }],
+          filas: pasos.map(([n, v]) => [n, v, pct(v, e.contactos)]) },
+        { titulo: "Por canal", columnas: [{ titulo: "Canal", ancho: 2 }, { titulo: "Leads", tipo: "n" }, { titulo: "Calificados", tipo: "n" }, { titulo: "% calificados", tipo: "pct" }, { titulo: "Ventas", tipo: "n" }],
+          filas: canales.map((c) => [canalCorto(c.clave), c.leads, c.calificados, pct(c.calificados, c.leads), c.ventas]) },
+        { titulo: "Ventas reales por proyecto y agrupación (cartera)", nota: "Digitales = el comprador entró por canal digital · De campañas = además figura como lead en las campañas sincronizadas.",
+          columnas: [{ titulo: "Proyecto", ancho: 2 }, { titulo: "Agrupación", ancho: 1.6 }, { titulo: "Unidades", ancho: 3 }, { titulo: "Vendidas", tipo: "n" }, { titulo: "Digitales", tipo: "n" }, { titulo: "De campañas", tipo: "n" }, { titulo: "Valor", tipo: "cop", ancho: 1.5 }, { titulo: "Última venta", ancho: 1.2 }],
+          filas: porProyecto.flatMap((p) => [[p.proyecto, "TOTAL PROYECTO", "", p.total, p.digitales, p.leads, p.valor, ""], ...p.grupos.map((g) => [p.proyecto, g.grupo, g.unidades.join(", "), g.total, g.digitales, g.leads, g.valor, g.ultima ? fechaCorta(g.ultima) : ""])]),
+          total: ["Total vendido", "", "", ventas.length, ventas.filter((v) => v.digital).length, ventas.filter((v) => v.lead).length, totalVendido, ""] },
+        { titulo: "Ventas (detalle por unidad)", columnas: [{ titulo: "Fecha de venta", ancho: 1.2 }, { titulo: "Proyecto", ancho: 2 }, { titulo: "Agrupación", ancho: 1.4 }, { titulo: "Unidad" }, { titulo: "Cliente", ancho: 2.4 }, { titulo: "Canal", ancho: 1.4 }, { titulo: "Valor", tipo: "cop", ancho: 1.5 }],
+          filas: [...ventas].sort((a, b) => (b.fecha_venta ?? "").localeCompare(a.fecha_venta ?? "")).map((v) => [v.fecha_venta ? fechaCorta(v.fecha_venta) : "", v.project_name, partirModulo(v.module).grupo, partirModulo(v.module).unidad, v.cliente ?? "", v.digital ? (v.lead ? "Digital · campaña" : "Digital") : "Otro canal", Number(v.total_valor ?? 0)]) },
+        { titulo: "Leads y conversión por anuncio / creativo", columnas: [{ titulo: "Anuncio / creativo", ancho: 3.2 }, { titulo: "Tipo" }, { titulo: "Canal", ancho: 1.2 }, { titulo: "Leads", tipo: "n" }, { titulo: "Contactados", tipo: "n" }, { titulo: "Calificados", tipo: "n" }, { titulo: "% calif.", tipo: "pct" }, { titulo: "Oportun.", tipo: "n" }, { titulo: "Ventas", tipo: "n" }, { titulo: "Descartados", tipo: "n" }, { titulo: "Crédito sí", tipo: "n" }, { titulo: "Último lead", ancho: 1.3 }],
+          filas: creativos.map((c) => [c.titulo, c.tipo || "", c.canales.map(canalCorto).join(", "), c.leads, c.contactados, c.calificados, pct(c.calificados, c.leads), c.oportunidades, c.ventas, c.descartados, c.creditoSi, fmtFecha(c.ultimoLead)]) },
+        { titulo: "Precalificación (formulario / bot)", columnas: [{ titulo: "Pregunta", ancho: 2.2 }, { titulo: "Respuesta", ancho: 2.2 }, { titulo: "Leads", tipo: "n" }, { titulo: "% de los que respondieron", tipo: "pct" }],
+          filas: [...dist("¿Cuenta con crédito aprobado?", precal.credito), ...dist("¿Empleado o independiente?", precal.empleo), ...dist("¿Reportado en centrales?", precal.reportado), ...dist("Capacidad de pago mensual", precal.capacidad), ...dist("Motivación de compra", precal.motivacion), ...dist("¿En cuánto tiempo compra?", precal.tiempo)] },
+        { titulo: "Perfil de quien sí compra", nota: `${NUM.format(compradores.length)} compradores en Ciclo de Compra (histórico completo).`,
+          columnas: [{ titulo: "Dato", ancho: 1.6 }, { titulo: "Valor", ancho: 2.4 }, { titulo: "Compradores", tipo: "n" }, { titulo: "%", tipo: "pct" }],
+          filas: [...dist("Género", perfil.genero), ...dist("Rango de edad", perfil.edad), ...dist("Ciudad", perfil.ciudad), ...dist("Barrio", perfil.barrio), ...dist("Estado civil", perfil.civil), ...dist("Fuente", perfil.fuente), ...dist("Profesión", perfil.profesion)] },
+      ],
+    };
+  }, [e, canales, porProyecto, ventas, creativos, precal, perfil, compradores.length, contexto]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <>
+      <ExportBar reporte={reporte} />
       <div className="kpis">
         <Kpi icon={<IconUsers />} label="Leads recibidos" value={NUM.format(e.contactos)} foot={`${NUM.format(e.unicos)} únicos · ${NUM.format(e.contactos - e.unicos)} repetidos`} />
         <Kpi icon={<IconActivity />} label="Calificados" value={NUM.format(e.calificados)} foot={`${PCT(pct(e.calificados, e.contactos))} de los leads`} tone="warn" />
@@ -421,7 +463,7 @@ function VistaMarketing({ leads, compradores, ventas }: { leads: Lead[]; comprad
 // ═══════════════════════════════════════════════════════════════════════════
 // Vista Gestión comercial: semáforo de tareas y gestión por asesor
 // ═══════════════════════════════════════════════════════════════════════════
-function VistaGestion({ prospectos }: { prospectos: Prospecto[] }) {
+function VistaGestion({ prospectos, contexto }: { prospectos: Prospecto[]; contexto: string[] }) {
   const filas = useMemo(() => gestionPorAsesor(prospectos), [prospectos]);
   const t = useMemo(() => totalGestion(filas), [filas]);
   const vivos = t.recibidos - t.ventas - t.descartados;
@@ -461,8 +503,30 @@ function VistaGestion({ prospectos }: { prospectos: Prospecto[] }) {
   }, [sgRecibidos, sinGestionTodos, sgAgrup]); // eslint-disable-line react-hooks/exhaustive-deps
   const sgMax = Math.max(1, ...serieSg.map((s) => s.recibidos));
 
+  const reporte = useMemo<Reporte>(() => {
+    const filaAsesor = (r: GestionAsesor) => [r.asesor, r.recibidos, r.sinGestion, r.sinGestion24h, r.contactados, r.vencidos, r.activos, r.calificados, r.descartados, r.ventas, r.acciones];
+    const ctxSg = [sgProyecto ? `Proyecto (sin gestionar): ${sgProyecto}` : "", sgDesde || sgHasta ? `Llegaron entre ${sgDesde || "inicio"} y ${sgHasta || "hoy"}` : ""].filter(Boolean).join(" · ");
+    return {
+      titulo: "Gestión comercial",
+      contexto,
+      kpis: [["Leads recibidos", NUM.format(t.recibidos)], ["Sin gestión", `${NUM.format(t.sinGestion)} (${PCT(pct(t.sinGestion, t.recibidos))})`], ["Sin gestión > 24 h", NUM.format(t.sinGestion24h)], ["Tareas vencidas", NUM.format(t.vencidos)], ["Calificados", NUM.format(t.calificados)], ["Ventas", NUM.format(t.ventas)]],
+      tablas: [
+        { titulo: "Gestión por asesor", columnas: [{ titulo: "Asesor", ancho: 2.4 }, { titulo: "Recibidos", tipo: "n" }, { titulo: "Sin gestión", tipo: "n" }, { titulo: "> 24 h", tipo: "n" }, { titulo: "Contactados", tipo: "n" }, { titulo: "Vencidos", tipo: "n" }, { titulo: "Activos", tipo: "n" }, { titulo: "Calificados", tipo: "n" }, { titulo: "Descartados", tipo: "n" }, { titulo: "Ventas", tipo: "n" }, { titulo: "Acciones", tipo: "n" }],
+          filas: filas.map(filaAsesor), total: ["Total", t.recibidos, t.sinGestion, t.sinGestion24h, t.contactados, t.vencidos, t.activos, t.calificados, t.descartados, t.ventas, t.acciones] },
+        { titulo: `Leads no atendidos por ${sgAgrup === "semana" ? "semana" : sgAgrup === "mes" ? "mes" : "año"}`, nota: ctxSg || undefined,
+          columnas: [{ titulo: "Período", ancho: 1.5 }, { titulo: "Recibidos", tipo: "n" }, { titulo: "Sin gestionar", tipo: "n" }, { titulo: "% sin gestionar", tipo: "pct" }],
+          filas: serieSg.map((s) => [s.label, s.recibidos, s.sinGestion, pct(s.sinGestion, s.recibidos)]),
+          total: ["Total", sgRecibidos.length, sinGestionTodos.length, pct(sinGestionTodos.length, sgRecibidos.length)] },
+        { titulo: "Leads sin gestionar (los más antiguos primero)", nota: ctxSg || undefined,
+          columnas: [{ titulo: "Lead", ancho: 2.4 }, { titulo: "Proyecto", ancho: 1.8 }, { titulo: "Fuente", ancho: 1.3 }, { titulo: "Asesor", ancho: 1.8 }, { titulo: "Llegó", ancho: 1.3 }, { titulo: "Hace" }, { titulo: "Semáforo", ancho: 1.2 }, { titulo: "ID Smarthome", ancho: 1.2 }],
+          filas: sinGestionTodos.map((p) => [nombreLead(p).texto, p.proyecto ?? "", canalCorto(p.fuente ?? ""), p.asesor, fmtFecha(p.fecha_creacion), hace(p.fecha_creacion), SEGUIMIENTO_LABEL(p.seguimiento).label, p.prospect_id]) },
+      ],
+    };
+  }, [filas, t, serieSg, sinGestionTodos, sgRecibidos.length, sgAgrup, sgProyecto, sgDesde, sgHasta, contexto]);
+
   return (
     <>
+      <ExportBar reporte={reporte} />
       <div className="kpis">
         <Kpi icon={<IconUsers />} label="Leads recibidos" value={NUM.format(t.recibidos)} foot={`${NUM.format(vivos)} en gestión · ${NUM.format(t.descartados)} descartados · ${NUM.format(t.ventas)} ventas`} />
         <Kpi icon={<IconAlert />} label="Sin ninguna gestión" value={NUM.format(t.sinGestion)} foot={`${PCT(pct(t.sinGestion, t.recibidos))} de los recibidos · ${NUM.format(t.sinGestion24h)} llevan más de 24 h`} tone="high" />
@@ -606,10 +670,25 @@ function Semaforo({ v }: { v: number | null }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Vista Inversión y CPA
 // ═══════════════════════════════════════════════════════════════════════════
-function VistaInversion({ leads, inversion, proyectos, proyecto, canal, puedeEditar, onChange }: {
-  leads: Lead[]; inversion: Inversion[]; proyectos: string[]; proyecto: string; canal: string; puedeEditar: boolean; onChange: () => void;
+function VistaInversion({ leads, inversion, proyectos, proyecto, canal, puedeEditar, onChange, contexto }: {
+  leads: Lead[]; inversion: Inversion[]; proyectos: string[]; proyecto: string; canal: string; puedeEditar: boolean; onChange: () => void; contexto: string[];
 }) {
   const filas = useMemo(() => cpaPorMes(leads, inversion, proyecto, canal), [leads, inversion, proyecto, canal]);
+  const reporte = useMemo<Reporte>(() => {
+    const inv = filas.reduce((s, m) => s + m.inversion, 0), L = filas.reduce((s, m) => s + m.leads, 0), C = filas.reduce((s, m) => s + m.calificados, 0), V = filas.reduce((s, m) => s + m.ventas, 0);
+    return {
+      titulo: "Inversión y CPA",
+      contexto,
+      kpis: [["Inversión registrada", COP.format(inv)], ["Leads", NUM.format(L)], ["Calificados", NUM.format(C)], ["Ventas", NUM.format(V)], ["Costo por lead", L && inv ? COP.format(inv / L) : "—"], ["Costo por cliente", V && inv ? COP.format(inv / V) : "—"]],
+      tablas: [
+        { titulo: "Costo por lead, calificado y cliente por mes", columnas: [{ titulo: "Mes", ancho: 1.2 }, { titulo: "Inversión", tipo: "cop", ancho: 1.4 }, { titulo: "Leads", tipo: "n" }, { titulo: "Calificados", tipo: "n" }, { titulo: "Ventas", tipo: "n" }, { titulo: "Costo / lead", tipo: "cop", ancho: 1.3 }, { titulo: "Costo / calificado", tipo: "cop", ancho: 1.3 }, { titulo: "Costo / cliente", tipo: "cop", ancho: 1.3 }],
+          filas: filas.map((m) => [fmtMes(m.mes), m.inversion || null, m.leads, m.calificados, m.ventas, m.cpl, m.cpc, m.cpa]),
+          total: ["Total", inv, L, C, V, L && inv ? inv / L : null, C && inv ? inv / C : null, V && inv ? inv / V : null] },
+        { titulo: "Registros de inversión", columnas: [{ titulo: "Mes" }, { titulo: "Proyecto", ancho: 2 }, { titulo: "Canal", ancho: 1.4 }, { titulo: "Monto", tipo: "cop", ancho: 1.4 }, { titulo: "Nota", ancho: 3 }],
+          filas: inversion.map((i) => [fmtMes(i.mes), i.proyecto || "Todos", i.canal ? canalCorto(i.canal) : "Todos", Number(i.monto), i.nota ?? ""]) },
+      ],
+    };
+  }, [filas, inversion, contexto]);
   const hoy = new Date();
   const [f, setF] = useState({ mes: `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`, proyecto: "", canal: "", monto: "", nota: "" });
   const [busy, setBusy] = useState(false);
@@ -632,6 +711,7 @@ function VistaInversion({ leads, inversion, proyectos, proyecto, canal, puedeEdi
 
   return (
     <>
+      <ExportBar reporte={reporte} />
       <div className="info-bar"><IconInfo /><div>
         La inversión en Meta Ads se captura manualmente por mes (y opcionalmente por proyecto y canal). Con ella se calcula el costo por lead (CPL), por lead calificado y por cliente (CPA). Los filtros de proyecto y canal de arriba aplican a esta tabla.
       </div></div>
@@ -710,6 +790,26 @@ function VistaInversion({ leads, inversion, proyectos, proyecto, canal, puedeEdi
 }
 
 // ─── Piezas compartidas ──────────────────────────────────────────────────────
+/** Botones «Exportar esta pestaña» a Excel / PDF con los filtros vigentes. */
+function ExportBar({ reporte }: { reporte: Reporte }) {
+  const [busy, setBusy] = useState<"" | "xlsx" | "pdf">("");
+  const [err, setErr] = useState("");
+  const run = async (k: "xlsx" | "pdf") => {
+    setBusy(k); setErr("");
+    try { if (k === "xlsx") await exportarExcel(reporte, nombreArchivo(reporte.titulo)); else await exportarPdf(reporte, nombreArchivo(reporte.titulo)); }
+    catch (e) { console.error(e); setErr("No se pudo generar el archivo. Intenta de nuevo."); }
+    finally { setBusy(""); }
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 14px" }}>
+      <span className="muted" style={{ fontSize: 12.5 }}>Exportar esta pestaña con los filtros actuales:</span>
+      <button className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => void run("xlsx")}><IconDownload /> {busy === "xlsx" ? "Generando…" : "Excel"}</button>
+      <button className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => void run("pdf")}><IconDownload /> {busy === "pdf" ? "Generando…" : "PDF"}</button>
+      {err && <span style={{ color: "var(--high)", fontSize: 12.5 }}>{err}</span>}
+    </div>
+  );
+}
+
 function Kpi({ icon, label, value, foot, tone }: { icon: React.ReactNode; label: string; value: string; foot?: string; tone?: "ok" | "warn" | "high" }) {
   return (
     <div className="kpi">
