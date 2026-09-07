@@ -35,9 +35,11 @@ export async function GET(req: NextRequest) {
   const supa = supabaseTransporte();
 
   if (searchParams.get("list")) {
-    const { data, error } = await supa.from("transporte_kv").select("key");
+    // keys + fecha de actualización por clave: el cliente solo recarga lo que cambió
+    const { data, error } = await supa.from("transporte_kv").select("key, updated_at");
     if (error) return errorLegible(error);
-    return NextResponse.json({ keys: (data ?? []).map((r) => r.key as string) });
+    const rows = (data ?? []) as Array<{ key: string; updated_at: string | null }>;
+    return NextResponse.json({ keys: rows.map((r) => r.key), updated: Object.fromEntries(rows.map((r) => [r.key, r.updated_at ?? ""])) });
   }
 
   const key = searchParams.get("key");

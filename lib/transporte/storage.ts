@@ -82,6 +82,17 @@ export async function kvDelete(key: string): Promise<void> {
   await api(`${API}?key=${encodeURIComponent(k)}`, { method: "DELETE" }, `delete ${key}`);
 }
 
+/** Fecha de actualización por clave (solo las de este módulo, sin prefijo). Sirve para recargar solo lo que cambió. */
+export async function kvMeta(): Promise<Record<string, string>> {
+  if (!storageAvailable()) return Object.fromEntries([...demoStore.keys()].map((k) => [k, ""]));
+  const r = await api<{ keys: string[]; updated?: Record<string, string> }>(`${API}?list=1`, undefined, "meta");
+  const out: Record<string, string> = {};
+  Object.entries(r.updated ?? {}).forEach(([k, v]) => {
+    if (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z]+:(adminconfig|tarifario|services:)/.test(k)) out[NS_PREFIX ? k.slice(NS_PREFIX.length) : k] = v;
+  });
+  return out;
+}
+
 export async function kvList(): Promise<string[]> {
   // Solo las claves de ESTE módulo, sin su prefijo (Transporte excluye las de otros módulos)
   const propias = (keys: string[]) => keys

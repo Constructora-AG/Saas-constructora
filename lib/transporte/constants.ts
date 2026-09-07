@@ -32,7 +32,7 @@ export const PDF_WARN_BYTES = 3 * 1024 * 1024;
 export const STORAGE_TIMEOUT_MS = 15_000;
 export const RESTORE_TIMEOUT_MS = 20_000;
 /** Intervalo del polling de sincronización (ms). */
-export const POLL_INTERVAL_MS = 12_000;
+export const POLL_INTERVAL_MS = 20_000; // sondeo ligero (solo metadatos); se descarga solo lo que cambió
 
 // ── Contrato ───────────────────────────────────────────────────────
 

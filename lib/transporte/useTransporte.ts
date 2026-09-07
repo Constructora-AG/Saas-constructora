@@ -51,6 +51,7 @@ import {
   saveTarifario,
   storageAvailable,
   validateBackup,
+  kvMeta,
   setStorageNamespace,
   type ModuloNs,
 } from "./storage";
@@ -130,6 +131,8 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
   const signatureRef = useRef("");
   const monthsRef = useRef<MonthInfo[]>([]);
   const activeIdxRef = useRef(0);
+  /** updated_at conocido por clave: solo se vuelve a descargar lo que cambió en el servidor. */
+  const metaRef = useRef<Record<string, string>>({});
   monthsRef.current = months;
   activeIdxRef.current = activeMonthIdx;
 
@@ -143,6 +146,7 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
   const loadAllMonths = useCallback(async (list: MonthInfo[]) => {
     const entries = await Promise.all(list.map(async (m) => [m.key, await loadMonth(m.key)] as const));
     setServicesByMonth(Object.fromEntries(entries));
+    metaRef.current = await kvMeta().catch(() => metaRef.current);
   }, []);
 
   const applyAdminContract = useCallback(
@@ -191,24 +195,33 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Polling cada 12 s (pausado con modal abierto) ────────────────
+  // ── Sondeo cada 20 s (pausado con modal abierto) ─────────────────
+  // Una sola consulta ligera de metadatos (clave → updated_at) y se descarga
+  // ÚNICAMENTE lo que cambió en el servidor (antes se bajaban los 14 meses,
+  // con el bloque de ~12 MB de fotos, cada minuto aunque nada hubiera cambiado).
   const refreshOnce = useCallback(
     async (todos: boolean) => {
-      const a = await loadAdminRaw();
-      if (a) {
-        setAdmin(a);
-        await applyAdminContract(a, false);
-      }
       const list = monthsRef.current;
       if (todos || list.length === 0) {
+        const a = await loadAdminRaw();
+        if (a) { setAdmin(a); await applyAdminContract(a, false); }
         await loadAllMonths(list);
-      } else {
-        const activo = list[activeIdxRef.current];
-        if (activo) {
-          const items = await loadMonth(activo.key);
-          setServicesByMonth((prev) => ({ ...prev, [activo.key]: items }));
-        }
+        setLastSyncAt(new Date());
+        return;
       }
+      const meta = await kvMeta();
+      const prev = metaRef.current;
+      const cambio = (k: string) => (meta[k] ?? "") !== (prev[k] ?? "");
+      if (cambio("adminconfig")) {
+        const a = await loadAdminRaw();
+        if (a) { setAdmin(a); await applyAdminContract(a, false); }
+      }
+      const pendientes = list.filter((m) => cambio(`services:${m.key}`));
+      if (pendientes.length) {
+        const entries = await Promise.all(pendientes.map(async (m) => [m.key, await loadMonth(m.key)] as const));
+        setServicesByMonth((p) => ({ ...p, ...Object.fromEntries(entries) }));
+      }
+      metaRef.current = meta;
       setLastSyncAt(new Date());
     },
     [applyAdminContract, loadAllMonths],
@@ -219,8 +232,7 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     const id = setInterval(() => {
       if (modalOpenRef.current) return; // pausa con modal/drawer abierto
       pollTickRef.current += 1;
-      const todos = pollTickRef.current % 5 === 1; // cada 5.º tick, todos los meses (~60 s)
-      refreshOnce(todos).catch(() => undefined);
+      refreshOnce(false).catch(() => undefined); // solo lo que cambió
     }, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [loading, refreshOnce]);
