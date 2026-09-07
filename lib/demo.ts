@@ -9,6 +9,18 @@ export function supabaseConfigured(): boolean {
   );
 }
 
+// El módulo Transporte AAA usa su propio Supabase (Coolify) vía service_role en
+// el servidor. Configurado si hay credenciales propias TRANSPORTE_* o, en su
+// defecto, las del Supabase principal.
+export function transporteConfigured(): boolean {
+  const url = process.env.TRANSPORTE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.TRANSPORTE_SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return Boolean(url && key && !url.includes("TU-PROYECTO"));
+}
+
 export const DEMO_COBRADORES = [
   { id: "c1", nombre: "Liliana Ospina" },
   { id: "c2", nombre: "Andrés Caro" },
