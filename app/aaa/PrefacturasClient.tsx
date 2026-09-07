@@ -39,6 +39,8 @@ const FORM0 = { numero: "", contrato: "alquiler" as "alquiler" | "emergencia", f
 
 export function PrefacturasClient({ initialRows, demo }: { initialRows: PrefacturaRow[]; demo: boolean }) {
   const [rows, setRows] = useState<PrefacturaRow[]>(initialRows);
+  // N° consecutivo automático (informativo; el servidor asigna el definitivo)
+  const proximoNumero = `N° ${String(Math.max(0, ...rows.map((r) => parseInt(String(r.numero ?? "").replace(/\D/g, ""), 10) || 0)) + 1).padStart(4, "0")} (automático)`;
   const [form, setForm] = useState(FORM0);
   const [items, setItems] = useState<ItemForm[]>([{ ...ITEM0 }]);
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -76,7 +78,6 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          numero: form.numero.trim(),
           contrato: form.contrato,
           fecha_generacion: form.fecha_generacion,
           fecha_vencimiento: form.fecha_vencimiento || null,
@@ -154,7 +155,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
       {mostrarForm && (
         <form onSubmit={crear} className="table-wrap" style={{ padding: 18, display: "grid", gap: 12, marginBottom: 18 }}>
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-            <input className="input" required placeholder="N° prefactura * (ej. 44-1)" value={form.numero} onChange={setF("numero")} />
+            <input className="input" readOnly value={proximoNumero} title="Se asigna automáticamente de forma consecutiva" style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
             <select className="input" value={form.contrato} onChange={(e) => { setForm((f) => ({ ...f, contrato: e.target.value as typeof form.contrato })); setItems([{ ...ITEM0 }]); }}>
               <option value="alquiler">Contrato Alquiler</option>
               <option value="emergencia">Otro Sí / Emergencia</option>

@@ -22,7 +22,7 @@ interface ItemBody {
 }
 
 // POST /api/aaa/prefacturas
-// Body: { numero, contrato, fecha_generacion, periodo?, lugar?, nota?, items: [{ item, cantidad, vr_unit }] }
+// Body: { contrato, fecha_generacion, (numero se asigna automático) periodo?, lugar?, nota?, items: [{ item, cantidad, vr_unit }] }
 // Los ítems se validan contra el catálogo Herpro del contrato: nombre no catalogado = rechazo.
 export async function POST(req: NextRequest) {
   let b: Record<string, unknown>;
@@ -32,7 +32,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  if (!b.numero || !String(b.numero).trim()) return NextResponse.json({ error: "Falta el número de prefactura" }, { status: 400 });
   if (b.contrato !== "alquiler" && b.contrato !== "emergencia")
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
   if (!b.fecha_generacion) return NextResponse.json({ error: "Falta la fecha de generación" }, { status: 400 });
@@ -66,10 +65,26 @@ export async function POST(req: NextRequest) {
   const valorBase = items.reduce((s, it) => s + it.valor_base, 0);
 
   const supa = supabaseAdmin();
-  const { data, error } = await supa
+  // N° de prefactura AUTOMÁTICO y consecutivo (0001, 0002, …), como en
+  // Transporte AAA. Se calcula en el servidor sobre el máximo existente; si
+  // dos registros coinciden (23505) se reintenta con el siguiente número.
+  const siguienteNumero = async (): Promise<string> => {
+    const { data: filas } = await supa.from("aaa_prefacturas").select("numero");
+    let max = 0;
+    (filas ?? []).forEach((r) => {
+      const n = parseInt(String(r.numero ?? "").replace(/\D/g, ""), 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    });
+    return String(max + 1).padStart(4, "0");
+  };
+  let data: Record<string, unknown> | null = null;
+  let error: { code?: string; message: string } | null = null;
+  for (let intento = 0; intento < 3; intento++) {
+    const numero = await siguienteNumero();
+    const r = await supa
     .from("aaa_prefacturas")
     .insert({
-      numero: String(b.numero).trim(),
+      numero,
       contrato: b.contrato,
       fecha_generacion: b.fecha_generacion,
       fecha_vencimiento: b.fecha_vencimiento ?? null,
@@ -82,11 +97,12 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single();
-
-  if (error) {
-    const msg = error.code === "23505" ? `Ya existe una prefactura con el número ${b.numero}` : error.message;
-    return NextResponse.json({ error: msg }, { status: 500 });
+    data = (r.data as Record<string, unknown> | null) ?? null;
+    error = r.error;
+    if (!error || error.code !== "23505") break;
   }
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, prefactura: data });
 }
 
