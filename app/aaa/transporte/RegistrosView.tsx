@@ -40,26 +40,34 @@ type ColId =
   | "valor" | "peajes" | "soportes" | "vobo" | "factura" | "aprobo" | "acciones";
 interface Columna { id: ColId; label: string; fija?: boolean; w: number; num?: boolean }
 
+/** Fecha compacta para la tabla: "01 sep 2026". */
+const fechaCorta = (iso: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return fdate(iso);
+  const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  return `${m[3]} ${meses[+m[2] - 1]} ${m[1]}`;
+};
+
 /** Orden secundario estable (número de registro del mes, si existe). */
 const seqDe = (s: Servicio) => Number((s as unknown as { seq?: number }).seq ?? 0);
 
 /** Columnas de la tabla. `fija` = no se puede ocultar. `w` = ancho relativo (table-layout fixed). */
 const COLUMNAS: ReadonlyArray<Columna> = [
-  { id: "fecha", label: "Fecha", fija: true, w: 9 },
-  { id: "tipo", label: "Tipo", w: 8 },
-  { id: "area", label: "Área AAA", w: 13 },
-  { id: "placa", label: "Placa", w: 7 },
+  { id: "fecha", label: "Fecha", fija: true, w: 7 },
+  { id: "tipo", label: "Tipo", w: 7 },
+  { id: "area", label: "Área AAA", w: 12 },
+  { id: "placa", label: "Placa", w: 6 },
   { id: "cap", label: "Cap.", w: 5, num: true },
-  { id: "conductor", label: "Conductor", w: 11 },
-  { id: "equipo", label: "Equipo", w: 12 },
-  { id: "destino", label: "Área / Destino", w: 12 },
-  { id: "valor", label: "Valor", w: 9, num: true },
-  { id: "peajes", label: "Peajes", w: 7, num: true },
-  { id: "soportes", label: "Soportes", w: 9 },
-  { id: "vobo", label: "V°B°", w: 5 },
-  { id: "factura", label: "Facturación", w: 8 },
-  { id: "aprobo", label: "Aprobó", w: 8 },
-  { id: "acciones", label: "", fija: true, w: 5 },
+  { id: "conductor", label: "Conductor", w: 10 },
+  { id: "equipo", label: "Equipo", w: 11 },
+  { id: "destino", label: "Destino", w: 12 },
+  { id: "valor", label: "Valor", w: 8, num: true },
+  { id: "peajes", label: "Peajes", w: 6, num: true },
+  { id: "soportes", label: "Soportes", w: 11 },
+  { id: "vobo", label: "V°B°", w: 4 },
+  { id: "factura", label: "Factura", w: 7 },
+  { id: "aprobo", label: "Aprobó", w: 7 },
+  { id: "acciones", label: "", fija: true, w: 4 },
 ];
 const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "peajes", "aprobo"];
 
@@ -336,36 +344,36 @@ export function RegistrosView({ t }: ViewProps) {
                 <tr key={s.id}>
                   {ver("fecha") && (
                     <td>
-                      <b>{s.date ? fdate(s.date) : "—"}</b>
-                      {s.orderNo && <span className="cc-dias">{s.orderNo}</span>}
+                      <b>{s.date ? fechaCorta(s.date) : "—"}</b>
+                      {s.orderNo && <span className="sub">N° {s.orderNo}</span>}
                       {!ver("tipo") && s.serviceType && s.serviceType !== "Programado" && (
                         <div><span className={`badge ${tipo.cls}`}>{tipo.label}</span></div>
                       )}
                     </td>
                   )}
                   {ver("tipo") && <td><span className={`badge ${tipo.cls}`}>{tipo.label}</span></td>}
-                  {ver("area") && <td className="cell-wrap" title={areaAAADe(s) || ""}>{areaAAADe(s) || "—"}</td>}
+                  {ver("area") && <td title={areaAAADe(s) || ""}><span className="clamp">{areaAAADe(s) || "—"}</span></td>}
                   {ver("placa") && (
                     <td>
                       <b>{s.plate || "—"}</b>
-                      {!ver("cap") && s.capacity !== "" && s.capacity != null && <div className="muted" style={{ fontSize: 11.5 }}>{num(s.capacity)} T</div>}
+                      {!ver("cap") && s.capacity !== "" && s.capacity != null && <span className="sub">{num(s.capacity)} T</span>}
                     </td>
                   )}
                   {ver("cap") && <td className="num" style={{ textAlign: "right" }}>{s.capacity !== "" && s.capacity != null ? `${num(s.capacity)} T` : "—"}</td>}
-                  {ver("conductor") && <td className="cell-wrap" title={s.driver || ""}>{s.driver || "—"}</td>}
-                  {ver("equipo") && <td className="cell-wrap" title={s.equipment || ""}>{s.equipment || "—"}</td>}
+                  {ver("conductor") && <td title={s.driver || ""}><span className="clamp">{s.driver || "—"}</span></td>}
+                  {ver("equipo") && <td title={s.equipment || ""}><span className="clamp">{s.equipment || "—"}</span></td>}
                   {ver("destino") && (
-                    <td className="cell-wrap" title={[s.pickup, s.destination].filter(Boolean).join(" → ")}>
-                      {s.area || s.destination || "—"}
+                    <td title={[s.pickup, s.destination].filter(Boolean).join(" → ")}>
+                      <span className="clamp">{s.area || s.destination || "—"}</span>
                       {s.destination && s.area && s.destination !== s.area && (
-                        <div className="muted" style={{ fontSize: 11.5 }}>{s.destination}</div>
+                        <span className="sub clamp">{s.destination}</span>
                       )}
                     </td>
                   )}
                   {ver("valor") && (
                     <td className="num" style={{ textAlign: "right" }}>
                       <b>{fmtCOP(s.value)}</b>
-                      {!ver("peajes") && num(s.tolls) > 0 && <div className="muted" style={{ fontSize: 11.5 }}>+ {fmtCOP(s.tolls)} peajes</div>}
+                      {!ver("peajes") && num(s.tolls) > 0 && <span className="sub">+ {fmtCOP(s.tolls)} peajes</span>}
                     </td>
                   )}
                   {ver("peajes") && <td className="num" style={{ textAlign: "right" }}>{fmtCOP(s.tolls)}</td>}
@@ -415,7 +423,7 @@ export function RegistrosView({ t }: ViewProps) {
                       </button>
                     </td>
                   )}
-                  {ver("aprobo") && <td className="cell-wrap">{aprobadorDe(s) || "—"}</td>}
+                  {ver("aprobo") && <td><span className="clamp">{aprobadorDe(s) || "—"}</span></td>}
                   {ver("acciones") && (
                     <td className="row-actions" style={{ textAlign: "right" }}>
                       <div className={`rowmenu${menuId === s.id ? " open" : ""}`}>
