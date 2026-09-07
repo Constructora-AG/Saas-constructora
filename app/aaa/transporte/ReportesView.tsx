@@ -15,8 +15,9 @@ import { IconDownload } from "../../icons";
 import type { CSSProperties, ReactNode } from "react";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import { fdate, fmtCOP, fmtMes, respHours, slugify } from "@/lib/transporte/logic";
-import type { Servicio } from "@/lib/transporte/model";
+import type { MonthInfo, Servicio } from "@/lib/transporte/model";
 import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
+import { ServicioForm } from "./ServicioForm";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 
 // ── Utilidades locales ─────────────────────────────────────────────
@@ -92,6 +93,18 @@ export function ReportesView({ t }: ViewProps) {
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VACIOS);
   const [pairs, setPairs] = useState<ExportPair[] | null>(null); // null = aún sin generar
   const [msg, setMsg] = useState<string | null>(null);
+  // Edición de un registro desde el resultado (mismo formulario de Registros)
+  const [edit, setEdit] = useState<{ item: Servicio; month: MonthInfo } | null>(null);
+  const abrirEdicion = (item: Servicio, monthKey: string) => {
+    const month = t.allMonths.find((m) => m.key === monthKey);
+    if (!month) return;
+    setEdit({ item, month });
+    t.setModalOpen(true); // pausa el polling mientras el drawer esté abierto
+  };
+  const cerrarEdicion = () => {
+    setEdit(null);
+    t.setModalOpen(false);
+  };
   const [exportando, setExportando] = useState<ExportFormat | null>(null);
 
   // Modal de reporte por escenario
@@ -530,6 +543,7 @@ export function ReportesView({ t }: ViewProps) {
                   <th style={{ textAlign: "right" }}>Valor</th>
                   <th>Facturado</th>
                   <th>Aprobó</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -549,14 +563,33 @@ export function ReportesView({ t }: ViewProps) {
                       <td className="num" style={{ textAlign: "right" }}><b>{fmtCOP(item.value)}</b></td>
                       <td>{item.invoiced ? <span className="badge ok">Sí</span> : <span className="badge warn">Pendiente</span>}</td>
                       <td>{aprobadorDe(item) || "—"}</td>
+                      <td className="row-actions" style={{ whiteSpace: "nowrap" }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => abrirEdicion(item, monthKey)} title="Editar este registro">Editar</button>
+                      </td>
                     </tr>
                   ))
                 ) : (
-                  <tr><td colSpan={9} className="muted" style={{ padding: 18 }}>Ningún servicio coincide con estos filtros.</td></tr>
+                  <tr><td colSpan={10} className="muted" style={{ padding: 18 }}>Ningún servicio coincide con estos filtros.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Formulario de edición en drawer (mismo de Registros) */}
+          {edit && (
+            <ServicioForm
+              t={t}
+              month={edit.month}
+              editing={edit.item}
+              dupFrom={null}
+              onClose={cerrarEdicion}
+              onSaved={(saved) => {
+                // Refleja el cambio en el resultado sin regenerar el reporte
+                setPairs((prev) => prev ? prev.map((p) => (p.item.id === saved.id ? { ...p, item: saved } : p)) : prev);
+                cerrarEdicion();
+              }}
+            />
+          )}
 
           {/* ── Gráficas y tarjetas ── */}
           <div className="charts-grid">

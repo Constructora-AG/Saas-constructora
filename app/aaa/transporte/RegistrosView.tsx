@@ -1,11 +1,10 @@
 "use client";
 // ════════════════════════════════════════════════════════════════════
 // Control Transporte AAA — Vista Registros / Servicios (SPEC §5.2)
-// - Pestañas por mes de la vigencia (segmented) + toolbar del mes.
-// - Tabla del mes (table.clean, scroll horizontal responsive) con las
-//   columnas del SPEC: fecha, tipo, área AAA, placa, capacidad,
-//   conductor, equipo, área/destino, valor, peajes, soportes (chips que
-//   abren el adjunto), V°B°, facturación (toggle), aprobó y acciones.
+// - Pestañas por mes visibles de la vigencia (segmented) + toolbar del mes.
+// - Tabla del mes ADAPTADA AL ANCHO de pantalla (sin scroll horizontal):
+//   columnas configurables (mostrar/ocultar, persistidas en localStorage),
+//   paginación de 10 registros y acciones por fila en un menú compacto.
 // - Acciones por fila: orden de servicio PDF (pdf-lib), duplicar
 //   (no copia fecha/adjuntos/checkboxes), editar, eliminar.
 // - Exportación mensual (SPEC §5.2): checkbox «Solo pendientes por
@@ -14,7 +13,7 @@
 // - Formulario en drawer (ServicioForm): t.setModalOpen pausa el polling.
 // ════════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconDownload } from "../../icons";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { Servicio } from "@/lib/transporte/model";
@@ -31,11 +30,46 @@ const TIPO_BADGE: Record<string, { label: string; cls: string }> = {
   Emergencia: { label: "Emergencia", cls: "high" },
 };
 
-const chipBtn: React.CSSProperties = {
-  border: "none",
-  cursor: "pointer",
-  font: "inherit",
-};
+const chipBtn: React.CSSProperties = { border: "none", cursor: "pointer", font: "inherit" };
+
+const PAGE_SIZE = 10;
+const COLS_KEY = "transporte.registros.columnas.v1";
+
+type ColId =
+  | "fecha" | "tipo" | "area" | "placa" | "cap" | "conductor" | "equipo" | "destino"
+  | "valor" | "peajes" | "soportes" | "vobo" | "factura" | "aprobo" | "acciones";
+interface Columna { id: ColId; label: string; fija?: boolean; w: number; num?: boolean }
+
+/** Orden secundario estable (número de registro del mes, si existe). */
+const seqDe = (s: Servicio) => Number((s as unknown as { seq?: number }).seq ?? 0);
+
+/** Columnas de la tabla. `fija` = no se puede ocultar. `w` = ancho relativo (table-layout fixed). */
+const COLUMNAS: ReadonlyArray<Columna> = [
+  { id: "fecha", label: "Fecha", fija: true, w: 9 },
+  { id: "tipo", label: "Tipo", w: 8 },
+  { id: "area", label: "Área AAA", w: 13 },
+  { id: "placa", label: "Placa", w: 7 },
+  { id: "cap", label: "Cap.", w: 5, num: true },
+  { id: "conductor", label: "Conductor", w: 11 },
+  { id: "equipo", label: "Equipo", w: 12 },
+  { id: "destino", label: "Área / Destino", w: 12 },
+  { id: "valor", label: "Valor", w: 9, num: true },
+  { id: "peajes", label: "Peajes", w: 7, num: true },
+  { id: "soportes", label: "Soportes", w: 9 },
+  { id: "vobo", label: "V°B°", w: 5 },
+  { id: "factura", label: "Facturación", w: 8 },
+  { id: "aprobo", label: "Aprobó", w: 8 },
+  { id: "acciones", label: "", fija: true, w: 5 },
+];
+const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "peajes", "aprobo"];
+
+function leerOcultas(): Set<ColId> {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(COLS_KEY) : null;
+    if (raw) return new Set(JSON.parse(raw) as ColId[]);
+  } catch { /* sin storage */ }
+  return new Set(OCULTAS_DEFAULT);
+}
 
 export function RegistrosView({ t }: ViewProps) {
   const [form, setForm] = useState<{ editing: Servicio | null; dupFrom: Servicio | null } | null>(null);
@@ -46,18 +80,57 @@ export function RegistrosView({ t }: ViewProps) {
   const [soloPendientes, setSoloPendientes] = useState(true);
   const [exportando, setExportando] = useState<ExportFormat | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  // Columnas visibles, paginación y menú de acciones
+  const [ocultas, setOcultas] = useState<Set<ColId>>(() => new Set(OCULTAS_DEFAULT));
+  const [colPickOpen, setColPickOpen] = useState(false);
+  const [pagina, setPagina] = useState(1);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const colPickRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => { setOcultas(leerOcultas()); }, []);
+  useEffect(() => {
+    const cerrarMenus = (e: MouseEvent) => {
+      if (colPickRef.current && !colPickRef.current.contains(e.target as Node)) setColPickOpen(false);
+      if (!(e.target as HTMLElement).closest?.(".rowmenu")) setMenuId(null);
+    };
+    document.addEventListener("mousedown", cerrarMenus);
+    return () => document.removeEventListener("mousedown", cerrarMenus);
+  }, []);
 
   const mes = t.activeMonth;
   const items = useMemo(
-    () => [...t.activeServices].sort((a, b) => (a.date || "").localeCompare(b.date || "")),
+    () => [...t.activeServices].sort((a, b) => (a.date || "").localeCompare(b.date || "") || seqDe(a) - seqDe(b)),
     [t.activeServices],
   );
   const tot = useMemo(() => totales(items), [items]);
   const diasMes = mes ? new Date(mes.year, mes.month + 1, 0).getDate() : 0;
 
+  // Paginación (10 por página); vuelve a la página 1 al cambiar de mes
+  useEffect(() => { setPagina(1); }, [mes?.key]);
+  const totalPaginas = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const visibles = useMemo(() => items.slice((paginaActual - 1) * PAGE_SIZE, paginaActual * PAGE_SIZE), [items, paginaActual]);
+
+  const columnas = useMemo(() => COLUMNAS.filter((c) => !ocultas.has(c.id)), [ocultas]);
+  const anchoTotal = columnas.reduce((a, c) => a + c.w, 0);
+  const ver = (id: ColId) => !ocultas.has(id);
+  const toggleCol = (id: ColId) => {
+    setOcultas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { window.localStorage.setItem(COLS_KEY, JSON.stringify([...next])); } catch { /* sin storage */ }
+      return next;
+    });
+  };
+  const restablecerCols = () => {
+    setOcultas(new Set(OCULTAS_DEFAULT));
+    try { window.localStorage.removeItem(COLS_KEY); } catch { /* sin storage */ }
+  };
+
   const abrir = (editing: Servicio | null, dupFrom: Servicio | null) => {
     setRowError(null);
     setGuardado(null);
+    setMenuId(null);
     setForm({ editing, dupFrom });
     t.setModalOpen(true); // pausa el polling mientras el drawer esté abierto
   };
@@ -68,6 +141,7 @@ export function RegistrosView({ t }: ViewProps) {
 
   const eliminar = async (s: Servicio) => {
     if (!mes) return;
+    setMenuId(null);
     if (!window.confirm("¿Eliminar este registro de servicio? Esta acción no se puede deshacer.")) return;
     setRowError(null);
     try {
@@ -89,6 +163,7 @@ export function RegistrosView({ t }: ViewProps) {
 
   const ordenPdf = async (s: Servicio) => {
     setRowError(null);
+    setMenuId(null);
     setPdfBusy(s.id);
     try {
       await buildOrderPdf(s, t.tarifario, mes?.label ?? "");
@@ -108,7 +183,7 @@ export function RegistrosView({ t }: ViewProps) {
     setExportError(null);
     setExportando(fmt);
     try {
-      const totalGlobalValue = t.months.reduce(
+      const totalGlobalValue = t.allMonths.reduce(
         (acc, m) => acc + (t.servicesByMonth[m.key] ?? []).reduce((s, it) => s + num(it.value), 0),
         0,
       );
@@ -143,6 +218,14 @@ export function RegistrosView({ t }: ViewProps) {
     );
   }
 
+  const desde = items.length === 0 ? 0 : (paginaActual - 1) * PAGE_SIZE + 1;
+  const hasta = Math.min(items.length, paginaActual * PAGE_SIZE);
+  const paginas = useMemo(() => {
+    // Ventana de páginas: 1 … (actual-1, actual, actual+1) … última
+    const set = new Set<number>([1, totalPaginas, paginaActual - 1, paginaActual, paginaActual + 1]);
+    return [...set].filter((p) => p >= 1 && p <= totalPaginas).sort((a, b) => a - b);
+  }, [paginaActual, totalPaginas]);
+
   return (
     <>
       {/* Pestañas por mes de la vigencia */}
@@ -156,6 +239,9 @@ export function RegistrosView({ t }: ViewProps) {
               title={m.label}
             >
               {m.label.split(" ")[0].slice(0, 3)} {String(m.year).slice(2)}
+              {(t.servicesByMonth[m.key]?.length ?? 0) > 0 && (
+                <span className="seg-count">{t.servicesByMonth[m.key].length}</span>
+              )}
             </button>
           ))}
         </div>
@@ -171,13 +257,30 @@ export function RegistrosView({ t }: ViewProps) {
         <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>+ Agregar servicio</button>
       </div>
 
-      {/* Exportación mensual (SPEC §5.2) */}
+      {/* Exportación mensual (SPEC §5.2) + selector de columnas */}
       <div className="toolbar" style={{ alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-2)", cursor: "pointer" }}>
           <input type="checkbox" checked={soloPendientes} onChange={(e) => setSoloPendientes(e.target.checked)} />
           Solo pendientes por facturar
         </label>
         <span className="topbar-spacer" style={{ flex: 1 }} />
+        <div className="colpick" ref={colPickRef}>
+          <button className={`btn btn-ghost btn-sm${colPickOpen ? " active" : ""}`} onClick={() => setColPickOpen((v) => !v)} title="Mostrar u ocultar columnas">
+            ☷ Columnas{ocultas.size > 0 && <span className="seg-count">{COLUMNAS.length - ocultas.size}/{COLUMNAS.length}</span>}
+          </button>
+          {colPickOpen && (
+            <div className="colpick-menu">
+              <div className="colpick-title">Columnas visibles</div>
+              {COLUMNAS.filter((c) => c.label).map((c) => (
+                <label key={c.id} className={`colpick-item${c.fija ? " fija" : ""}`}>
+                  <input type="checkbox" checked={ver(c.id)} disabled={!!c.fija} onChange={() => toggleCol(c.id)} />
+                  {c.label}
+                </label>
+              ))}
+              <button className="btn btn-ghost btn-sm" style={{ marginTop: 6, width: "100%" }} onClick={restablecerCols}>Restablecer</button>
+            </div>
+          )}
+        </div>
         <button className="btn btn-ghost btn-sm" disabled={exportando !== null} onClick={() => void exportarMes("csv")}>
           <IconDownload width={15} height={15} /> {exportando === "csv" ? "Exportando…" : "CSV"}
         </button>
@@ -205,111 +308,170 @@ export function RegistrosView({ t }: ViewProps) {
         </div>
       )}
 
-      {/* Tabla del mes */}
-      <div className="table-wrap table-scroll">
-        <table className="clean">
+      {/* Tabla del mes: ajustada al ancho, sin scroll horizontal */}
+      <div className="table-wrap tbl-fit-wrap">
+        <table className="clean tbl-fit">
+          <colgroup>
+            {columnas.map((c) => <col key={c.id} style={{ width: `${(c.w / anchoTotal) * 100}%` }} />)}
+          </colgroup>
           <thead>
             <tr>
-              <th>Fecha</th>
-              <th>Tipo</th>
-              <th>Área AAA</th>
-              <th>Placa</th>
-              <th style={{ textAlign: "right" }}>Cap.</th>
-              <th>Conductor</th>
-              <th>Equipo</th>
-              <th>Área / Destino</th>
-              <th style={{ textAlign: "right" }}>Valor</th>
-              <th style={{ textAlign: "right" }}>Peajes</th>
-              <th>Soportes</th>
-              <th>V°B°</th>
-              <th>Facturación</th>
-              <th>Aprobó</th>
-              <th></th>
+              {columnas.map((c) => (
+                <th key={c.id} style={c.num ? { textAlign: "right" } : undefined}>{c.label}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={15} className="muted" style={{ padding: 18 }}>
+                <td colSpan={columnas.length} className="muted" style={{ padding: 18 }}>
                   Aún no hay servicios registrados en {mes.label}. Usa &laquo;Agregar servicio&raquo; para comenzar.
                 </td>
               </tr>
             )}
-            {items.map((s) => {
+            {visibles.map((s) => {
               const tipo = TIPO_BADGE[String(s.serviceType)] ?? { label: String(s.serviceType || "—"), cls: "warn" };
+              const fotos = s.photoFiles ?? [];
               return (
                 <tr key={s.id}>
-                  <td><b>{s.date ? fdate(s.date) : "—"}</b>{s.orderNo && <span className="cc-dias">{s.orderNo}</span>}</td>
-                  <td><span className={`badge ${tipo.cls}`}>{tipo.label}</span></td>
-                  <td>{areaAAADe(s) || "—"}</td>
-                  <td>{s.plate || "—"}</td>
-                  <td className="num" style={{ textAlign: "right" }}>{s.capacity !== "" && s.capacity != null ? `${num(s.capacity)} T` : "—"}</td>
-                  <td>{s.driver || "—"}</td>
-                  <td>{s.equipment || "—"}</td>
-                  <td>{s.area || s.destination || "—"}</td>
-                  <td className="num" style={{ textAlign: "right" }}><b>{fmtCOP(s.value)}</b></td>
-                  <td className="num" style={{ textAlign: "right" }}>{fmtCOP(s.tolls)}</td>
-                  <td>
-                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4 }}>
-                      {(s.photoFiles ?? []).map((file, i) => (
-                        <button
-                          key={`${s.id}-f${i}`}
-                          className="badge"
-                          style={{ ...chipBtn, background: "var(--brand-soft)", color: "var(--brand)" }}
-                          onClick={() => openAttachment(file)}
-                          title={`Abrir ${file.name}`}
-                        >
-                          {file.type === "application/pdf" || /\.pdf$/i.test(file.name) ? "PDF" : "Foto"} {i + 1}
-                        </button>
-                      ))}
-                      {s.approvalFile && (
-                        <button
-                          className="badge ok"
-                          style={chipBtn}
-                          onClick={() => s.approvalFile && openAttachment(s.approvalFile)}
-                          title={`Abrir V°B°: ${s.approvalFile.name}`}
-                        >
-                          V°B°
-                        </button>
+                  {ver("fecha") && (
+                    <td>
+                      <b>{s.date ? fdate(s.date) : "—"}</b>
+                      {s.orderNo && <span className="cc-dias">{s.orderNo}</span>}
+                      {!ver("tipo") && s.serviceType && s.serviceType !== "Programado" && (
+                        <div><span className={`badge ${tipo.cls}`}>{tipo.label}</span></div>
                       )}
-                      {!(s.photoFiles?.length || s.approvalFile) && <span className="muted">—</span>}
-                    </span>
-                  </td>
-                  <td><span className={`badge ${s.approved ? "ok" : "warn"}`}>{s.approved ? "Sí" : "No"}</span></td>
-                  <td>
-                    <button
-                      className={`badge ${s.invoiced ? "ok" : "warn"}`}
-                      style={chipBtn}
-                      onClick={() => void facturado(s)}
-                      title={s.invoiced ? "Clic para marcar como pendiente" : "Clic para marcar como facturado"}
-                    >
-                      {s.invoiced ? "Facturado" : "Pendiente"}
-                    </button>
-                  </td>
-                  <td>{aprobadorDe(s) || "—"}</td>
-                  <td className="row-actions" style={{ whiteSpace: "nowrap" }}>
-                    <button className="btn btn-ghost btn-sm" disabled={pdfBusy === s.id} onClick={() => void ordenPdf(s)} title="Orden de servicio PDF">
-                      {pdfBusy === s.id ? "…" : "Orden"}
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => abrir(null, s)} title="Duplicar (no copia fecha, adjuntos ni estados)">Duplicar</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => abrir(s, null)} title="Editar">Editar</button>
-                    <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void eliminar(s)} title="Eliminar">Eliminar</button>
-                  </td>
+                    </td>
+                  )}
+                  {ver("tipo") && <td><span className={`badge ${tipo.cls}`}>{tipo.label}</span></td>}
+                  {ver("area") && <td className="cell-wrap" title={areaAAADe(s) || ""}>{areaAAADe(s) || "—"}</td>}
+                  {ver("placa") && (
+                    <td>
+                      <b>{s.plate || "—"}</b>
+                      {!ver("cap") && s.capacity !== "" && s.capacity != null && <div className="muted" style={{ fontSize: 11.5 }}>{num(s.capacity)} T</div>}
+                    </td>
+                  )}
+                  {ver("cap") && <td className="num" style={{ textAlign: "right" }}>{s.capacity !== "" && s.capacity != null ? `${num(s.capacity)} T` : "—"}</td>}
+                  {ver("conductor") && <td className="cell-wrap" title={s.driver || ""}>{s.driver || "—"}</td>}
+                  {ver("equipo") && <td className="cell-wrap" title={s.equipment || ""}>{s.equipment || "—"}</td>}
+                  {ver("destino") && (
+                    <td className="cell-wrap" title={[s.pickup, s.destination].filter(Boolean).join(" → ")}>
+                      {s.area || s.destination || "—"}
+                      {s.destination && s.area && s.destination !== s.area && (
+                        <div className="muted" style={{ fontSize: 11.5 }}>{s.destination}</div>
+                      )}
+                    </td>
+                  )}
+                  {ver("valor") && (
+                    <td className="num" style={{ textAlign: "right" }}>
+                      <b>{fmtCOP(s.value)}</b>
+                      {!ver("peajes") && num(s.tolls) > 0 && <div className="muted" style={{ fontSize: 11.5 }}>+ {fmtCOP(s.tolls)} peajes</div>}
+                    </td>
+                  )}
+                  {ver("peajes") && <td className="num" style={{ textAlign: "right" }}>{fmtCOP(s.tolls)}</td>}
+                  {ver("soportes") && (
+                    <td>
+                      <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4 }}>
+                        {fotos.slice(0, 3).map((file, i) => (
+                          <button
+                            key={`${s.id}-f${i}`}
+                            className="thumb-chip"
+                            onClick={() => openAttachment(file)}
+                            title={`Abrir ${file.name}`}
+                          >
+                            {file.type === "application/pdf" || /\.pdf$/i.test(file.name) ? (
+                              <span className="badge" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>PDF</span>
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={file.dataUrl} alt={file.name} loading="lazy" />
+                            )}
+                          </button>
+                        ))}
+                        {fotos.length > 3 && <span className="badge" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>+{fotos.length - 3}</span>}
+                        {s.approvalFile && (
+                          <button
+                            className="badge ok"
+                            style={chipBtn}
+                            onClick={() => s.approvalFile && openAttachment(s.approvalFile)}
+                            title={`Abrir V°B°: ${s.approvalFile.name}`}
+                          >
+                            V°B°
+                          </button>
+                        )}
+                        {!(fotos.length || s.approvalFile) && <span className="muted">—</span>}
+                      </span>
+                    </td>
+                  )}
+                  {ver("vobo") && <td><span className={`badge ${s.approved ? "ok" : "warn"}`}>{s.approved ? "Sí" : "No"}</span></td>}
+                  {ver("factura") && (
+                    <td>
+                      <button
+                        className={`badge ${s.invoiced ? "ok" : "warn"}`}
+                        style={chipBtn}
+                        onClick={() => void facturado(s)}
+                        title={s.invoiced ? "Clic para marcar como pendiente" : "Clic para marcar como facturado"}
+                      >
+                        {s.invoiced ? "Facturado" : "Pendiente"}
+                      </button>
+                    </td>
+                  )}
+                  {ver("aprobo") && <td className="cell-wrap">{aprobadorDe(s) || "—"}</td>}
+                  {ver("acciones") && (
+                    <td className="row-actions" style={{ textAlign: "right" }}>
+                      <div className={`rowmenu${menuId === s.id ? " open" : ""}`}>
+                        <button className="btn btn-ghost btn-sm rowmenu-btn" onClick={() => setMenuId(menuId === s.id ? null : s.id)} title="Acciones" aria-label="Acciones">⋯</button>
+                        {menuId === s.id && (
+                          <div className="rowmenu-list">
+                            <button disabled={pdfBusy === s.id} onClick={() => void ordenPdf(s)}>{pdfBusy === s.id ? "Generando…" : "Orden de servicio PDF"}</button>
+                            <button onClick={() => abrir(s, null)}>Editar</button>
+                            <button onClick={() => abrir(null, s)} title="No copia fecha, adjuntos ni estados">Duplicar</button>
+                            <button className="danger" onClick={() => void eliminar(s)}>Eliminar</button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               );
             })}
-            {items.length > 0 && (
-              <tr style={{ background: "var(--surface-2)" }}>
-                <td><b>Total</b></td>
-                <td colSpan={7}></td>
-                <td className="num" style={{ textAlign: "right", fontWeight: 700 }}>{fmtCOP(tot.valor)}</td>
-                <td className="num" style={{ textAlign: "right", fontWeight: 700 }}>{fmtCOP(tot.peajes)}</td>
-                <td colSpan={5} className="muted">{tot.pendientes} pendiente(s) por facturar · {fmtCOP(tot.valorPendiente)}</td>
-              </tr>
-            )}
+            {items.length > 0 && (() => {
+              // Fila de totales alineada con las columnas visibles
+              const iVal = columnas.findIndex((c) => c.id === "valor");
+              const iPea = columnas.findIndex((c) => c.id === "peajes");
+              const lead = iVal >= 0 ? iVal : iPea >= 0 ? iPea : columnas.length;
+              const trailing = columnas.length - lead - (iVal >= 0 ? 1 : 0) - (iPea >= 0 ? 1 : 0);
+              return (
+                <tr style={{ background: "var(--surface-2)" }}>
+                  <td colSpan={Math.max(1, lead)}><b>Total del mes</b>{lead === columnas.length && <span className="muted"> · {fmtCOP(tot.valor)}</span>}</td>
+                  {iVal >= 0 && <td className="num" style={{ textAlign: "right", fontWeight: 700 }}>{fmtCOP(tot.valor)}</td>}
+                  {iPea >= 0 && <td className="num" style={{ textAlign: "right", fontWeight: 700 }}>{fmtCOP(tot.peajes)}</td>}
+                  {trailing > 0 && (
+                    <td colSpan={trailing} className="muted">
+                      {tot.pendientes} pendiente(s) por facturar · {fmtCOP(tot.valorPendiente)}
+                    </td>
+                  )}
+                </tr>
+              );
+            })()}
           </tbody>
         </table>
       </div>
+
+      {/* Paginación */}
+      {items.length > 0 && (
+        <div className="pager">
+          <span className="muted">Mostrando {desde}–{hasta} de {items.length} servicios</span>
+          <span className="topbar-spacer" style={{ flex: 1 }} />
+          <button className="btn btn-ghost btn-sm" disabled={paginaActual <= 1} onClick={() => setPagina(paginaActual - 1)}>‹ Anterior</button>
+          {paginas.map((p, i) => (
+            <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {i > 0 && paginas[i - 1] !== p - 1 && <span className="muted">…</span>}
+              <button className={`btn btn-sm ${p === paginaActual ? "btn-primary" : "btn-ghost"}`} onClick={() => setPagina(p)}>{p}</button>
+            </span>
+          ))}
+          <button className="btn btn-ghost btn-sm" disabled={paginaActual >= totalPaginas} onClick={() => setPagina(paginaActual + 1)}>Siguiente ›</button>
+        </div>
+      )}
 
       {/* Formulario de servicio en drawer */}
       {form && (
