@@ -6,7 +6,7 @@
 //   documentos pasa solo a "Pendiente de pago" → "Pagada" | "Rechazada".
 // - Crear, editar (mismo formulario), eliminar; cargar/abrir acta y migo.
 // ════════════════════════════════════════════════════════════════════
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { catalogoDe, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
@@ -88,6 +88,13 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
   }
 
   const cerrarForm = () => { setMostrarForm(false); setEditando(null); setForm(FORM0); setItems([{ ...ITEM0 }]); };
+  useEffect(() => {
+    if (!mostrarForm) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") cerrarForm(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mostrarForm]);
   const abrirNuevo = () => { setError(null); setOk(null); setEditando(null); setForm(FORM0); setItems([{ ...ITEM0 }]); setMostrarForm(true); };
   const abrirEdicion = (r: PrefacturaRow) => {
     setError(null); setOk(null);
@@ -240,9 +247,7 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
       <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span>Registro de prefacturas</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
-        <button className="btn btn-primary btn-sm" onClick={() => (mostrarForm ? cerrarForm() : abrirNuevo())}>
-          {mostrarForm ? "Cancelar" : "Registrar prefactura"}
-        </button>
+        <button className="btn btn-primary btn-sm" onClick={abrirNuevo}>+ Registrar prefactura</button>
       </div>
 
       {ok && (
@@ -254,8 +259,18 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
       )}
 
       {mostrarForm && (
-        <form onSubmit={guardar} className="table-wrap" style={{ padding: 18, display: "grid", gap: 12, marginBottom: 18 }}>
-          <div style={{ fontWeight: 700 }}>{editando ? `Editar prefactura ${editando.numero}` : "Nueva prefactura"}</div>
+        <>
+          <div className="drawer-overlay" onClick={cerrarForm} />
+          <aside className="drawer" role="dialog" aria-modal="true" aria-label={editando ? `Editar prefactura ${editando.numero}` : "Nueva prefactura"}>
+            <div className="drawer-head">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h2 className="drawer-title">{editando ? `Editar prefactura ${editando.numero}` : "Nueva prefactura"}</h2>
+                <span className="cc-dias">{editando ? `Estado: ${(ESTADOS[editando.estado] ?? { label: editando.estado }).label}` : `N° ${proximoNumero.replace(" (automático)", "")} · se asigna automáticamente`}</span>
+              </div>
+              <button className="drawer-close" onClick={cerrarForm} title="Cerrar (Esc)">×</button>
+            </div>
+            <div className="drawer-body">
+        <form onSubmit={guardar} style={{ display: "grid", gap: 12 }}>
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
             <input className="input" readOnly value={editando ? editando.numero : proximoNumero} title="Se asigna automáticamente de forma consecutiva" style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
             <select className="input" value={form.contrato} onChange={(e) => { setForm((f) => ({ ...f, contrato: e.target.value as typeof form.contrato })); setItems([{ ...ITEM0 }]); }}>
@@ -275,8 +290,8 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
             const cat = catalogo.find((c) => c.item === it.item);
             const valor = (Number(it.cantidad) || 0) * (Number(it.vr_unit) || 0);
             return (
-              <div key={i} style={{ display: "grid", gap: 10, gridTemplateColumns: "minmax(240px, 2fr) 110px 150px 130px 34px", alignItems: "center" }}>
-                <select className="input" required value={it.item} onChange={(e) => elegirItem(i, e.target.value)}>
+              <div key={i} style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr 34px", alignItems: "center", padding: "8px 10px", background: "var(--surface-2)", borderRadius: 8 }}>
+                <select className="input" required value={it.item} onChange={(e) => elegirItem(i, e.target.value)} style={{ gridColumn: "1 / -1" }}>
                   <option value="">Ítem Herpro *</option>
                   {catalogo.map((c) => (
                     <option key={c.item} value={c.item}>{c.maquina} — {c.item}</option>
@@ -299,6 +314,9 @@ export function PrefacturasClient({ initialRows, demo }: { initialRows: Prefactu
           </div>
           {error && <div style={{ color: "var(--high)", fontSize: 13 }}>{error}</div>}
         </form>
+            </div>
+          </aside>
+        </>
       )}
       {!mostrarForm && error && <div style={{ color: "var(--high)", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
