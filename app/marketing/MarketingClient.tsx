@@ -221,7 +221,8 @@ function VistaMarketing({ leads, compradores, ventas }: { leads: Lead[]; comprad
         <Kpi icon={<IconUsers />} label="Leads recibidos" value={NUM.format(e.contactos)} foot={`${NUM.format(e.unicos)} únicos · ${NUM.format(e.contactos - e.unicos)} repetidos`} />
         <Kpi icon={<IconActivity />} label="Calificados" value={NUM.format(e.calificados)} foot={`${PCT(pct(e.calificados, e.contactos))} de los leads`} tone="warn" />
         <Kpi icon={<IconCheck />} label="Oportunidades" value={NUM.format(e.oportunidades)} foot={`${PCT(pct(e.oportunidades, e.contactos))} de los leads`} />
-        <Kpi icon={<IconKey />} label="Ventas" value={NUM.format(e.ventas)} foot={e.ventas ? `1 venta cada ${NUM.format(Math.round(e.contactos / e.ventas))} leads` : "sin ventas en el período"} tone="ok" />
+        <Kpi icon={<IconKey />} label="Ventas (leads del período)" value={NUM.format(e.ventas)} foot={e.ventas ? `1 venta cada ${NUM.format(Math.round(e.contactos / e.ventas))} leads` : "sin ventas en el período"} tone="ok" />
+        <Kpi icon={<IconCoins />} label="Vendido total (cartera)" value={COP.format(ventas.reduce((s, v) => s + Number(v.total_valor ?? 0), 0))} foot={`${NUM.format(ventas.length)} unidades · ${NUM.format(ventas.filter((v) => v.digital).length)} por canal digital`} tone="ok" />
         <Kpi icon={<IconAlert />} label="Descartados" value={NUM.format(e.descartados)} foot={`${PCT(pct(e.descartados, e.contactos))} · ${NUM.format(e.vivos)} siguen vivos`} tone="high" />
       </div>
 
@@ -292,6 +293,15 @@ function VistaMarketing({ leads, compradores, ventas }: { leads: Lead[]; comprad
                 ))}
               </Fragment>
             ))}
+            {porProyecto.length > 0 && (
+              <tr style={{ background: "var(--brand-soft)" }}>
+                <td><b>Total vendido</b></td>
+                <td className="num" style={{ textAlign: "right" }}><b>{NUM.format(ventas.length)}</b></td>
+                <td className="num" style={{ textAlign: "right" }}><b>{NUM.format(ventas.filter((v) => v.digital).length)}</b> <span className="muted">({PCT(pct(ventas.filter((v) => v.digital).length, ventas.length))})</span></td>
+                <td className="num" style={{ textAlign: "right" }}><b>{NUM.format(ventas.filter((v) => v.lead).length)}</b></td>
+                <td className="num" style={{ textAlign: "right" }}><b>{COP.format(ventas.reduce((s, v) => s + Number(v.total_valor ?? 0), 0))}</b></td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
