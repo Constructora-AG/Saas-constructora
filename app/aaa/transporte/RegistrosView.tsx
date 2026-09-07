@@ -36,7 +36,7 @@ const PAGE_SIZE = 10;
 const COLS_KEY = "transporte.registros.columnas.v1";
 
 type ColId =
-  | "fecha" | "tipo" | "area" | "placa" | "cap" | "conductor" | "equipo" | "destino"
+  | "fecha" | "tipo" | "area" | "placa" | "cap" | "conductor" | "operario" | "equipo" | "destino"
   | "valor" | "peajes" | "soportes" | "vobo" | "factura" | "aprobo" | "acciones";
 interface Columna { id: ColId; label: string; fija?: boolean; w: number; num?: boolean }
 
@@ -59,6 +59,7 @@ const COLUMNAS: ReadonlyArray<Columna> = [
   { id: "placa", label: "Placa", w: 6 },
   { id: "cap", label: "Cap.", w: 5, num: true },
   { id: "conductor", label: "Conductor", w: 10 },
+  { id: "operario", label: "Operario", w: 9 },
   { id: "equipo", label: "Equipo", w: 11 },
   { id: "destino", label: "Destino", w: 12 },
   { id: "valor", label: "Valor", w: 8, num: true },
@@ -361,6 +362,7 @@ export function RegistrosView({ t }: ViewProps) {
                   )}
                   {ver("cap") && <td className="num" style={{ textAlign: "right" }}>{s.capacity !== "" && s.capacity != null ? `${num(s.capacity)} T` : "—"}</td>}
                   {ver("conductor") && <td title={s.driver || ""}><span className="clamp">{s.driver || "—"}</span></td>}
+                  {ver("operario") && <td title={s.operario || ""}><span className="clamp">{s.operario || "—"}</span></td>}
                   {ver("equipo") && <td title={s.equipment || ""}><span className="clamp">{s.equipment || "—"}</span></td>}
                   {ver("destino") && (
                     <td title={[s.pickup, s.destination].filter(Boolean).join(" → ")}>

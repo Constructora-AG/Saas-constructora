@@ -132,6 +132,7 @@ export interface Servicio {
   plate: string;
   capacity: NumLike;   // llega como string del formulario
   driver: string;
+  operario?: string;   // nombre del operario (Vehículo y carga)
   equipment: string;
   weight: NumLike;     // string del formulario
   pickup: string;

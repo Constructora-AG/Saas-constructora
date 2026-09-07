@@ -35,6 +35,7 @@ interface Campos {
   plateSel: string;
   plateOtro: string;
   driverSel: string;
+  operario: string;
   driverOtro: string;
   equipmentSel: string;
   equipmentOtro: string;
@@ -95,7 +96,7 @@ function buildInit(args: {
     interventorSel: "", interventorOtro: "",
     areaAAASel: "", areaAAAOtro: "",
     plateSel: "", plateOtro: "",
-    driverSel: "", driverOtro: "",
+    driverSel: "", driverOtro: "", operario: "",
     equipmentSel: "", equipmentOtro: "",
     capacity: "", weight: "",
     pickup: "", destination: "", area: "",
@@ -124,6 +125,7 @@ function buildInit(args: {
       areaAAASel: sa.sel, areaAAAOtro: sa.otro,
       plateSel: sp.sel, plateOtro: sp.otro,
       driverSel: sd.sel, driverOtro: sd.otro,
+      operario: src.operario ?? "",
       equipmentSel: se.sel, equipmentOtro: se.otro,
       capacity: sv(src.capacity), weight: sv(src.weight),
       pickup: src.pickup ?? "", destination: src.destination ?? "", area: src.area ?? "",
@@ -347,6 +349,7 @@ export function ServicioForm({
       plate: resolver(f.plateSel, f.plateOtro),
       capacity: f.capacity,
       driver: resolver(f.driverSel, f.driverOtro),
+      operario: f.operario.trim(),
       equipment: resolver(f.equipmentSel, f.equipmentOtro),
       weight: f.weight,
       pickup: f.pickup.trim(),
@@ -527,6 +530,10 @@ export function ServicioForm({
               <label className="field">Peso del equipo (Ton)
                 <input className="input num" type="number" step="0.01" min="0" value={f.weight}
                   onChange={(e) => setF({ ...f, weight: e.target.value })} />
+              </label>
+              <label className="field">Nombre del operario
+                <input className="input" value={f.operario} placeholder="Operario del equipo"
+                  onChange={(e) => setF({ ...f, operario: e.target.value })} />
               </label>
             </div>
 
