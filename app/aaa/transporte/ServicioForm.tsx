@@ -18,7 +18,7 @@ import type { UseTransporte } from "@/lib/transporte/useTransporte";
 import type { AdjuntoFile, AdminConfig, MonthInfo, NumLike, Servicio, Tarifario } from "@/lib/transporte/model";
 import { areaAAADe, aprobadorDe, num, nuevoServicioId } from "@/lib/transporte/model";
 import { autoRecargos, computeValor, fdate, fmtCOP, respHours } from "@/lib/transporte/logic";
-import { openAttachment, processSelectedFile } from "@/lib/transporte/media";
+import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
 
 const OTRO = "__otro__";
@@ -392,8 +392,20 @@ export function ServicioForm({
 
     const resolver = (sel: string, otro: string) => (sel === OTRO ? otro.trim() : sel);
     const manual = !f.tarifaCategoria || f.tarifaCategoria === "manual";
+    const idServicio = editing?.id ?? nuevoServicioId();
+    // Los adjuntos nuevos (base64) se suben a Supabase Storage: en el registro queda solo la URL.
+    let photoFilesSubidos = f.photoFiles;
+    let approvalSubido = f.approvalFile;
+    try {
+      const ctx = { ns: t.ns, monthKey: month.key, serviceId: idServicio };
+      photoFilesSubidos = await Promise.all(f.photoFiles.map((pf) => subirAdjunto(pf, ctx)));
+      approvalSubido = f.approvalFile ? await subirAdjunto(f.approvalFile, ctx) : null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudieron subir los adjuntos.");
+      return;
+    }
     const item: Servicio = {
-      id: editing?.id ?? nuevoServicioId(),
+      id: idServicio,
       date: f.date,
       orderNo: editing ? f.orderNo.trim() : siguienteOrden(t.servicesByMonth, t.ns),
       serviceType: f.serviceType,
@@ -426,8 +438,8 @@ export function ServicioForm({
       recargoNocturno: f.recNocturno,
       recargoDominical: f.recDominical,
       notes: f.notes.trim(),
-      photoFiles: f.photoFiles,
-      approvalFile: f.approvalFile,
+      photoFiles: photoFilesSubidos,
+      approvalFile: approvalSubido,
       tarifaCategoria: manual ? null : f.tarifaCategoria,
       tarifaRuta: manual ? null : f.tarifaRuta || null,
       ...r.stamp, // approvedBy / approvedByKey / approvedAt (siempre se re-aprueba)

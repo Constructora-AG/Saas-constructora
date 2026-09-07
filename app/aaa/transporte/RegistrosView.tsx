@@ -19,7 +19,7 @@ import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { Servicio } from "@/lib/transporte/model";
 import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
 import { fdate, fmtCOP, totales } from "@/lib/transporte/logic";
-import { openAttachment } from "@/lib/transporte/media";
+import { adjuntoSrc, openAttachment } from "@/lib/transporte/media";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 import { ServicioForm } from "./ServicioForm";
 import { buildOrderPdf } from "./ordenPdf";
@@ -480,7 +480,7 @@ export function RegistrosView({ t }: ViewProps) {
                               <span className="badge" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>PDF</span>
                             ) : (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={file.dataUrl} alt={file.name} loading="lazy" />
+                              <img src={adjuntoSrc(file)} alt={file.name} loading="lazy" />
                             )}
                           </button>
                         ))}

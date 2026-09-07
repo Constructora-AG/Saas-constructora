@@ -43,7 +43,7 @@ export async function compressImage(f: File): Promise<AdjuntoFile> {
       const i = new Image();
       i.onload = () => resolve(i);
       i.onerror = () => reject(new Error("decode"));
-      i.src = original.dataUrl;
+      i.src = original.dataUrl ?? "";
     });
     let w = img.naturalWidth || img.width;
     let h = img.naturalHeight || img.height;
@@ -97,10 +97,45 @@ export function fmtBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
-/** Abre un adjunto en pestaña nueva vía Blob URL (se revoca a los 60 s). */
+/** Fuente mostrable del adjunto: URL de Storage o data URL legado. */
+export function adjuntoSrc(file: AdjuntoFile): string {
+  return file.url || file.dataUrl || "";
+}
+
+/** Bytes del adjunto (descarga desde Storage o decodifica el base64 legado). */
+export async function adjuntoBytesAsync(file: AdjuntoFile): Promise<Uint8Array> {
+  if (file.url) {
+    const r = await fetch(file.url);
+    if (!r.ok) throw new Error(`No se pudo descargar ${file.name}`);
+    return new Uint8Array(await r.arrayBuffer());
+  }
+  const d = file.dataUrl || "";
+  const i = d.indexOf(",");
+  const bin = atob(i >= 0 ? d.slice(i + 1) : d);
+  const bytes = new Uint8Array(bin.length);
+  for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+  return bytes;
+}
+
+/** Sube un adjunto recién seleccionado (base64) a Supabase Storage y devuelve la referencia por URL. */
+export async function subirAdjunto(file: AdjuntoFile, ctx: { ns: string; monthKey: string; serviceId: string }): Promise<AdjuntoFile> {
+  if (file.url || !file.dataUrl) return file;
+  const r = await fetch("/api/aaa/transporte/adjunto", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...ctx, name: file.name, type: file.type, dataUrl: file.dataUrl }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `No se pudo subir ${file.name}`);
+  return { name: file.name, type: j.type || file.type, url: j.url, size: j.size };
+}
+
+/** Abre un adjunto en pestaña nueva (URL de Storage, o Blob URL para base64 legado). */
 export function openAttachment(file: AdjuntoFile): void {
-  const i = file.dataUrl.indexOf(",");
-  const bin = atob(file.dataUrl.slice(i + 1));
+  if (file.url) { window.open(file.url, "_blank", "noopener"); return; }
+  const d = file.dataUrl || "";
+  const i = d.indexOf(",");
+  const bin = atob(d.slice(i + 1));
   const bytes = new Uint8Array(bin.length);
   for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
   const url = URL.createObjectURL(new Blob([bytes], { type: file.type || "application/octet-stream" }));

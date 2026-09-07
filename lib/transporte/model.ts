@@ -116,8 +116,12 @@ export type TipoServicio = "Programado" | "No Programado" | "Emergencia";
 
 export interface AdjuntoFile {
   name: string;
-  type: string;    // mime
-  dataUrl: string; // base64 data URL
+  type: string;      // mime
+  /** URL pública en Supabase Storage (bucket «evidencias»). Es la forma normal desde 2026-09. */
+  url?: string;
+  /** Base64 solo mientras el archivo está recién seleccionado (antes de subirlo) o en datos legados. */
+  dataUrl?: string;
+  size?: number;
 }
 
 export interface Servicio {

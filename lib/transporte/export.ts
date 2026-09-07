@@ -143,21 +143,22 @@ export async function exportServicios(
     head.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123A7A" } };
     head.alignment = { vertical: "middle", wrapText: true };
     head.height = 30;
-    pairs.forEach((p, i) => {
-      const fotos = (p.item.photoFiles || []).filter((f) => /image\//.test(f.type) && f.dataUrl).slice(0, MAX_FOTOS);
+    for (const [i, p] of pairs.entries()) {
+      const fotos = (p.item.photoFiles || []).filter((f) => /image\//.test(f.type) && (f.dataUrl || f.url)).slice(0, MAX_FOTOS);
       const excelRow = i + 2; // 1 = encabezado
       const row = ws.getRow(excelRow);
       row.alignment = { vertical: "top", wrapText: true };
-      if (!fotos.length) return;
+      if (!fotos.length) continue;
       row.height = 96;
+      const b64s = await Promise.all(fotos.map(adjuntoBase64));
       fotos.forEach((f, j) => {
-        const base64 = f.dataUrl.split(",")[1] || "";
+        const base64 = b64s[j];
         if (!base64) return;
         const id = wb.addImage({ base64, extension: /png/.test(f.type) ? "png" : "jpeg" });
         // Anclaje en la celda (col/row base 0), tamaño fijo en píxeles
         ws.addImage(id, { tl: { col: headers.length + j, row: excelRow - 1 }, ext: { width: 130, height: 122 }, editAs: "oneCell" });
       });
-    });
+    }
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
     const buf = await wb.xlsx.writeBuffer();
     downloadBlob(new Blob([buf as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${filenameBase}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -247,8 +248,29 @@ interface PdfAdjunto {
   bytes: Uint8Array;
 }
 
-function adjuntoBytes(f: AdjuntoFile): PdfAdjunto {
-  return { name: f.name, type: f.type, bytes: b64ToBytes(f.dataUrl.split(",")[1] || "") };
+async function adjuntoBytes(f: AdjuntoFile): Promise<PdfAdjunto> {
+  if (f.url) {
+    try {
+      const r = await fetch(f.url);
+      if (r.ok) return { name: f.name, type: f.type, bytes: new Uint8Array(await r.arrayBuffer()) };
+    } catch { /* cae a vacío */ }
+    return { name: f.name, type: f.type, bytes: new Uint8Array() };
+  }
+  return { name: f.name, type: f.type, bytes: b64ToBytes((f.dataUrl || "").split(",")[1] || "") };
+}
+
+/** Base64 puro del adjunto (para incrustar en Excel), desde Storage o data URL legado. */
+async function adjuntoBase64(f: AdjuntoFile): Promise<string> {
+  if (f.dataUrl) return f.dataUrl.split(",")[1] || "";
+  if (!f.url) return "";
+  try {
+    const r = await fetch(f.url);
+    if (!r.ok) return "";
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  } catch { return ""; }
 }
 
 /** Construye el PDF completo del reporte con soportes y devuelve sus bytes. */
@@ -260,12 +282,12 @@ export async function buildReportPdf(
   const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
   const generatedAt = new Date().toLocaleString("es-CO");
 
-  const rows = pairs.map((p) => ({
+  const rows = await Promise.all(pairs.map(async (p) => ({
     item: p.item,
     monthLabel: p.monthLabel,
-    photoFiles: (p.item.photoFiles || []).map(adjuntoBytes),
-    approvalFile: p.item.approvalFile ? adjuntoBytes(p.item.approvalFile) : null,
-  }));
+    photoFiles: (await Promise.all((p.item.photoFiles || []).map(adjuntoBytes))).filter((a) => a.bytes.length > 0),
+    approvalFile: p.item.approvalFile ? await adjuntoBytes(p.item.approvalFile) : null,
+  })));
   const scopedValue = rows.reduce((s, r) => s + num(r.item.value), 0);
   const pendientes = rows.filter((r) => !r.item.invoiced).length;
 
