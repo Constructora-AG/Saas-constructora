@@ -384,9 +384,6 @@ export function AdminView({ t }: ViewProps) {
       <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span>Administración</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
-        <span className="badge ok" title="Rol de la sesión de plataforma (login de Supabase Auth)">
-          Sesión: {ses.profileLabel(perfil)}
-        </span>
       </div>
       <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>
         Listas maestras que alimentan los desplegables de «Registrar servicio». Cada cambio se guarda
@@ -459,7 +456,7 @@ export function AdminView({ t }: ViewProps) {
                 </div>
               ))}
             </div>
-            <form onSubmit={agregarEquipo} style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 110px 1fr auto" }}>
+            <form onSubmit={agregarEquipo} style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))" }}>
               <input className="input" placeholder="Nombre del equipo *" value={eqNuevo.name} onChange={(e) => setEqNuevo((f) => ({ ...f, name: e.target.value }))} />
               <input className="input" type="number" min={0} step="0.01" placeholder="Peso (Ton)" value={eqNuevo.weight} onChange={(e) => setEqNuevo((f) => ({ ...f, weight: e.target.value }))} />
               <input className="input" placeholder="Clase" value={eqNuevo.clase} onChange={(e) => setEqNuevo((f) => ({ ...f, clase: e.target.value }))} />
