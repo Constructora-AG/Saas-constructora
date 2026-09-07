@@ -234,6 +234,13 @@ export async function PATCH(req: NextRequest) {
     estadoFinal = "pendiente_pago";
     if (!("fecha_factura" in patch) && !actual.fecha_factura) patch.fecha_factura = new Date().toISOString().slice(0, 10);
   }
+  // Si se QUITA la factura estando pendiente de pago: vuelve a "por_facturar" y se
+  // borra la fecha de factura (con ello desaparece la fecha estimada de pago).
+  if ("factura" in patch && !patch.factura && actual.factura && estadoFinal === "pendiente_pago") {
+    estadoFinal = actaFinal && migoFinal ? "por_facturar" : "pendiente_acta_migo";
+    patch.fecha_factura = null;
+    patch.numero_factura = null;
+  }
   if (estadoFinal !== String(actual.estado) || "estado" in patch) patch.estado = estadoFinal;
   if (!Object.keys(patch).length) return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
 
