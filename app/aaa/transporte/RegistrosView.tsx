@@ -72,6 +72,10 @@ const COLUMNAS: ReadonlyArray<Columna> = [
 ];
 const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "peajes", "aprobo"];
 
+/** Descripción de un servicio como ítem de prefactura. */
+const descripcionServicio = (s: Servicio) =>
+  [s.date ? fechaCorta(s.date) : "", s.plate, s.equipment, [s.pickup, s.destination].filter(Boolean).join(" → ")].filter(Boolean).join(" · ");
+
 function leerOcultas(): Set<ColId> {
   try {
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(COLS_KEY) : null;
@@ -94,6 +98,10 @@ export function RegistrosView({ t }: ViewProps) {
   const [colPickOpen, setColPickOpen] = useState(false);
   const [pagina, setPagina] = useState(1);
   const [menuId, setMenuId] = useState<string | null>(null);
+  // Selección para prefacturar
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [prefacturando, setPrefacturando] = useState(false);
+  const [prefMsg, setPrefMsg] = useState<{ ok?: string; error?: string } | null>(null);
   const colPickRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => { setOcultas(leerOcultas()); }, []);
@@ -115,7 +123,7 @@ export function RegistrosView({ t }: ViewProps) {
   const diasMes = mes ? new Date(mes.year, mes.month + 1, 0).getDate() : 0;
 
   // Paginación (10 por página); vuelve a la página 1 al cambiar de mes
-  useEffect(() => { setPagina(1); }, [mes?.key]);
+  useEffect(() => { setPagina(1); setSel(new Set()); }, [mes?.key]);
   const totalPaginas = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = useMemo(() => items.slice((paginaActual - 1) * PAGE_SIZE, paginaActual * PAGE_SIZE), [items, paginaActual]);
@@ -134,6 +142,43 @@ export function RegistrosView({ t }: ViewProps) {
   const restablecerCols = () => {
     setOcultas(new Set(OCULTAS_DEFAULT));
     try { window.localStorage.removeItem(COLS_KEY); } catch { /* sin storage */ }
+  };
+
+  // ── Prefacturar (crea la prefactura en Proyecto Triple A y marca los servicios) ──
+  const prefacturables = useMemo(() => items.filter((s) => !s.prefactura), [items]);
+  const toggleSel = (id: string) => setSel((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const crearPrefactura = async (lista: Servicio[]) => {
+    if (!mes || !lista.length) return;
+    const total = lista.reduce((a, s) => a + num(s.value), 0);
+    if (!window.confirm(`Se creará una prefactura de Transporte AAA con ${lista.length} servicio(s) por ${fmtCOP(total)} (sin peajes). ¿Continuar?`)) return;
+    setPrefacturando(true); setPrefMsg(null);
+    try {
+      const fechas = lista.map((s) => s.date).filter(Boolean).sort();
+      const moda = (arr: string[]) => { const m = new Map<string, number>(); arr.forEach((v) => v && m.set(v, (m.get(v) || 0) + 1)); return [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ""; };
+      const body = {
+        contrato: "transporte",
+        fecha_generacion: new Date().toISOString().slice(0, 10),
+        periodo_desde: fechas[0] || null,
+        periodo_hasta: fechas[fechas.length - 1] || null,
+        area_aaa: moda(lista.map((s) => areaAAADe(s))) || null,
+        interventor: moda(lista.map((s) => s.interventor || "")) || null,
+        lugar: moda(lista.map((s) => s.area || "")) || null,
+        nota: `Generada desde Registros de Transporte AAA (${mes.label})`,
+        items: lista.map((s) => ({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value) })),
+        servicios: lista.map((s) => ({ monthKey: mes.key, id: s.id, date: s.date, plate: s.plate })),
+      };
+      const res = await fetch("/api/aaa/prefacturas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "No se pudo crear la prefactura.");
+      const numero = String(j.prefactura?.numero ?? "");
+      await t.markPrefacturada(lista.map((s) => ({ monthKey: mes.key, id: s.id })), numero);
+      setSel(new Set());
+      setPrefMsg({ ok: `Prefactura ${numero} creada con ${lista.length} servicio(s). Puedes verla en Proyecto Triple A → Prefacturas.` });
+    } catch (e) {
+      setPrefMsg({ error: e instanceof Error ? e.message : "No se pudo crear la prefactura." });
+    } finally {
+      setPrefacturando(false);
+    }
   };
 
   const abrir = (editing: Servicio | null, dupFrom: Servicio | null) => {
@@ -273,6 +318,14 @@ export function RegistrosView({ t }: ViewProps) {
           Solo pendientes por facturar
         </label>
         <span className="topbar-spacer" style={{ flex: 1 }} />
+        <button className="btn btn-primary btn-sm" disabled={prefacturando || sel.size === 0} title="Crea una prefactura con los servicios marcados"
+          onClick={() => void crearPrefactura(items.filter((s) => sel.has(s.id) && !s.prefactura))}>
+          {prefacturando ? "Creando…" : `Prefacturar seleccionados${sel.size ? ` (${sel.size})` : ""}`}
+        </button>
+        <button className="btn btn-ghost btn-sm" disabled={prefacturando || prefacturables.length === 0} title="Crea una prefactura con todos los servicios del mes aún no prefacturados"
+          onClick={() => void crearPrefactura(prefacturables)}>
+          Prefacturar mes completo{prefacturables.length ? ` (${prefacturables.length})` : ""}
+        </button>
         <div className="colpick" ref={colPickRef}>
           <button className={`btn btn-ghost btn-sm${colPickOpen ? " active" : ""}`} onClick={() => setColPickOpen((v) => !v)} title="Mostrar u ocultar columnas">
             ☷ Columnas{ocultas.size > 0 && <span className="seg-count">{COLUMNAS.length - ocultas.size}/{COLUMNAS.length}</span>}
@@ -303,6 +356,15 @@ export function RegistrosView({ t }: ViewProps) {
       {exportError && <div style={{ color: "var(--high)", fontSize: 13, margin: "0 0 10px" }}>{exportError}</div>}
 
       {rowError && <div style={{ color: "var(--high)", fontSize: 13, margin: "0 0 10px" }}>{rowError}</div>}
+      {prefMsg?.error && <div style={{ color: "var(--high)", fontSize: 13, margin: "0 0 10px" }}>{prefMsg.error}</div>}
+      {prefMsg?.ok && (
+        <div className="info-bar" style={{ marginBottom: 12 }}>
+          <div>{prefMsg.ok}</div>
+          <span className="topbar-spacer" style={{ flex: 1 }} />
+          <a className="btn btn-ghost btn-sm" href="/aaa/prefacturas">Ver prefacturas</a>
+          <button className="btn btn-ghost btn-sm" onClick={() => setPrefMsg(null)}>Cerrar</button>
+        </div>
+      )}
 
       {guardado && (
         <div className="info-bar" style={{ marginBottom: 12 }}>
@@ -326,7 +388,16 @@ export function RegistrosView({ t }: ViewProps) {
           <thead>
             <tr>
               {columnas.map((c) => (
-                <th key={c.id} style={c.num ? { textAlign: "right" } : undefined}>{c.label}</th>
+                <th key={c.id} style={c.num ? { textAlign: "right" } : undefined}>
+                  {c.id === "fecha" ? (
+                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                      <input type="checkbox" title="Seleccionar todos los de esta página sin prefacturar"
+                        checked={visibles.some((s) => !s.prefactura) && visibles.filter((s) => !s.prefactura).every((s) => sel.has(s.id))}
+                        onChange={(e) => setSel((p) => { const n = new Set(p); visibles.filter((s) => !s.prefactura).forEach((s) => (e.target.checked ? n.add(s.id) : n.delete(s.id))); return n; })} />
+                      {c.label}
+                    </span>
+                  ) : c.label}
+                </th>
               ))}
             </tr>
           </thead>
@@ -345,8 +416,14 @@ export function RegistrosView({ t }: ViewProps) {
                 <tr key={s.id}>
                   {ver("fecha") && (
                     <td>
-                      <b>{s.date ? fechaCorta(s.date) : "—"}</b>
-                      {s.orderNo && <span className="sub">N° {s.orderNo}</span>}
+                      <span style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+                        <input type="checkbox" checked={sel.has(s.id)} disabled={!!s.prefactura} onChange={() => toggleSel(s.id)} title={s.prefactura ? `Ya en prefactura ${s.prefactura}` : "Seleccionar para prefacturar"} style={{ marginTop: 2 }} />
+                        <span>
+                          <b>{s.date ? fechaCorta(s.date) : "—"}</b>
+                          {s.orderNo && <span className="sub">N° {s.orderNo}</span>}
+                          {s.prefactura && <span className="badge ok" style={{ marginTop: 3, fontSize: 10.5 }} title="Incluido en prefactura">{s.prefactura}</span>}
+                        </span>
+                      </span>
                       {!ver("tipo") && s.serviceType && s.serviceType !== "Programado" && (
                         <div><span className={`badge ${tipo.cls}`}>{tipo.label}</span></div>
                       )}

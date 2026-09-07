@@ -92,6 +92,8 @@ export interface UseTransporte {
   deleteService: (monthKey: string, id: string) => Promise<void>;
   toggleInvoiced: (monthKey: string, id: string) => Promise<void>;
   markInvoiced: (pairs: Array<{ monthKey: string; id: string }>) => Promise<void>;
+  /** Marca servicios con el N° de prefactura que los incluyó (null = desmarcar). */
+  markPrefacturada: (pairs: Array<{ monthKey: string; id: string }>, numero: string | null) => Promise<void>;
   saveTarifarioCfg: (t: Tarifario) => Promise<void>;
   resetTarifario: () => Promise<void>;
   saveAdminCfg: (mutator: (a: AdminConfig) => void) => Promise<AdminConfig>;
@@ -262,6 +264,22 @@ export function useTransporte(): UseTransporte {
     [servicesByMonth, persistMonth],
   );
 
+  const markPrefacturada = useCallback(
+    async (pairs: Array<{ monthKey: string; id: string }>, numero: string | null) => {
+      const porMes = new Map<string, Set<string>>();
+      pairs.forEach(({ monthKey, id }) => {
+        if (!porMes.has(monthKey)) porMes.set(monthKey, new Set());
+        porMes.get(monthKey)!.add(id);
+      });
+      for (const [mk, ids] of porMes) {
+        const prev = servicesByMonth[mk] ?? [];
+        const next = prev.map((s) => (ids.has(s.id) ? { ...s, prefactura: numero } : s));
+        await persistMonth(mk, next, prev);
+      }
+    },
+    [servicesByMonth, persistMonth],
+  );
+
   const deleteService = useCallback(
     async (monthKey: string, id: string) => {
       const prev = servicesByMonth[monthKey] ?? [];
@@ -412,6 +430,7 @@ export function useTransporte(): UseTransporte {
     deleteService,
     toggleInvoiced,
     markInvoiced,
+    markPrefacturada,
     saveTarifarioCfg,
     resetTarifario,
     saveAdminCfg,

@@ -43,8 +43,11 @@ export const CATALOGO_EMERGENCIA: ItemCatalogo[] = [
 ];
 
 export function catalogoDe(contrato: string): ItemCatalogo[] {
+  if (contrato === "transporte") return []; // Transporte AAA: ítems libres (uno por servicio registrado)
   return contrato === "emergencia" ? CATALOGO_EMERGENCIA : CATALOGO_ALQUILER;
 }
+
+export const CONTRATO_LABEL: Record<string, string> = { alquiler: "Alquiler", emergencia: "Emergencia", transporte: "Transporte AAA" };
 
 export interface PrefacturaItem {
   item: string;
@@ -58,7 +61,7 @@ export interface PrefacturaItem {
 export interface PrefacturaRow {
   id: string;
   numero: string;
-  contrato: "alquiler" | "emergencia";
+  contrato: "alquiler" | "emergencia" | "transporte";
   fecha_generacion: string;
   fecha_vencimiento: string | null;
   centro_costo: string | null;
@@ -78,6 +81,8 @@ export interface PrefacturaRow {
   /** Área AAA solicitante e interventor / funcionario (listas maestras de Transporte) */
   area_aaa?: string | null;
   interventor?: string | null;
+  /** Servicios de Transporte AAA incluidos (prefacturas automáticas) */
+  servicios?: Array<{ monthKey: string; id: string; date?: string; plate?: string }> | null;
   /** Período del servicio (calendario) */
   periodo_desde?: string | null;
   periodo_hasta?: string | null;

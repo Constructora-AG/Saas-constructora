@@ -7,7 +7,7 @@
 // - Crear, editar (mismo formulario), eliminar; cargar/abrir acta y migo.
 // ════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useRef, useState } from "react";
-import { catalogoDe, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
+import { catalogoDe, CONTRATO_LABEL, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
 import { ResponsiveTables } from "./ResponsiveTables";
@@ -54,7 +54,7 @@ function leerArchivo(f: File): Promise<AdjuntoPrefactura> {
 
 interface ItemForm { item: string; cantidad: string; vr_unit: string }
 const ITEM0: ItemForm = { item: "", cantidad: "", vr_unit: "" };
-const FORM0 = { contrato: "alquiler" as "alquiler" | "emergencia", fecha_generacion: "", fecha_vencimiento: "", centro_costo: "", area_aaa: "", interventor: "", periodo_desde: "", periodo_hasta: "", lugar: "", nota: "" };
+const FORM0 = { contrato: "alquiler" as "alquiler" | "emergencia" | "transporte", fecha_generacion: "", fecha_vencimiento: "", centro_costo: "", area_aaa: "", interventor: "", periodo_desde: "", periodo_hasta: "", lugar: "", nota: "" };
 
 const OTRO = "__otro__";
 /** Desplegable de lista maestra con opción «Otro (digitar)». */
@@ -312,6 +312,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
               <select className="input" value={form.contrato} onChange={(e) => { setForm((f) => ({ ...f, contrato: e.target.value as typeof form.contrato })); setItems([{ ...ITEM0 }]); }}>
                 <option value="alquiler">Contrato Alquiler</option>
                 <option value="emergencia">Otro Sí / Emergencia</option>
+                <option value="transporte">Transporte AAA</option>
               </select>
             </label>
             <label className="field">Fecha de generación *<input className="input" required type="date" value={form.fecha_generacion} onChange={setF("fecha_generacion")} /></label>
@@ -331,12 +332,16 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
             const valor = (Number(it.cantidad) || 0) * (Number(it.vr_unit) || 0);
             return (
               <div key={i} style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr 1fr 34px", alignItems: "center", padding: "8px 10px", background: "var(--surface-2)", borderRadius: 8 }}>
-                <select className="input" required value={it.item} onChange={(e) => elegirItem(i, e.target.value)} style={{ gridColumn: "1 / -1" }}>
-                  <option value="">Ítem Herpro *</option>
-                  {catalogo.map((c) => (
-                    <option key={c.item} value={c.item}>{c.maquina} — {c.item}</option>
-                  ))}
-                </select>
+                {catalogo.length ? (
+                  <select className="input" required value={it.item} onChange={(e) => elegirItem(i, e.target.value)} style={{ gridColumn: "1 / -1" }}>
+                    <option value="">Ítem Herpro *</option>
+                    {catalogo.map((c) => (
+                      <option key={c.item} value={c.item}>{c.maquina} — {c.item}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input className="input" required placeholder="Descripción del servicio *" value={it.item} onChange={(e) => setItem(i, { item: e.target.value })} style={{ gridColumn: "1 / -1" }} />
+                )}
                 <input className="input" required type="number" min="0.01" step="0.01" placeholder={`Cant. ${cat?.unidad ?? ""}`} value={it.cantidad} onChange={(e) => setItem(i, { cantidad: e.target.value })} />
                 <input className="input" required type="number" min="1" step="0.01" placeholder="Tarifa sin IVA" value={it.vr_unit} onChange={(e) => setItem(i, { vr_unit: e.target.value })} />
                 <div className="num muted" style={{ textAlign: "right" }}>{valor > 0 ? COP.format(valor) : "—"}</div>
@@ -388,7 +393,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                 <Row key={r.id}>
                   <tr style={{ cursor: "pointer" }} onClick={() => setAbierta(open ? null : r.id)}>
                     <td><b>{r.numero}</b><span className="cc-dias">{fmtF(r.fecha_generacion)}</span></td>
-                    <td className="muted">{r.contrato === "alquiler" ? "Alquiler" : "Emergencia"}{r.centro_costo ? <span className="cc-dias">{r.centro_costo}</span> : null}{r.area_aaa ? <span className="cc-dias">{r.area_aaa}</span> : null}{r.interventor ? <span className="cc-dias">Interv.: {r.interventor}</span> : null}</td>
+                    <td className="muted">{CONTRATO_LABEL[r.contrato] ?? r.contrato}{r.servicios?.length ? <span className="cc-dias">{r.servicios.length} servicio(s) de Transporte</span> : null}{r.centro_costo ? <span className="cc-dias">{r.centro_costo}</span> : null}{r.area_aaa ? <span className="cc-dias">{r.area_aaa}</span> : null}{r.interventor ? <span className="cc-dias">Interv.: {r.interventor}</span> : null}</td>
                     <td className="muted">{r.periodo ?? "—"}{r.lugar ? ` · ${r.lugar}` : ""}{r.fecha_vencimiento ? <span className="cc-dias">vence {fmtF(r.fecha_vencimiento)}</span> : null}</td>
                     <td className="num" style={{ textAlign: "right" }}><b>{COP.format(Number(r.valor_base))}</b></td>
                     <td className="num muted" style={{ textAlign: "right" }}>{COP.format(Number(r.valor_base) * (1 + CORTE.iva_pct))}</td>

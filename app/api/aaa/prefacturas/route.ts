@@ -35,6 +35,20 @@ function periodoTexto(desde: unknown, hasta: unknown, fallback: unknown): string
 /** Valida los ítems contra el catálogo del contrato; devuelve los ítems normalizados o un error legible. */
 function validarItems(contrato: string, rawItems: ItemBody[]): { items: Array<Record<string, unknown>>; valorBase: number } | { error: string } {
   if (rawItems.length === 0) return { error: "La prefactura necesita al menos un ítem" };
+  if (contrato === "transporte") {
+    // Transporte AAA: ítems libres (un servicio registrado por ítem)
+    const items: Array<Record<string, unknown>> = [];
+    for (const it of rawItems as Array<ItemBody & { maquina?: unknown; unidad?: unknown }>) {
+      const nombre = String(it.item ?? "").trim();
+      if (!nombre) return { error: "Ítem sin descripción" };
+      const cantidad = Number(it.cantidad);
+      const vrUnit = Number(it.vr_unit);
+      if (!Number.isFinite(cantidad) || cantidad <= 0) return { error: `Cantidad inválida en "${nombre}"` };
+      if (!Number.isFinite(vrUnit) || vrUnit < 0) return { error: `Valor inválido en "${nombre}"` };
+      items.push({ item: nombre, maquina: String(it.maquina ?? "").trim(), unidad: String(it.unidad ?? "VJ").trim() || "VJ", cantidad, vr_unit: vrUnit, valor_base: Math.round(cantidad * vrUnit * 100) / 100 });
+    }
+    return { items, valorBase: items.reduce((s, it) => s + Number(it.valor_base), 0) };
+  }
   const catalogo = new Map(catalogoDe(contrato).map((c) => [c.item, c]));
   const items: Array<Record<string, unknown>> = [];
   for (const it of rawItems) {
@@ -78,7 +92,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  if (b.contrato !== "alquiler" && b.contrato !== "emergencia")
+  if (b.contrato !== "alquiler" && b.contrato !== "emergencia" && b.contrato !== "transporte")
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
   if (!b.fecha_generacion) return NextResponse.json({ error: "Falta la fecha de generación" }, { status: 400 });
 
@@ -111,6 +125,7 @@ export async function POST(req: NextRequest) {
       fecha_generacion: b.fecha_generacion,
       fecha_vencimiento: b.fecha_vencimiento ?? null,
       centro_costo: b.centro_costo ?? null,
+      servicios: Array.isArray(b.servicios) ? b.servicios : null,
       area_aaa: b.area_aaa ? String(b.area_aaa).trim() || null : null,
       interventor: b.interventor ? String(b.interventor).trim() || null : null,
       periodo_desde: b.periodo_desde || null,
@@ -145,7 +160,7 @@ export async function PATCH(req: NextRequest) {
   }
   if (!b.id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
   if (b.estado && !ESTADOS.has(String(b.estado))) return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
-  if (b.contrato !== undefined && b.contrato !== "alquiler" && b.contrato !== "emergencia")
+  if (b.contrato !== undefined && b.contrato !== "alquiler" && b.contrato !== "emergencia" && b.contrato !== "transporte")
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
 
   const supa = supabaseAdmin();
@@ -153,7 +168,7 @@ export async function PATCH(req: NextRequest) {
   if (e0 || !actual) return NextResponse.json({ error: "Prefactura no encontrada" }, { status: 404 });
 
   const patch: Record<string, unknown> = {};
-  for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "area_aaa", "interventor", "periodo", "periodo_desde", "periodo_hasta", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
+  for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "area_aaa", "interventor", "servicios", "periodo", "periodo_desde", "periodo_hasta", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
     if (k in b) patch[k] = b[k];
   }
   if ("periodo_desde" in b || "periodo_hasta" in b) {
