@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { catalogoDe, CONTRATO_LABEL, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { DIAS_HABILES_PAGO, diasHasta, sumarDiasHabiles } from "@/lib/aaa/pago";
+import { descargarPrefacturaPdf } from "@/lib/aaa/prefacturaPdf";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
 import { ResponsiveTables } from "./ResponsiveTables";
 
@@ -460,6 +461,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                         <button className="btn btn-ghost btn-sm rowmenu-btn" onClick={() => setMenuId(menuId === r.id ? null : r.id)} title="Acciones" aria-label="Acciones">⋯</button>
                         {menuId === r.id && (
                           <div className="rowmenu-list">
+                            <button onClick={() => { setMenuId(null); descargarPrefacturaPdf(r).catch((e) => setError(e instanceof Error ? e.message : "No se pudo generar el PDF")); }}>Descargar prefactura (PDF)</button>
                             {(["soporte", "acta", "migo", "factura"] as const).filter((campo) => campo !== "soporte" || requiereSoporte(r)).map((campo) => (
                               r[campo] ? (
                                 <button key={campo} onClick={() => { setMenuId(null); abrirAdjunto(r[campo]!); }}>Ver {LABEL_ADJ[campo].toLowerCase()}</button>
