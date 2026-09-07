@@ -90,6 +90,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
   const [ok, setOk] = useState<string | null>(null);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [subiendo, setSubiendo] = useState<string | null>(null);
+  const [soporteForm, setSoporteForm] = useState<AdjuntoPrefactura | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
   useEffect(() => {
     const cerrar = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.(".rowmenu")) setMenuId(null); };
@@ -97,7 +98,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     return () => document.removeEventListener("mousedown", cerrar);
   }, []);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const pendienteSubida = useRef<{ id: string; campo: "acta" | "migo" | "factura" } | null>(null);
+  const pendienteSubida = useRef<{ id: string; campo: "soporte" | "acta" | "migo" | "factura" } | null>(null);
 
   const catalogo = catalogoDe(form.contrato);
   const activas = useMemo(() => rows.filter((r) => ACTIVAS.has(r.estado)), [rows]);
@@ -118,7 +119,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     setItem(i, { item: nombre, vr_unit: cat ? String(cat.tarifa) : "" });
   }
 
-  const cerrarForm = () => { setMostrarForm(false); setEditando(null); setForm(FORM0); setItems([{ ...ITEM0 }]); };
+  const cerrarForm = () => { setMostrarForm(false); setEditando(null); setForm(FORM0); setItems([{ ...ITEM0 }]); setSoporteForm(null); };
   useEffect(() => {
     if (!mostrarForm) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") cerrarForm(); };
@@ -132,6 +133,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     setEditando(r);
     setForm({ contrato: r.contrato, fecha_generacion: r.fecha_generacion ?? "", fecha_vencimiento: r.fecha_vencimiento ?? "", centro_costo: r.centro_costo ?? "", area_aaa: r.area_aaa ?? "", interventor: r.interventor ?? "", periodo_desde: r.periodo_desde ?? "", periodo_hasta: r.periodo_hasta ?? "", lugar: r.lugar ?? "", nota: r.nota ?? "" });
     setItems((r.items as PrefacturaItem[]).map((it) => ({ item: it.item, cantidad: String(it.cantidad), vr_unit: String(it.vr_unit) })));
+    setSoporteForm(r.soporte ?? null);
     setMostrarForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -147,6 +149,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     e.preventDefault();
     setError(null); setOk(null);
     if (demo) { setError("Modo demostración: conecta Supabase para registrar prefacturas reales."); return; }
+    if (!soporteForm) { setError("Adjunta el documento de soporte (imagen o PDF)."); return; }
     setSaving(true);
     try {
       const payload = {
@@ -161,6 +164,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
         lugar: form.lugar.trim() || null,
         nota: form.nota.trim() || null,
         items: items.filter((it) => it.item).map((it) => ({ item: it.item, cantidad: Number(it.cantidad), vr_unit: Number(it.vr_unit) })),
+        soporte: soporteForm,
       };
       if (editando) {
         const p = await llamar({ method: "PATCH", body: JSON.stringify({ id: editando.id, ...payload }) });
@@ -206,7 +210,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
   }
 
   // Carga de acta / migo: abre el selector de archivo y envía el documento
-  const pedirArchivo = (id: string, campo: "acta" | "migo" | "factura") => {
+  const pedirArchivo = (id: string, campo: "soporte" | "acta" | "migo" | "factura") => {
     pendienteSubida.current = { id, campo };
     fileRef.current?.click();
   };
@@ -225,12 +229,12 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
         setRows((rs) => rs.map((r) => (r.id === p.id ? p : r)));
         const nombre = LABEL_ADJ[destino.campo];
         const cambio = p.estado !== rows.find((r) => r.id === p.id)?.estado ? ` La prefactura ${p.numero} pasó a ${(ESTADOS[p.estado] ?? { label: p.estado }).label}.` : "";
-        setOk(`${nombre} cargad${destino.campo === "factura" ? "a" : "o"} en ${p.numero}.${cambio}`);
+        setOk(`${nombre} cargad${destino.campo === "factura" ? "a" : "o"} en ${p.numero}.${destino.campo === "soporte" ? " La prefactura quedó desbloqueada." : ""}${cambio}`);
       }
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setSubiendo(null); pendienteSubida.current = null; }
   }
-  async function quitarAdjunto(row: PrefacturaRow, campo: "acta" | "migo" | "factura") {
+  async function quitarAdjunto(row: PrefacturaRow, campo: "soporte" | "acta" | "migo" | "factura") {
     if (!window.confirm(`¿Quitar ${campo === "factura" ? "la factura" : "el " + campo} de ${row.numero}?`)) return;
     try {
       const p = await llamar({ method: "PATCH", body: JSON.stringify({ id: row.id, [campo]: null }) });
@@ -238,10 +242,11 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }
 
-  const LABEL_ADJ = { acta: "Acta", migo: "Migo", factura: "Factura" } as const;
-  const puedeCargar = (r: PrefacturaRow, campo: "acta" | "migo" | "factura") =>
-    campo === "factura" ? r.estado === "por_facturar" || r.estado === "pendiente_pago" : ACTIVAS.has(r.estado);
-  const Adjunto = ({ r, campo }: { r: PrefacturaRow; campo: "acta" | "migo" | "factura" }) => {
+  const LABEL_ADJ = { soporte: "Soporte", acta: "Acta", migo: "Migo", factura: "Factura" } as const;
+  type Campo = "soporte" | "acta" | "migo" | "factura";
+  const puedeCargar = (r: PrefacturaRow, campo: Campo) =>
+    campo === "soporte" ? r.estado !== "pagada" : !r.soporte ? false : campo === "factura" ? r.estado === "por_facturar" || r.estado === "pendiente_pago" : ACTIVAS.has(r.estado);
+  const Adjunto = ({ r, campo }: { r: PrefacturaRow; campo: Campo }) => {
     const a = r[campo];
     const label = LABEL_ADJ[campo];
     const busy = subiendo === `${r.id}:${campo}`;
@@ -327,6 +332,21 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
             <label className="field">Centro de costo AAA<input className="input" placeholder="Ej. MANTENIMIENTO, ASEO" value={form.centro_costo} onChange={setF("centro_costo")} /></label>
             <label className="field">Lugar del servicio<input className="input" placeholder="Ej. POCITOS" value={form.lugar} onChange={setF("lugar")} /></label>
             <label className="field" style={{ gridColumn: "1 / -1" }}>Nota / observaciones<input className="input" value={form.nota} onChange={setF("nota")} /></label>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <span>Documento de soporte (imagen o PDF) *</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
+                {soporteForm ? (
+                  <>
+                    <button type="button" className="badge ok" style={{ border: "none", cursor: "pointer", font: "inherit" }} onClick={() => abrirAdjunto(soporteForm)} title="Abrir">✓ {soporteForm.name}</button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSoporteForm(null)}>Cambiar</button>
+                  </>
+                ) : (
+                  <input type="file" accept="application/pdf,image/*" required
+                    onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; if (f.size > 4 * 1024 * 1024) { setError("El soporte supera 4 MB."); e.target.value = ""; return; } setError(null); setSoporteForm(await leerArchivo(f)); }} />
+                )}
+                <span className="muted" style={{ fontSize: 11.5 }}>Obligatorio. Es distinto de la evidencia fotográfica de Transporte.</span>
+              </div>
+            </div>
           </div>
 
           <div className="section-title" style={{ margin: "4px 0 0" }}>Ítems — nombres exactos de Herpro (así cruzan al facturar)</div>
@@ -379,7 +399,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
               <th style={{ textAlign: "right" }}>Con IVA</th>
               <th>Antigüedad</th>
               <th>Estado</th>
-              <th>Acta / Migo / Factura</th>
+              <th>Documentos</th>
               <th></th>
             </tr>
           </thead>
@@ -403,6 +423,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                     <td>{activa ? <span className={`badge ${agingCls(dias)}`}>{dias} días</span> : <span className="muted">—</span>}</td>
                     <td>
                       <span className={`badge ${est.cls}`}>{est.label}</span>
+                      {!r.soporte && <span className="cc-dias" style={{ color: "var(--high)", fontWeight: 600 }}>Bloqueada: falta el soporte</span>}
                       {r.numero_factura && <span className="cc-dias">Fact. {r.numero_factura} · {fmtF(r.fecha_factura)}</span>}
                       {!r.numero_factura && r.fecha_factura && <span className="cc-dias">Facturada {fmtF(r.fecha_factura)}</span>}
                       {r.estado === "pendiente_pago" && (() => {
@@ -421,6 +442,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <Adjunto r={r} campo="soporte" />
                         <Adjunto r={r} campo="acta" />
                         <Adjunto r={r} campo="migo" />
                         <Adjunto r={r} campo="factura" />
@@ -431,22 +453,22 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                         <button className="btn btn-ghost btn-sm rowmenu-btn" onClick={() => setMenuId(menuId === r.id ? null : r.id)} title="Acciones" aria-label="Acciones">⋯</button>
                         {menuId === r.id && (
                           <div className="rowmenu-list">
-                            {(["acta", "migo", "factura"] as const).map((campo) => (
+                            {(["soporte", "acta", "migo", "factura"] as const).map((campo) => (
                               r[campo] ? (
                                 <button key={campo} onClick={() => { setMenuId(null); abrirAdjunto(r[campo]!); }}>Ver {LABEL_ADJ[campo].toLowerCase()}</button>
                               ) : (
-                                <button key={campo} disabled={demo || !puedeCargar(r, campo)} title={campo === "factura" && !puedeCargar(r, campo) ? "Primero carga el acta y el migo" : ""} onClick={() => { setMenuId(null); pedirArchivo(r.id, campo); }}>Cargar {LABEL_ADJ[campo].toLowerCase()}</button>
+                                <button key={campo} disabled={demo || !puedeCargar(r, campo)} title={!r.soporte && campo !== "soporte" ? "Bloqueada: primero carga el soporte" : campo === "factura" && !puedeCargar(r, campo) ? "Primero carga el acta y el migo" : ""} onClick={() => { setMenuId(null); pedirArchivo(r.id, campo); }}>Cargar {LABEL_ADJ[campo].toLowerCase()}{campo === "soporte" ? " (obligatorio)" : ""}</button>
                               )
                             ))}
                             {(["acta", "migo", "factura"] as const).filter((c) => r[c] && puedeCargar(r, c)).map((campo) => (
                               <button key={"q-" + campo} onClick={() => { setMenuId(null); void quitarAdjunto(r, campo); }}>Quitar {LABEL_ADJ[campo].toLowerCase()}</button>
                             ))}
-                            {r.estado === "pendiente_pago" && <button onClick={() => { setMenuId(null); void cambiarEstado(r, "pagada"); }}>Marcar pagada</button>}
+                            {r.estado === "pendiente_pago" && <button disabled={!r.soporte} onClick={() => { setMenuId(null); void cambiarEstado(r, "pagada"); }}>Marcar pagada</button>}
                             {(r.estado === "rechazada" || r.estado === "pagada") && (
                               <button onClick={() => { setMenuId(null); void cambiarEstado(r, r.factura ? "pendiente_pago" : r.acta && r.migo ? "por_facturar" : "pendiente_acta_migo"); }}>Reabrir</button>
                             )}
                             <button onClick={() => { setMenuId(null); abrirEdicion(r); }}>Editar</button>
-                            {activa && <button className="danger" onClick={() => { setMenuId(null); void cambiarEstado(r, "rechazada"); }}>Rechazar</button>}
+                            {activa && <button className="danger" disabled={!r.soporte} onClick={() => { setMenuId(null); void cambiarEstado(r, "rechazada"); }}>Rechazar</button>}
                             <button className="danger" onClick={() => { setMenuId(null); void eliminar(r); }}>Eliminar</button>
                           </div>
                         )}

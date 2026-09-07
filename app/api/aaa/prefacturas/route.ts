@@ -99,6 +99,17 @@ export async function POST(req: NextRequest) {
   const v = validarItems(String(b.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : []);
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 400 });
   const { items, valorBase } = v;
+  // Soporte obligatorio (imagen o PDF). Las creadas automáticamente desde
+  // Transporte AAA (origen: "transporte") nacen sin soporte y quedan bloqueadas.
+  let soporte: { name: string; type: string; dataUrl: string } | null = null;
+  try {
+    soporte = limpiarAdjunto(b.soporte) ?? null;
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Soporte inválido" }, { status: 400 });
+  }
+  if (!soporte && b.origen !== "transporte") {
+    return NextResponse.json({ error: "Adjunta el documento de soporte (imagen o PDF) de la prefactura" }, { status: 400 });
+  }
 
   const supa = supabaseAdmin();
   // N° de prefactura AUTOMÁTICO y consecutivo (PF0001, PF0002, …), como en
@@ -126,6 +137,7 @@ export async function POST(req: NextRequest) {
       fecha_vencimiento: b.fecha_vencimiento ?? null,
       centro_costo: b.centro_costo ?? null,
       servicios: Array.isArray(b.servicios) ? b.servicios : null,
+      soporte,
       area_aaa: b.area_aaa ? String(b.area_aaa).trim() || null : null,
       interventor: b.interventor ? String(b.interventor).trim() || null : null,
       periodo_desde: b.periodo_desde || null,
@@ -184,11 +196,18 @@ export async function PATCH(req: NextRequest) {
     const acta = limpiarAdjunto(b.acta);
     const migo = limpiarAdjunto(b.migo);
     const factura = limpiarAdjunto(b.factura);
+    const soporte = limpiarAdjunto(b.soporte);
+    if (soporte !== undefined) patch.soporte = soporte;
     if (acta !== undefined) patch.acta = acta;
     if (migo !== undefined) patch.migo = migo;
     if (factura !== undefined) patch.factura = factura;
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Adjunto inválido" }, { status: 400 });
+  }
+  // Bloqueo: sin soporte no se cargan documentos ni cambia el estado
+  const soporteFinal = "soporte" in patch ? patch.soporte : actual.soporte;
+  if (!soporteFinal && ("acta" in patch || "migo" in patch || "factura" in patch || "estado" in patch)) {
+    return NextResponse.json({ error: "La prefactura está bloqueada: primero carga el documento de soporte" }, { status: 400 });
   }
   // Transiciones automáticas:
   //  · acta + migo cargados  → "pendiente_acta_migo" pasa a "por_facturar"

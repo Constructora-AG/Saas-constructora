@@ -78,6 +78,8 @@ export interface PrefacturaRow {
   acta?: AdjuntoPrefactura | null;
   migo?: AdjuntoPrefactura | null;
   factura?: AdjuntoPrefactura | null;
+  /** Soporte obligatorio de la prefactura (distinto de la evidencia de Transporte). Sin él queda bloqueada. */
+  soporte?: AdjuntoPrefactura | null;
   /** Área AAA solicitante e interventor / funcionario (listas maestras de Transporte) */
   area_aaa?: string | null;
   interventor?: string | null;

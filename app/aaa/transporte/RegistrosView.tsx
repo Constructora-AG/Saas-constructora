@@ -157,6 +157,7 @@ export function RegistrosView({ t }: ViewProps) {
       const moda = (arr: string[]) => { const m = new Map<string, number>(); arr.forEach((v) => v && m.set(v, (m.get(v) || 0) + 1)); return [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ""; };
       const body = {
         contrato: "transporte",
+        origen: "transporte",
         fecha_generacion: new Date().toISOString().slice(0, 10),
         periodo_desde: fechas[0] || null,
         periodo_hasta: fechas[fechas.length - 1] || null,
@@ -173,7 +174,7 @@ export function RegistrosView({ t }: ViewProps) {
       const numero = String(j.prefactura?.numero ?? "");
       await t.markPrefacturada(lista.map((s) => ({ monthKey: mes.key, id: s.id })), numero);
       setSel(new Set());
-      setPrefMsg({ ok: `Prefactura ${numero} creada con ${lista.length} servicio(s). Puedes verla en Proyecto Triple A → Prefacturas.` });
+      setPrefMsg({ ok: `Prefactura ${numero} creada con ${lista.length} servicio(s). Queda BLOQUEADA hasta que cargues su documento de soporte en Proyecto Triple A → Prefacturas.` });
     } catch (e) {
       setPrefMsg({ error: e instanceof Error ? e.message : "No se pudo crear la prefactura." });
     } finally {
