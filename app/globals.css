@@ -496,7 +496,14 @@ table.tbl-fit td.row-actions { padding-right: 6px; display: table-cell; }
 .tx-mod table.clean th, .tx-mod table.clean td { white-space: normal; overflow-wrap: anywhere; padding: 9px 10px; vertical-align: top; line-height: 1.3; }
 .tx-mod table.clean thead th { position: sticky; top: 0; z-index: 2; background: var(--brand-soft); color: var(--brand); font-size: 11px; letter-spacing: .06em; border-bottom: 1px solid var(--brand-line, #c9d6ee); white-space: nowrap; }
 .tx-mod table.clean tbody tr:nth-child(even) td { background: var(--surface-2); }
-.tx-mod table.clean tbody tr:hover td { background: #f1f5fb; }
+.tx-mod table.clean tbody tr:hover:not(:has(> td[colspan])) td { background: #f1f5fb; }
+/* Esquinas: el contenedor ya no recorta (overflow visible para los menús), así que las
+   celdas de los extremos llevan el mismo radio que la tarjeta */
+.tx-mod table.clean thead tr:first-child th:first-child { border-top-left-radius: var(--radius); }
+.tx-mod table.clean thead tr:first-child th:last-child { border-top-right-radius: var(--radius); }
+.tx-mod table.clean tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius); }
+.tx-mod table.clean tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius); }
+.tx-mod table.clean tbody tr:last-child td[colspan] { border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); }
 .tx-mod table.clean td .badge { white-space: nowrap; }
 .tx-mod table.clean td.num, .tx-mod table.clean th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tx-mod .row-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
