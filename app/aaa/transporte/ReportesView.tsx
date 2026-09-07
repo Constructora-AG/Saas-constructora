@@ -151,6 +151,12 @@ export function ReportesView({ t }: ViewProps) {
     });
     return [...set].sort((a, b) => a.localeCompare(b, "es"));
   }, [t.admin, allPairs]);
+  // Interventores: catálogo de Administración + los que aparezcan en los registros
+  const interventoresConocidos = useMemo(() => {
+    const set = new Set<string>((t.admin?.interventores ?? []).map((x) => x.trim()).filter(Boolean));
+    allPairs.forEach((p) => { const i = (p.item.interventor || "").trim(); if (i) set.add(i); });
+    return [...set].sort((a, b) => a.localeCompare(b, "es"));
+  }, [t.admin, allPairs]);
 
   // ── Filtro analítico (12 criterios, SPEC §5.4) ───────────────────
   const generar = () => {
@@ -170,7 +176,7 @@ export function ReportesView({ t }: ViewProps) {
       if (conductor && !(item.driver || "").toLowerCase().includes(conductor)) return false;
       if (area && !(item.area || "").toLowerCase().includes(area)) return false;
       if (areaAAA && !areaAAADe(item).toLowerCase().includes(areaAAA)) return false;
-      if (interventor && !(item.interventor || "").toLowerCase().includes(interventor)) return false;
+      if (interventor && (item.interventor || "").trim().toLowerCase() !== interventor) return false;
       if (f.aprobador && aprobadorDe(item) !== f.aprobador) return false;
       if (f.valorMin && num(item.value) < num(f.valorMin)) return false;
       if (f.valorMax && num(item.value) > num(f.valorMax)) return false;
@@ -464,7 +470,10 @@ export function ReportesView({ t }: ViewProps) {
             </datalist>
           </label>
           <label className="field">Interventor
-            <input className="input" value={filtros.interventor} onChange={setF("interventor")} placeholder="Contiene…" />
+            <select value={filtros.interventor} onChange={setF("interventor")}>
+              <option value="">Todos</option>
+              {interventoresConocidos.map((i) => <option key={i} value={i}>{i}</option>)}
+            </select>
           </label>
           <label className="field">Aprobado por
             <select value={filtros.aprobador} onChange={setF("aprobador")}>
