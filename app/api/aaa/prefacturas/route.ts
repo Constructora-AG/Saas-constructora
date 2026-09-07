@@ -53,7 +53,9 @@ function validarItems(contrato: string, rawItems: ItemBody[], libres = false): {
       const vrUnit = Number(it.vr_unit);
       if (!Number.isFinite(cantidad) || cantidad <= 0) return { error: `Cantidad inválida en "${nombre}"` };
       if (!Number.isFinite(vrUnit) || vrUnit < 0) return { error: `Valor inválido en "${nombre}"` };
-      items.push({ item: nombre, maquina: String(it.maquina ?? "").trim(), unidad: String(it.unidad ?? "VJ").trim() || "VJ", cantidad, vr_unit: vrUnit, valor_base: Math.round(cantidad * vrUnit * 100) / 100 });
+      const ivaRaw = (it as { iva_pct?: unknown }).iva_pct;
+      const iva_pct = ivaRaw === undefined ? undefined : Number(ivaRaw) === 0 ? 0 : 0.19;
+      items.push({ item: nombre, maquina: String(it.maquina ?? "").trim(), unidad: String(it.unidad ?? "VJ").trim() || "VJ", cantidad, vr_unit: vrUnit, valor_base: Math.round(cantidad * vrUnit * 100) / 100, ...(iva_pct === undefined ? {} : { iva_pct }) });
     }
     return { items, valorBase: items.reduce((s, it) => s + Number(it.valor_base), 0) };
   }

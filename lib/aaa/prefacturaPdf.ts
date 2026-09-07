@@ -146,7 +146,7 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
     lineas.forEach((ln, k) => text(ln, xs[3] + 3, y - 10 - k * 9 - (h - 8 - lineas.length * 9) / 2, 7));
     const valor = Number(it.valor_base) || Number(it.cantidad) * Number(it.vr_unit);
     textR(money(Number(it.vr_unit)), xs[5] - 3, base, 7);
-    textR(money(valor * ivaPct), xs[6] - 3, base, 7);
+    textR(money(valor * (it.iva_pct ?? ivaPct)), xs[6] - 3, base, 7);
     textR(money(valor), xs[7] - 3, base, 7);
     y -= h;
   });
@@ -154,9 +154,9 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
 
   // ── Totales ──
   const subtotal = items.reduce((s, it) => s + (Number(it.valor_base) || Number(it.cantidad) * Number(it.vr_unit)), 0);
-  const iva = subtotal * ivaPct;
+  const iva = items.reduce((s, it) => s + (Number(it.valor_base) || Number(it.cantidad) * Number(it.vr_unit)) * (it.iva_pct ?? ivaPct), 0);
   const tw = 150, tx = M + W - tw, lw = 60;
-  [["SUBTOTAL", money(subtotal)], [ivaPct ? "IVA" : "IVA (excluido)", money(iva)], ["TOTAL", money(subtotal + iva)]].forEach(([l, v], i) => {
+  [["SUBTOTAL", money(subtotal)], [iva > 0 ? "IVA" : "IVA (excluido)", money(iva)], ["TOTAL", money(subtotal + iva)]].forEach(([l, v], i) => {
     const yy = y - 13 * (i + 1);
     rect(tx, yy, lw, 13, i === 2 ? fondoClaro : blanco); textR(l, tx + lw - 3, yy + 4, 7, bold);
     rect(tx + lw, yy, tw - lw, 13); textR(v, tx + tw - 3, yy + 4, 7, i === 2 ? bold : font);

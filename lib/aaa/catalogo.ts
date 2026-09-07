@@ -55,6 +55,8 @@ export function ivaPctDe(contrato: string, ivaBase: number): number {
 }
 
 export interface PrefacturaItem {
+  /** IVA propio del ítem (0 o 0.19). Si falta, aplica el del contrato (ivaPctDe). */
+  iva_pct?: number;
   item: string;
   maquina: string;
   unidad: string;

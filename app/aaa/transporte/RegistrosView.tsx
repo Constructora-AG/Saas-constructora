@@ -165,7 +165,16 @@ export function RegistrosView({ t }: ViewProps) {
         interventor: moda(lista.map((s) => s.interventor || "")) || null,
         lugar: moda(lista.map((s) => s.area || "")) || null,
         nota: `Generada desde Registros de ${t.ns === "alquiler" ? "Contrato de Alquiler" : "Transporte AAA"} (${mes.label})`,
-        items: lista.map((s) => ({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value) })),
+        items: t.ns === "alquiler"
+          ? lista.flatMap((s) => {
+              const out: Array<Record<string, unknown>> = [];
+              const horas = num(s.horasMaquina), vh = num(s.valorHora), viajes = num(s.viajesEquipo), vv = num(s.valorTransporte);
+              if (horas > 0 && vh > 0) out.push({ item: `Alquiler ${s.equipment || "equipo"} · ${s.date ? fechaCorta(s.date) : ""} · ${s.area || ""}`.trim(), maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
+              if (viajes > 0 && vv > 0) out.push({ item: `Transporte del equipo ${s.equipment || ""} · ${s.date ? fechaCorta(s.date) : ""}`.trim(), maquina: s.equipment || "", unidad: "VJ", cantidad: viajes, vr_unit: vv, iva_pct: s.ivaTransporte === false ? 0 : 0.19 });
+              if (!out.length) out.push({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value), iva_pct: 0.19 });
+              return out;
+            })
+          : lista.map((s) => ({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value) })),
         servicios: lista.map((s) => ({ monthKey: mes.key, id: s.id, date: s.date, plate: s.plate })),
       };
       const res = await fetch("/api/aaa/prefacturas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

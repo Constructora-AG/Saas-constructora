@@ -39,6 +39,8 @@ interface Campos {
   transporteEquipo: boolean;
   viajesEquipo: string;
   horasMaquina: string;
+  ivaAlquiler: boolean;
+  ivaTransporte: boolean;
   driverOtro: string;
   equipmentSel: string;
   equipmentOtro: string;
@@ -99,7 +101,7 @@ function buildInit(args: {
     interventorSel: "", interventorOtro: "",
     areaAAASel: "", areaAAAOtro: "",
     plateSel: "", plateOtro: "",
-    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false, viajesEquipo: "0", horasMaquina: "",
+    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false, viajesEquipo: "0", horasMaquina: "", ivaAlquiler: true, ivaTransporte: true,
     equipmentSel: "", equipmentOtro: "",
     capacity: "", weight: "",
     pickup: "", destination: "", area: "",
@@ -132,6 +134,8 @@ function buildInit(args: {
       transporteEquipo: !!src.transporteEquipo,
       viajesEquipo: String(src.viajesEquipo ?? (src.transporteEquipo ? 1 : 0)),
       horasMaquina: src.horasMaquina != null && src.horasMaquina !== "" ? String(src.horasMaquina) : "",
+      ivaAlquiler: src.ivaAlquiler ?? true,
+      ivaTransporte: src.ivaTransporte ?? true,
       equipmentSel: se.sel, equipmentOtro: se.otro,
       capacity: sv(src.capacity), weight: sv(src.weight),
       pickup: src.pickup ?? "", destination: src.destination ?? "", area: src.area ?? "",
@@ -261,6 +265,16 @@ export function ServicioForm({
   const zonaDe = (label: string) => (/municipio/i.test(label) ? "Municipios" : "Barranquilla y área metropolitana");
   const rutasHora = (c: Campos) => (tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas ?? []).filter((r) => /\(HR\)|hora/i.test(r.label));
   const tarifaTransporte = (c: Campos) => { const h = tarifaSel(c); if (!h) return null; const z = zonaDe(h.label); return (tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas ?? []).find((r) => /transporte/i.test(r.label) && zonaDe(r.label) === z) ?? null; };
+  /** Alquiler: bases e IVA por ítem (19% activable en alquiler y en transporte). */
+  const ivaDe = (c: Campos) => {
+    const r = tarifaSel(c); const unit = r ? num(r.unitario) : 0;
+    const horas = c.horasMaquina.trim() === "" ? 0 : num(c.horasMaquina);
+    const viajes = Math.max(0, Math.floor(num(c.viajesEquipo)));
+    const tr = tarifaTransporte(c); const vViaje = tr ? num(tr.unitario) : 0;
+    const alq = Math.round(unit * horas), trans = vViaje * viajes;
+    const ivaAlq = c.ivaAlquiler ? Math.round(alq * 0.19) : 0, ivaTr = c.ivaTransporte ? Math.round(trans * 0.19) : 0;
+    return { unit, horas, viajes, vViaje, alq, trans, ivaAlq, ivaTr, total: ivaAlq + ivaTr, tr: !!tr };
+  };
   const conValor = (next: Campos): Campos => {
     if (!tarifario) return next;
     if (esAlquiler) {
@@ -400,6 +414,9 @@ export function ServicioForm({
       tolls: esAlquiler ? "0" : f.tolls,
       horasMaquina: esAlquiler ? f.horasMaquina.trim() : undefined,
       valorHora: esAlquiler && esPorHora(f) ? String(num(tarifaSel(f)?.unitario ?? 0)) : undefined,
+      ivaAlquiler: esAlquiler ? f.ivaAlquiler : undefined,
+      ivaTransporte: esAlquiler ? f.ivaTransporte : undefined,
+      valorIva: esAlquiler ? String(ivaDe(f).total) : undefined,
       transporteEquipo: esAlquiler ? num(f.viajesEquipo) > 0 : undefined,
       viajesEquipo: esAlquiler ? String(Math.max(0, Math.floor(num(f.viajesEquipo)))) : undefined,
       valorTransporte: esAlquiler && num(f.viajesEquipo) > 0 ? String(num(tarifaTransporte(f)?.unitario ?? 0)) : undefined,
@@ -631,25 +648,35 @@ export function ServicioForm({
 
             {seccion("Financiero")}
             {esAlquiler && (() => {
-              const r = tarifaSel(f); const unit = r ? num(r.unitario) : 0;
-              const horas = f.horasMaquina.trim() === "" ? 0 : num(f.horasMaquina);
-              const viajes = Math.max(0, Math.floor(num(f.viajesEquipo)));
-              const tr = tarifaTransporte(f); const vViaje = tr ? num(tr.unitario) : 0;
-              const alq = Math.round(unit * horas), trans = vViaje * viajes;
+              const d = ivaDe(f); const r = tarifaSel(f);
               const ro: React.CSSProperties = { background: "var(--surface-2)", color: "var(--text-2)" };
+              const fila: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) auto minmax(0, 1fr) minmax(0, 1fr)", gap: 10, alignItems: "center", padding: "8px 10px", background: "var(--surface-2)", borderRadius: 8, fontSize: 13 };
               return (
-                <div style={gridAuto}>
-                  <label className="field">Valor hora máquina <span className="muted" style={{ fontWeight: 400 }}>· tarifario</span>
-                    <input className="input num" readOnly style={ro} value={r ? fmtCOP(unit) : "Selecciona equipo y zona"} /></label>
-                  <label className="field">Horas × valor hora
-                    <input className="input num" readOnly style={ro} value={r ? `${horas} h × ${fmtCOP(unit)} = ${fmtCOP(alq)}` : "—"} /></label>
-                  <label className="field">Viajes × valor viaje
-                    <input className="input num" readOnly style={ro} value={viajes > 0 && tr ? `${viajes} × ${fmtCOP(vViaje)} = ${fmtCOP(trans)}` : "Sin transporte del equipo"} /></label>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={fila}>
+                    <span><b>Alquiler del equipo</b><br /><span className="muted" style={{ fontSize: 12 }}>{r ? `${d.horas} h × ${fmtCOP(d.unit)} (hora máquina)` : "Selecciona equipo, zona y horas"}</span></span>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}><input type="checkbox" checked={f.ivaAlquiler} onChange={(e) => setF({ ...f, ivaAlquiler: e.target.checked })} /> IVA 19%</label>
+                    <span className="num" style={{ textAlign: "right" }}>Base <b>{fmtCOP(d.alq)}</b></span>
+                    <span className="num" style={{ textAlign: "right" }}>IVA <b>{fmtCOP(d.ivaAlq)}</b></span>
+                  </div>
+                  <div style={fila}>
+                    <span><b>Transporte del equipo</b><br /><span className="muted" style={{ fontSize: 12 }}>{d.viajes > 0 && d.tr ? `${d.viajes} viaje(s) × ${fmtCOP(d.vViaje)}` : "Sin viajes"}</span></span>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}><input type="checkbox" checked={f.ivaTransporte} onChange={(e) => setF({ ...f, ivaTransporte: e.target.checked })} /> IVA 19%</label>
+                    <span className="num" style={{ textAlign: "right" }}>Base <b>{fmtCOP(d.trans)}</b></span>
+                    <span className="num" style={{ textAlign: "right" }}>IVA <b>{fmtCOP(d.ivaTr)}</b></span>
+                  </div>
+                  <div style={{ ...fila, background: "var(--brand-soft)", gridTemplateColumns: "1fr auto auto auto" }}>
+                    <b>Total del servicio</b>
+                    <span className="num">Base <b>{fmtCOP(d.alq + d.trans)}</b></span>
+                    <span className="num">IVA <b>{fmtCOP(d.total)}</b></span>
+                    <span className="num">Con IVA <b>{fmtCOP(d.alq + d.trans + d.total)}</b></span>
+                  </div>
+                  <input type="hidden" value={fmtCOP(d.unit)} readOnly style={ro} />
                 </div>
               );
             })()}
             <div style={gridAuto}>
-              <label className="field">Valor del servicio (COP){esAlquiler && tarifaSel(f) && <span className="muted" style={{ fontWeight: 400 }}> · calculado</span>}
+              <label className="field">{esAlquiler ? "Valor del servicio sin IVA (COP)" : "Valor del servicio (COP)"}{esAlquiler && tarifaSel(f) && <span className="muted" style={{ fontWeight: 400 }}> · calculado</span>}
                 <input className="input num" type="number" step="1" min="0" value={f.value}
                   onChange={(e) => setF({ ...f, value: e.target.value })} />
               </label>

@@ -106,7 +106,12 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
   const catalogo = catalogoDe(form.contrato);
   const activas = useMemo(() => rows.filter((r) => ACTIVAS.has(r.estado)), [rows]);
   const totalActivo = activas.reduce((s, r) => s + Number(r.valor_base), 0);
-  const conIvaDe = (r: PrefacturaRow) => Number(r.valor_base) * (1 + ivaPctDe(r.contrato, CORTE.iva_pct));
+  const conIvaDe = (r: PrefacturaRow) => {
+    const items = (r.items ?? []) as PrefacturaItem[];
+    const base = Number(r.valor_base);
+    if (items.some((it) => it.iva_pct !== undefined)) return items.reduce((s, it) => s + Number(it.valor_base) * (1 + (it.iva_pct ?? ivaPctDe(r.contrato, CORTE.iva_pct))), 0);
+    return base * (1 + ivaPctDe(r.contrato, CORTE.iva_pct));
+  };
   const totalActivoConIva = activas.reduce((s, r) => s + conIvaDe(r), 0);
   const totalPendientePago = activas.filter((r) => r.estado === "pendiente_pago").reduce((s, r) => s + Number(r.valor_base), 0);
   const masAntigua = activas.reduce((m, r) => Math.max(m, diasDesde(r.fecha_generacion)), 0);

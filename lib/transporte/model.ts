@@ -153,6 +153,10 @@ export interface Servicio {
   /** N° de viajes de transporte del equipo y valor unitario del viaje (tarifario). */
   viajesEquipo?: NumLike;
   valorTransporte?: NumLike;
+  /** IVA 19% activado por ítem (alquiler / transporte) y valor total del IVA del servicio. */
+  ivaAlquiler?: boolean;
+  ivaTransporte?: boolean;
+  valorIva?: NumLike;
   /** N° de la prefactura (PF0001…) en la que quedó incluido el servicio; null/undefined = sin prefacturar. */
   prefactura?: string | null;
   /** Recargos aplicados (SPEC §3.3): se persisten para precargar los checkboxes al editar. */
