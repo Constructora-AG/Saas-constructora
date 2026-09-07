@@ -108,9 +108,6 @@ function TransporteShell({ t }: { t: UseTransporte }) {
             </button>
           ))}
         </div>
-        <span className="badge ok" title="Rol de la sesión de plataforma (login de Supabase Auth)">
-          Perfil: {ses.profileLabel(ses.currentProfile)}
-        </span>
         <button className="btn btn-ghost btn-sm" onClick={() => void t.refresh()} disabled={t.loading}>
           Actualizar
         </button>
