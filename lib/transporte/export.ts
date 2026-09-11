@@ -17,8 +17,8 @@ import {
   CONTRATISTA,
   CONTRATISTA_NIT,
 } from "./constants";
-import { fmtCOP, respHours } from "./logic";
-import type { AdjuntoFile, Servicio } from "./model";
+import { desgloseValor, fmtCOP, respHours } from "./logic";
+import type { AdjuntoFile, Servicio, Tarifario } from "./model";
 import { aprobadorDe, areaAAADe, num } from "./model";
 
 /** Par mes+servicio con la etiqueta del mes (para la columna «Mes» y el PDF). */
@@ -36,13 +36,29 @@ export interface ExportContexto {
   vigencia: string;
   /** Valor total ejecutado de TODO el contrato (el saldo del PDF es global). */
   totalGlobalValue: number;
+  /** Tarifario para discriminar el valor en servicio + recargos (solo Transporte; null = sin desglose). */
+  tarifario?: Tarifario | null;
 }
+
+/** Columnas de valores en pesos (formato moneda y fila de totales en el Excel). */
+const COLS_MONEDA = [
+  "Valor Servicio (COP)",
+  "Horas Extra / Recargo Nocturno (COP)",
+  "Dominical o Festivo (COP)",
+  "Valor Total (COP)",
+  "Peajes (COP)",
+];
 
 export const SIN_REGISTROS_MSG = "No hay servicios para exportar con los filtros seleccionados.";
 
 // ── Fila de exportación (26 columnas literales, SPEC §5.9) ─────────
 
-export function toExportRow(monthLabel: string, item: Servicio): Record<string, string | number> {
+export function toExportRow(
+  monthLabel: string,
+  item: Servicio,
+  tarifario?: Tarifario | null,
+): Record<string, string | number> {
+  const v = desgloseValor(item, tarifario);
   const adjuntos = [
     ...(item.photoFiles || []).map((f) => f.name),
     item.approvalFile ? item.approvalFile.name : null,
@@ -69,7 +85,10 @@ export function toExportRow(monthLabel: string, item: Servicio): Record<string, 
     "Hora Atención": item.hourAtt || "",
     "Tiempo de Respuesta (h)": respHours(item.hourReq, item.hourAtt) ?? "",
     "Interventor": item.interventor || "",
-    "Valor Servicio (COP)": item.value ? num(item.value) : 0,
+    "Valor Servicio (COP)": v.base,
+    "Horas Extra / Recargo Nocturno (COP)": v.nocturno,
+    "Dominical o Festivo (COP)": v.dominical,
+    "Valor Total (COP)": v.total,
     "Peajes (COP)": item.tolls ? num(item.tolls) : 0,
     "Evidencia Fotográfica": item.photo ? "Sí" : "No",
     "V°B° Interventor": item.approved ? "Sí" : "No",
@@ -119,14 +138,14 @@ export async function exportServicios(
 ): Promise<void> {
   if (!pairs.length) throw new Error(SIN_REGISTROS_MSG);
   if (format === "csv") {
-    const rows = pairs.map((p) => toExportRow(p.monthLabel, p.item));
+    const rows = pairs.map((p) => toExportRow(p.monthLabel, p.item, ctx.tarifario));
     downloadBlob(rowsToCSV(rows), `${filenameBase}.csv`, "text/csv;charset=utf-8;");
   } else if (format === "xlsx") {
     // Excel con las fotos de soporte INCRUSTADAS en la fila (ExcelJS), como el
     // control manual del equipo: hasta 3 evidencias por servicio en columnas al final.
     const ExcelJSMod = await import("exceljs");
     const ExcelJS = (ExcelJSMod as unknown as { default?: typeof ExcelJSMod }).default ?? ExcelJSMod;
-    const rows = pairs.map((p) => toExportRow(p.monthLabel, p.item));
+    const rows = pairs.map((p) => toExportRow(p.monthLabel, p.item, ctx.tarifario));
     const headers = Object.keys(rows[0]);
     const wb = new ExcelJS.Workbook();
     wb.creator = "Control Transporte AAA";
@@ -159,6 +178,14 @@ export async function exportServicios(
         ws.addImage(id, { tl: { col: headers.length + j, row: excelRow - 1 }, ext: { width: 130, height: 122 }, editAs: "oneCell" });
       });
     }
+    // Valores en pesos con formato moneda y fila final con la sumatoria de cada columna.
+    COLS_MONEDA.forEach((h) => { ws.getColumn(h).numFmt = '"$"#,##0'; });
+    const filaTotal = ws.addRow({
+      [headers[0]]: "TOTAL",
+      ...Object.fromEntries(COLS_MONEDA.map((h) => [h, rows.reduce((s, r) => s + num(r[h]), 0)])),
+    });
+    filaTotal.font = { bold: true };
+    filaTotal.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF7" } };
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
     const buf = await wb.xlsx.writeBuffer();
     downloadBlob(new Blob([buf as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${filenameBase}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

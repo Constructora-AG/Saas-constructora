@@ -6,11 +6,11 @@
 // Según SPEC §5.3 la edición NO está restringida por perfil.
 // ════════════════════════════════════════════════════════════════════
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { Tarifario } from "@/lib/transporte/model";
 import { num } from "@/lib/transporte/model";
-import { fmtCOP } from "@/lib/transporte/logic";
+import { fmtCOP, recalcularValores } from "@/lib/transporte/logic";
 import { MsgInline } from "./CatalogoTabla";
 
 /** Estado editable: unitarios por "catId|rutaId" + recargos, como strings. */
@@ -40,6 +40,13 @@ export function TarifarioView({ t }: ViewProps) {
   useEffect(() => {
     if (t.tarifario && !dirty) setDraft(draftFrom(t.tarifario));
   }, [t.tarifario, dirty]);
+
+  // Servicios registrados cuyo valor no coincide con el tarifario vigente (solo Transporte:
+  // en Contrato de Alquiler el valor sale de horas máquina, no de la ruta).
+  const desactualizados = useMemo(
+    () => (t.ns === "transporte" && t.tarifario ? recalcularValores(t.servicesByMonth, t.tarifario) : null),
+    [t.ns, t.tarifario, t.servicesByMonth],
+  );
 
   if (!t.tarifario || !draft) {
     return (
@@ -75,13 +82,35 @@ export function TarifarioView({ t }: ViewProps) {
       await t.saveTarifarioCfg(nuevo);
       setDirty(false);
       setOk("Tarifario guardado. Los nuevos servicios usarán estos valores.");
+      if (t.ns === "transporte" && recalcularValores(t.servicesByMonth, nuevo).servicios > 0) {
+        setOk("Tarifario guardado. Usa «Actualizar servicios registrados» para aplicarlo a los servicios ya cargados.");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar el tarifario.");
     }
   };
 
+  const actualizarServicios = async () => {
+    if (!desactualizados || desactualizados.servicios === 0) return;
+    const { servicios, facturados, diferencia } = desactualizados;
+    const aviso =
+      `Se actualizará el valor de ${servicios} servicio(s) registrado(s) con el tarifario vigente ` +
+      `(diferencia total ${diferencia < 0 ? "-" : "+"}${fmtCOP(Math.abs(diferencia))}).` +
+      (facturados ? `\n\n${facturados} de ellos ya están facturados o prefacturados.` : "") +
+      "\n\nLos servicios con tarifa manual no se modifican. ¿Continuar?";
+    if (!window.confirm(aviso)) return;
+    setError(null);
+    setOk(null);
+    try {
+      const r = await t.recalcularServicios(tarifario);
+      setOk(`${r.servicios} servicio(s) actualizado(s) con el tarifario vigente.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudieron actualizar los servicios.");
+    }
+  };
+
   const restablecer = async () => {
-    if (!window.confirm("¿Restablecer el tarifario a los valores originales del pliego? Se perderán los cambios manuales.")) return;
+    if (!window.confirm("¿Restablecer el tarifario a los valores del Formulario de Cantidades y Precios vigente? Se perderán los cambios manuales.")) return;
     setError(null);
     setOk(null);
     try {
@@ -100,6 +129,21 @@ export function TarifarioView({ t }: ViewProps) {
         Tarifas del pliego para el cálculo automático del valor de cada servicio. Edítalas si hay un
         otrosí u OFAC. Los cambios se guardan para todo el equipo.
       </p>
+
+      {desactualizados && desactualizados.servicios > 0 && !dirty && (
+        <div
+          className="table-wrap"
+          style={{ padding: "12px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}
+        >
+          <span style={{ fontSize: 13, flex: "1 1 280px" }}>
+            <b>{desactualizados.servicios} servicio(s) registrado(s)</b> tienen un valor distinto al de este tarifario
+            (diferencia {desactualizados.diferencia < 0 ? "-" : "+"}{fmtCOP(Math.abs(desactualizados.diferencia))}).
+          </span>
+          <button className="btn btn-primary" onClick={() => void actualizarServicios()} disabled={t.saving}>
+            {t.saving ? "Actualizando…" : "Actualizar servicios registrados"}
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))" }}>
         {tarifario.categorias.map((cat) => (
@@ -176,7 +220,7 @@ export function TarifarioView({ t }: ViewProps) {
           {t.saving ? "Guardando…" : "Guardar tarifario"}
         </button>
         <button className="btn btn-ghost" onClick={() => void restablecer()} disabled={t.saving}>
-          Restablecer valores del pliego
+          Restablecer valores del formulario vigente
         </button>
         {dirty && <span className="muted" style={{ fontSize: 13 }}>Hay cambios sin guardar.</span>}
         <MsgInline error={error} ok={ok} />

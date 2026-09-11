@@ -124,9 +124,10 @@ export function ResumenView({ t }: ViewProps) {
     () => ({
       vigencia: `${fFecha(inicio)} - ${fFecha(finIncl)}`,
       totalGlobalValue: valorEjecutado,
+      tarifario: t.ns === "transporte" ? t.tarifario : null,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t.contractStart, t.contractEndExclusive, valorEjecutado],
+    [t.contractStart, t.contractEndExclusive, valorEjecutado, t.ns, t.tarifario],
   );
 
   async function exportar(fmt: ExportFormat) {

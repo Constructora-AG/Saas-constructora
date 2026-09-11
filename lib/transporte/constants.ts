@@ -48,6 +48,7 @@ export const CONTRATISTA = "Constructora Anaya Giraldo S.A.S.";
 export const CONTRATISTA_NIT = "900.530.150-5";
 
 // ── Tarifario por defecto (§1.3) ───────────────────────────────────
+// Valores del «FORMATO 2 — Formulario de cantidades y precios» (sep 2026).
 
 export const TARIFARIO_DEFAULT: Tarifario = {
   recargos: { nocturno: 109600, dominicalFestivo: 126905 },
@@ -57,10 +58,10 @@ export const TARIFARIO_DEFAULT: Tarifario = {
       label: "Ítem 1 · Camión Plancha 5 Ton (largo mín. 5 m)",
       capacidad: 5,
       rutas: [
-        { id: "1.1", label: "Barranquilla a su Área Metropolitana", unitario: 709199 },
-        { id: "1.2", label: "Barranquilla a Municipios Costero", unitario: 925042 },
-        { id: "1.3", label: "Barranquilla a Municipios Oriente", unitario: 994095 },
-        { id: "1.4", label: "Transporte entre Municipios", unitario: 994095 },
+        { id: "1.1", label: "Barranquilla a su Área Metropolitana", unitario: 703199 },
+        { id: "1.2", label: "Barranquilla a Municipios Costero", unitario: 920042 },
+        { id: "1.3", label: "Barranquilla a Municipios Oriente", unitario: 989095 },
+        { id: "1.4", label: "Transporte entre Municipios", unitario: 989095 },
       ],
     },
     {
@@ -68,10 +69,10 @@ export const TARIFARIO_DEFAULT: Tarifario = {
       label: "Ítem 2 · Camión Plancha 8 Ton (largo mín. 6 m)",
       capacidad: 8,
       rutas: [
-        { id: "2.1", label: "Barranquilla a su Área Metropolitana", unitario: 709199 },
-        { id: "2.2", label: "Barranquilla a Municipios Costero", unitario: 925042 },
-        { id: "2.3", label: "Barranquilla a Municipios Oriente", unitario: 994095 },
-        { id: "2.4", label: "Transporte entre Municipios", unitario: 994095 },
+        { id: "2.1", label: "Barranquilla a su Área Metropolitana", unitario: 706199 },
+        { id: "2.2", label: "Barranquilla a Municipios Costero", unitario: 922042 },
+        { id: "2.3", label: "Barranquilla a Municipios Oriente", unitario: 991095 },
+        { id: "2.4", label: "Transporte entre Municipios", unitario: 991095 },
       ],
     },
     {
@@ -90,8 +91,8 @@ export const TARIFARIO_DEFAULT: Tarifario = {
       label: "Ítem 4 · Cama Baja 40 Ton (largo mín. 11 m)",
       capacidad: 40,
       rutas: [
-        { id: "4.1", label: "Barranquilla a su Área Metropolitana", unitario: 1541736 },
-        { id: "4.2", label: "Barranquilla a Municipios Costero", unitario: 1798692 },
+        { id: "4.1", label: "Barranquilla a su Área Metropolitana", unitario: 1541236 },
+        { id: "4.2", label: "Barranquilla a Municipios Costero", unitario: 1798192 },
         { id: "4.3", label: "Barranquilla a Municipios Oriente", unitario: 1978561 },
         { id: "4.4", label: "Transporte entre Municipios (ref. servicio a demanda)", unitario: 1978561 },
       ],

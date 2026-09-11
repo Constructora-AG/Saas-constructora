@@ -243,6 +243,88 @@ export function computeValor(
   return { capacidad: num(cat.capacidad), total, hint };
 }
 
+/** Holgura (COP) para reconocer un recargo dentro del valor aunque la tarifa de la ruta haya cambiado. */
+const HOLGURA_RECARGO = 8000;
+
+/**
+ * Recargos realmente cobrados en un servicio con tarifa. Se deducen del valor
+ * guardado (valor − unitario de la ruta ≈ 0 / nocturno / dominical / ambos),
+ * porque en datos migrados el recargo quedó sumado sin marcar la casilla. Si
+ * el valor no encaja en ninguna combinación (valor editado a mano), mandan las
+ * casillas del servicio.
+ */
+export function recargosCobrados(s: Servicio, t: Tarifario): { nocturno: boolean; dominical: boolean } {
+  const porCasillas = { nocturno: !!s.recargoNocturno, dominical: !!s.recargoDominical };
+  const ruta = findRuta(findCategoria(t, s.tarifaCategoria), s.tarifaRuta);
+  if (!ruta) return porCasillas;
+  const extra = num(s.value) - num(ruta.unitario);
+  const rn = num(t.recargos.nocturno);
+  const rd = num(t.recargos.dominicalFestivo);
+  const combos = [
+    { nocturno: false, dominical: false, v: 0 },
+    { nocturno: true, dominical: false, v: rn },
+    { nocturno: false, dominical: true, v: rd },
+    { nocturno: true, dominical: true, v: rn + rd },
+  ];
+  const hit = combos.find((c) => Math.abs(extra - c.v) <= HOLGURA_RECARGO);
+  return hit ? { nocturno: hit.nocturno, dominical: hit.dominical } : porCasillas;
+}
+
+/**
+ * Recalcula el valor de todos los servicios que usan el tarifario (los de
+ * tarifa manual o sin ruta no se tocan), conservando los recargos cobrados y
+ * dejando sus casillas coherentes con el valor. Devuelve solo los meses que
+ * cambian, cuántos servicios cambian (y cuántos ya estaban facturados o
+ * prefacturados) y la diferencia total en COP.
+ */
+export function recalcularValores(
+  servicesByMonth: Record<string, Servicio[]>,
+  t: Tarifario,
+): { cambios: Record<string, Servicio[]>; servicios: number; facturados: number; diferencia: number } {
+  const cambios: Record<string, Servicio[]> = {};
+  let servicios = 0;
+  let facturados = 0;
+  let diferencia = 0;
+  for (const [mk, arr] of Object.entries(servicesByMonth)) {
+    let cambio = false;
+    const next = (arr ?? []).map((s) => {
+      const rec = recargosCobrados(s, t);
+      const c = computeValor(t, s.tarifaCategoria, s.tarifaRuta, rec.nocturno, rec.dominical);
+      if (!c || c.total == null) return s;
+      const mismoValor = c.total === num(s.value);
+      if (mismoValor && rec.nocturno === !!s.recargoNocturno && rec.dominical === !!s.recargoDominical) return s;
+      cambio = true;
+      if (!mismoValor) {
+        servicios += 1;
+        if (s.invoiced || s.prefactura) facturados += 1;
+        diferencia += c.total - num(s.value);
+      }
+      return { ...s, value: String(c.total), recargoNocturno: rec.nocturno, recargoDominical: rec.dominical };
+    });
+    if (cambio) cambios[mk] = next;
+  }
+  return { cambios, servicios, facturados, diferencia };
+}
+
+/**
+ * Desglose del valor para los reportes: valor de la ruta + recargo nocturno
+ * (horas extra) + recargo dominical/festivo = valor total. Sin tarifario
+ * (p. ej. Contrato de Alquiler) o con tarifa manual, todo el valor queda como
+ * valor del servicio.
+ */
+export function desgloseValor(
+  s: Servicio,
+  t: Tarifario | null | undefined,
+): { base: number; nocturno: number; dominical: number; total: number } {
+  const total = num(s.value);
+  if (!t || !s.tarifaCategoria || !s.tarifaRuta) return { base: total, nocturno: 0, dominical: 0, total };
+  const rec = recargosCobrados(s, t);
+  const nocturno = rec.nocturno ? num(t.recargos.nocturno) : 0;
+  const dominical = rec.dominical ? num(t.recargos.dominicalFestivo) : 0;
+  if (nocturno + dominical > total) return { base: total, nocturno: 0, dominical: 0, total };
+  return { base: total - nocturno - dominical, nocturno, dominical, total };
+}
+
 /** Descripción de la tarifa para la orden PDF: '<cat.label> — <ruta.label>' o manual. */
 export function tarifaDescriptionFor(t: Tarifario | null, s: Servicio): string {
   const cat = t ? findCategoria(t, s.tarifaCategoria) : null;

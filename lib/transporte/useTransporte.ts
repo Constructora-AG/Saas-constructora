@@ -37,6 +37,7 @@ import {
   contractStatus,
   currentMonthIdx,
   fdate,
+  recalcularValores,
 } from "./logic";
 import type { AdminConfig, Backup, MonthInfo, Servicio, Tarifario } from "./model";
 import {
@@ -101,6 +102,8 @@ export interface UseTransporte {
   markPrefacturada: (pairs: Array<{ monthKey: string; id: string }>, numero: string | null) => Promise<void>;
   saveTarifarioCfg: (t: Tarifario) => Promise<void>;
   resetTarifario: () => Promise<void>;
+  /** Actualiza el valor de todos los servicios registrados con las tarifas dadas (los manuales no se tocan). */
+  recalcularServicios: (t: Tarifario) => Promise<{ servicios: number; diferencia: number }>;
   saveAdminCfg: (mutator: (a: AdminConfig) => void) => Promise<AdminConfig>;
 
   // Backup
@@ -351,6 +354,17 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     await saveTarifarioCfg(JSON.parse(JSON.stringify(TARIFARIO_DEFAULT)) as Tarifario);
   }, [saveTarifarioCfg]);
 
+  const recalcularServicios = useCallback(
+    async (tar: Tarifario) => {
+      const r = recalcularValores(servicesByMonth, tar);
+      for (const [mk, next] of Object.entries(r.cambios)) {
+        await persistMonth(mk, next, servicesByMonth[mk] ?? []);
+      }
+      return { servicios: r.servicios, diferencia: r.diferencia };
+    },
+    [servicesByMonth, persistMonth],
+  );
+
   /** Muta una copia del admin actual y la persiste (optimista con revert). */
   const saveAdminCfg = useCallback(
     async (mutator: (a: AdminConfig) => void) => {
@@ -452,6 +466,7 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     markPrefacturada,
     saveTarifarioCfg,
     resetTarifario,
+    recalcularServicios,
     saveAdminCfg,
     downloadBackup,
     restoreFromBackup,
