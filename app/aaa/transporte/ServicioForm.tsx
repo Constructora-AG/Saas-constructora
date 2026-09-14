@@ -13,11 +13,11 @@
 // El llamador (RegistrosView) es responsable de t.setModalOpen(true/false).
 // ════════════════════════════════════════════════════════════════════
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { UseTransporte } from "@/lib/transporte/useTransporte";
 import type { AdjuntoFile, AdminConfig, MonthInfo, NumLike, Servicio, Tarifario } from "@/lib/transporte/model";
 import { areaAAADe, aprobadorDe, num, nuevoServicioId } from "@/lib/transporte/model";
-import { autoRecargos, computeValor, fdate, fmtCOP, respHours } from "@/lib/transporte/logic";
+import { autoRecargos, computeValor, fdate, fmtCOP, respHours, sugerenciasCampo } from "@/lib/transporte/logic";
 import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
 
@@ -254,6 +254,16 @@ export function ServicioForm({
   })();
   const catSel = tarifario?.categorias.find((c) => c.id === f.tarifaCategoria) ?? null;
 
+  // Autocompletado de los campos de texto libre con lo ya registrado (SPEC §5.2):
+  // recogida y destino comparten el universo de sitios, porque un mismo lugar se
+  // repite en ambos sentidos. Se recalcula solo cuando cambian los servicios.
+  const sugSitios = useMemo(() => sugerenciasCampo(t.servicesByMonth, ["pickup", "destination"]), [t.servicesByMonth]);
+  const sugAreas = useMemo(() => sugerenciasCampo(t.servicesByMonth, "area"), [t.servicesByMonth]);
+  const sugOperarios = useMemo(
+    () => sugerenciasCampo(t.servicesByMonth, "operario", conductoresDe(admin)),
+    [t.servicesByMonth, admin],
+  );
+
   // ── Recálculos encadenados (handlers, no efectos) ────────────────
 
   /** Aplica computeValor sobre un estado candidato y actualiza el hint. */
@@ -486,6 +496,10 @@ export function ServicioForm({
     </label>
   );
 
+  /** Lista de sugerencias del navegador para un input libre (vacía = sin datalist). */
+  const sugerencias = (id: string, opciones: string[]) =>
+    opciones.length ? <datalist id={id}>{opciones.map((o) => <option key={o} value={o} />)}</datalist> : null;
+
   const recNoct = fmtCOP(num(tarifario?.recargos.nocturno));
   const recDom = fmtCOP(num(tarifario?.recargos.dominicalFestivo));
   const titulo = editing ? "Editar servicio" : "Registrar servicio";
@@ -621,22 +635,28 @@ export function ServicioForm({
                   onChange={(e) => setF({ ...f, weight: e.target.value })} />
               </label>}
               <label className="field">Nombre del operario
-                <input className="input" value={f.operario} placeholder="Operario del equipo"
+                <input className="input" value={f.operario} placeholder="Operario del equipo" list="sug-operarios"
                   onChange={(e) => setF({ ...f, operario: e.target.value })} />
+                {sugerencias("sug-operarios", sugOperarios)}
               </label>
             </div>
 
             {seccion(esAlquiler ? "Lugar del servicio" : "Ruta")}
             <div style={gridAuto}>
               {!esAlquiler && <label className="field">Lugar de recogida
-                <input className="input" value={f.pickup} onChange={(e) => setF({ ...f, pickup: e.target.value })} />
+                <input className="input" value={f.pickup} list="sug-sitios" placeholder="Escribe o elige uno ya usado"
+                  onChange={(e) => setF({ ...f, pickup: e.target.value })} />
               </label>}
               {!esAlquiler && <label className="field">Lugar de destino
-                <input className="input" value={f.destination} onChange={(e) => setF({ ...f, destination: e.target.value })} />
+                <input className="input" value={f.destination} list="sug-sitios" placeholder="Escribe o elige uno ya usado"
+                  onChange={(e) => setF({ ...f, destination: e.target.value })} />
               </label>}
               <label className="field">Municipio / área de prestación
-                <input className="input" value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })} />
+                <input className="input" value={f.area} list="sug-areas" placeholder="Escribe o elige uno ya usado"
+                  onChange={(e) => setF({ ...f, area: e.target.value })} />
               </label>
+              {sugerencias("sug-sitios", sugSitios)}
+              {sugerencias("sug-areas", sugAreas)}
             </div>
 
             {seccion(esAlquiler ? "Horas máquina" : "Tiempos de atención")}

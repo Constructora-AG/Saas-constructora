@@ -471,3 +471,44 @@ export function totales(items: Servicio[]): Totales {
 
 /** Re-export cómodo para las vistas. */
 export { areaAAADe };
+
+// ── Sugerencias para campos de texto libre (§5.2) ───────────────────
+
+/** Campos de texto libre del servicio con autocompletado por historial. */
+export type CampoLibre = "pickup" | "destination" | "area" | "operario";
+
+/**
+ * Valores ya escritos en uno o varios campos de texto libre de los servicios
+ * (lugares, municipios, operarios), para ofrecerlos como autocompletado y que
+ * el mismo sitio no se escriba distinto según quién registre. Deduplica sin
+ * distinguir mayúsculas ni espacios repetidos, conserva la escritura más
+ * usada y ordena por frecuencia y luego alfabéticamente. `extra` (catálogos
+ * del admin) se ofrece aunque todavía no se haya usado.
+ */
+export function sugerenciasCampo(
+  servicesByMonth: Record<string, Servicio[]>,
+  campos: CampoLibre | CampoLibre[],
+  extra: string[] = [],
+): string[] {
+  const lista = Array.isArray(campos) ? campos : [campos];
+  const grupos = new Map<string, Map<string, number>>();
+  const add = (raw: unknown, peso: number) => {
+    const v = String(raw ?? "").trim().replace(/\s+/g, " ");
+    if (!v) return;
+    const k = v.toLocaleLowerCase("es");
+    const g = grupos.get(k) ?? new Map<string, number>();
+    g.set(v, (g.get(v) ?? 0) + peso);
+    grupos.set(k, g);
+  };
+  Object.values(servicesByMonth).forEach((arr) =>
+    (arr ?? []).forEach((s) => lista.forEach((c) => add(s[c], 1))),
+  );
+  extra.forEach((v) => add(v, 0));
+  return [...grupos.values()]
+    .map((variantes) => {
+      const orden = [...variantes.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es"));
+      return { label: orden[0][0], usos: orden.reduce((t, [, n]) => t + n, 0) };
+    })
+    .sort((a, b) => b.usos - a.usos || a.label.localeCompare(b.label, "es"))
+    .map((x) => x.label);
+}
