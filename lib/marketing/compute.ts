@@ -315,6 +315,8 @@ export const ETAPAS_MANANTIAL: Array<{ etapa: number; manzana: string; desde: nu
   { etapa: 2, manzana: "5", desde: 18, hasta: 35 },
 ];
 export const ETAPA_RESTO = 3;
+/** Etapas que existen en el proyecto de lotes, tengan ventas o no. */
+export const ETAPAS_TOTALES_MANANTIAL = [1, 2, 3];
 
 /** Etapa de un lote a partir de su manzana y número. */
 export function etapaDeLote(manzana: string, lote: number): number {
@@ -365,6 +367,17 @@ export function ventasPorProyecto(ventas: VentaCartera[]): ProyectoVentas[] {
     }
     return a.localeCompare(b);
   };
+  // El proyecto de lotes muestra sus tres etapas aunque alguna no haya vendido
+  // todavía (hoy la Etapa 3, pendiente de urbanizar): si no, desaparece de la tabla.
+  for (const p of map.values()) {
+    if (!/manantial/i.test(p.proyecto)) continue;
+    for (const e of ETAPAS_TOTALES_MANANTIAL) {
+      const grupo = `Etapa ${e}`;
+      if (!p.grupos.some((g) => g.grupo === grupo)) {
+        p.grupos.push({ grupo, total: 0, digitales: 0, leads: 0, valor: 0, unidades: [], ultima: null });
+      }
+    }
+  }
   return [...map.values()]
     .map((p) => ({
       ...p,

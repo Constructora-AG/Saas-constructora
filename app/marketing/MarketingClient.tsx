@@ -335,7 +335,7 @@ function VistaMarketing({ leads, compradores, ventas, contexto }: { leads: Lead[
                   return (
                   <tr key={clave} style={g.unidades.length > 12 ? { cursor: "pointer" } : undefined}
                       onClick={g.unidades.length > 12 ? () => setGrupoAbierto(todas ? null : clave) : undefined}>
-                    <td style={{ paddingLeft: 32 }}>{g.grupo} <span className="muted" style={{ fontSize: 12 }}>· {visibles.join(", ")}{ocultas > 0 ? ` y ${ocultas} más ▸` : g.unidades.length > 12 ? " ▾" : ""}{g.ultima ? ` · última venta ${fechaCorta(g.ultima)}` : ""}</span></td>
+                    <td style={{ paddingLeft: 32 }}>{g.grupo} <span className="muted" style={{ fontSize: 12 }}>{g.unidades.length === 0 ? "· sin ventas todavía" : `· ${visibles.join(", ")}`}{ocultas > 0 ? ` y ${ocultas} más ▸` : g.unidades.length > 12 ? " ▾" : ""}{g.ultima ? ` · última venta ${fechaCorta(g.ultima)}` : ""}</span></td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.total)}</td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.digitales)}</td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.leads)}</td>
