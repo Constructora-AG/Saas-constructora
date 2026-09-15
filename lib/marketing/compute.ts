@@ -307,10 +307,20 @@ export interface ProyectoVentas { proyecto: string; total: number; digitales: nu
 // Lotes Reservas del Manantial se comercializa por ETAPAS, pero Smarthome no las
 // modela: el proyecto es uno solo y lo único que llega es la manzana dentro del
 // código del módulo ("MANZANA 4 LOTE 20"). Esta es la correspondencia real del
-// inventario: Manzana 4 = Etapa 1 (28 lotes), Manzanas 3 y 5 = Etapa 2 (18 c/u),
-// y el resto del terreno pendiente de urbanizar es la Etapa 3.
-export const ETAPA_POR_MANZANA: Record<string, number> = { "4": 1, "3": 2, "5": 2 };
+// inventario; todo lo que no caiga en estos rangos son las manzanas sobrantes,
+// es decir la Etapa 3.
+export const ETAPAS_MANANTIAL: Array<{ etapa: number; manzana: string; desde: number; hasta: number }> = [
+  { etapa: 1, manzana: "4", desde: 1, hasta: 28 },
+  { etapa: 2, manzana: "3", desde: 1, hasta: 18 },
+  { etapa: 2, manzana: "5", desde: 18, hasta: 35 },
+];
 export const ETAPA_RESTO = 3;
+
+/** Etapa de un lote a partir de su manzana y número. */
+export function etapaDeLote(manzana: string, lote: number): number {
+  const r = ETAPAS_MANANTIAL.find((x) => x.manzana === manzana && lote >= x.desde && lote <= x.hasta);
+  return r?.etapa ?? ETAPA_RESTO;
+}
 
 /** "TORRE 5 APTO 419" → { grupo: "Torre 5", unidad: "Apto 419" }; "MANZANA 4 LOTE 10" → { grupo: "Etapa 1", unidad: "Mz 4 · Lote 10" }. */
 export function partirModulo(module: string): { grupo: string; unidad: string } {
@@ -323,8 +333,8 @@ export function partirModulo(module: string): { grupo: string; unidad: string } 
   const numero = x[2].toUpperCase();
   const unidad = cap(x[3] || "") || "—";
   if (tipo === "MANZANA" || tipo === "MZ") {
-    const etapa = ETAPA_POR_MANZANA[numero] ?? ETAPA_RESTO;
-    return { grupo: `Etapa ${etapa}`, unidad: `Mz ${numero} · ${unidad}` };
+    const lote = Number((x[3].match(/\d+/) ?? ["0"])[0]);
+    return { grupo: `Etapa ${etapaDeLote(numero, lote)}`, unidad: `Mz ${numero} · ${unidad}` };
   }
   return { grupo: cap(`${tipo} ${numero}`), unidad };
 }
