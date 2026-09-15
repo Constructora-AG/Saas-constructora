@@ -216,6 +216,29 @@ export const bi = {
     return all;
   },
 
+  // Igual que prospectDetail({ all: true }) pero entregando página a página: el
+  // histórico completo son ~68.000 registros y acumularlos todos en memoria hacía
+  // que la función de /api/marketing/sync muriera antes de escribir en Supabase.
+  async *prospectDetailPages(opts?: {
+    records?: number;
+    createdDate?: string;
+  }): AsyncGenerator<ProspectDetailRecord[]> {
+    const key = requireUserKey();
+    const records = opts?.records ?? 1000;
+    const createdDate = opts?.createdDate ?? "2023-01-01";
+    const fetchPage = (page: number) =>
+      call<PaginatedBI<ProspectDetailRecord>>(
+        `${BI_BASE}/api/bi/getProspectDetail/${key}?page=${page}&records=${records}&createdDate=${createdDate}`,
+      );
+
+    const first = await fetchPage(1);
+    yield first.records ?? [];
+    const totalPages = first.pages ?? 1;
+    for (let p = 2; p <= totalPages; p++) {
+      yield (await fetchPage(p)).records ?? [];
+    }
+  },
+
   // Registros digitales (contactos entrantes: WhatsApp, web, etc.). Owner = cuenta que atendió.
   async digitalRecords(records = 100000): Promise<Record<string, unknown>[]> {
     const key = requireUserKey();

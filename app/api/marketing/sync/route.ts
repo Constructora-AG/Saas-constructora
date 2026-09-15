@@ -42,42 +42,63 @@ async function handler(req: NextRequest) {
   const inicio = Date.now();
   let leads = 0;
   let prospectos = 0;
+  let miniaturas: { cacheadas: number; caducadas: number; reutilizadas: number } | null = null;
+
+  // El estado se guarda al terminar cada fase, no solo al final: si la función se
+  // queda sin tiempo en una fase posterior, lo ya sincronizado queda registrado y
+  // la UI muestra el avance real en vez de un error.
+  const guardarEstado = async () => {
+    const detalle = { leads, prospectos, miniaturas, errores: errores.slice(0, 10), segundos: Math.round((Date.now() - inicio) / 1000) };
+    if (leads || prospectos) {
+      await supa.from("mk_sync_estado").upsert({ clave: "marketing", ultimo_ok: new Date().toISOString(), detalle }, { onConflict: "clave" });
+    }
+    return detalle;
+  };
+
+  const subir = async (tabla: string, onConflict: string, rows: Record<string, unknown>[]): Promise<number> => {
+    let ok = 0;
+    for (let i = 0; i < rows.length; i += 500) {
+      const lote = rows.slice(i, i + 500);
+      const { error } = await supa.from(tabla).upsert(lote, { onConflict });
+      if (error) errores.push(`${tabla}: ${error.message}`);
+      else ok += lote.length;
+    }
+    return ok;
+  };
 
   // Las fases van EN SERIE: Smarthome responde mucho más lento con peticiones
   // simultáneas (medido: 246 s en paralelo vs 76 s en serie).
   try {
     const digital = await bi.digitalRecords();
-    const rows = digital.filter((r) => permitido(r.Project)).map(mapDigitalRecord);
-    for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await supa.from("mk_leads").upsert(rows.slice(i, i + 500), { onConflict: "id" });
-      if (error) errores.push(`mk_leads: ${error.message}`);
-      else leads += Math.min(500, rows.length - i);
-    }
+    leads = await subir("mk_leads", "id", digital.filter((r) => permitido(r.Project)).map(mapDigitalRecord));
   } catch (e) {
     errores.push(`digitalRecords: ${String(e)}`);
   }
+  await guardarEstado();
 
   // ── Prospectos enriquecidos (getProspectDetail, todas las páginas) ─────────
+  // Página a página: el histórico son ~68.000 registros y acumularlos enteros en
+  // memoria antes de subirlos hacía que la función muriera sin escribir nada.
   try {
-    const detail = await bi.prospectDetail({ all: true, createdDate: "2015-01-01" });
-    const rows = (detail as unknown as Record<string, unknown>[]).filter((r) => permitido(r.Proyecto)).map(mapProspectDetail);
-    for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await supa.from("sh_prospectos").upsert(rows.slice(i, i + 500), { onConflict: "prospect_id" });
-      if (error) errores.push(`sh_prospectos: ${error.message}`);
-      else prospectos += Math.min(500, rows.length - i);
+    for await (const pagina of bi.prospectDetailPages({ createdDate: "2015-01-01" })) {
+      const rows = (pagina as unknown as Record<string, unknown>[]).filter((r) => permitido(r.Proyecto)).map(mapProspectDetail);
+      prospectos += await subir("sh_prospectos", "prospect_id", rows);
     }
   } catch (e) {
     errores.push(`prospectDetail: ${String(e)}`);
   }
+  await guardarEstado();
 
   // ── Miniaturas de anuncios → Storage (los enlaces de fbcdn caducan en días) ──
-  let miniaturas: { cacheadas: number; caducadas: number; reutilizadas: number } | null = null;
-  try { miniaturas = await cachearMiniaturas(supa); } catch (e) { errores.push(`miniaturas: ${String(e)}`); }
-
-  const detalle = { leads, prospectos, miniaturas, errores: errores.slice(0, 10), segundos: Math.round((Date.now() - inicio) / 1000) };
-  if (leads || prospectos) {
-    await supa.from("mk_sync_estado").upsert({ clave: "marketing", ultimo_ok: new Date().toISOString(), detalle }, { onConflict: "clave" });
+  // Con presupuesto de tiempo: es lo accesorio del sync y no puede agotar la
+  // duración máxima de la función; lo que falte se completa en la siguiente pasada.
+  try {
+    miniaturas = await cachearMiniaturas(supa, Math.max(0, maxDuration * 1000 - 45_000 - (Date.now() - inicio)));
+  } catch (e) {
+    errores.push(`miniaturas: ${String(e)}`);
   }
+
+  const detalle = await guardarEstado();
   return NextResponse.json({ ok: errores.length === 0, ...detalle });
 }
 

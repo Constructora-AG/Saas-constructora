@@ -319,7 +319,7 @@ function VistaMarketing({ leads, compradores, ventas, contexto }: { leads: Lead[
             {porProyecto.map((p) => (
               <Fragment key={p.proyecto}>
                 <tr style={{ cursor: "pointer", background: "var(--surface-2)" }} onClick={() => setAbierto(abierto === p.proyecto ? null : p.proyecto)}>
-                  <td><b>{abierto === p.proyecto ? "▾" : "▸"} {p.proyecto}</b> <span className="muted" style={{ fontSize: 12 }}>· {p.grupos.length} {/manzana/i.test(p.grupos[0]?.grupo ?? "") ? "manzanas" : /torre/i.test(p.grupos[0]?.grupo ?? "") ? "torres" : "grupos"}</span></td>
+                  <td><b>{abierto === p.proyecto ? "▾" : "▸"} {p.proyecto}</b> <span className="muted" style={{ fontSize: 12 }}>· {p.grupos.length} {/etapa/i.test(p.grupos[0]?.grupo ?? "") ? (p.grupos.length === 1 ? "etapa" : "etapas") : /manzana/i.test(p.grupos[0]?.grupo ?? "") ? "manzanas" : /torre/i.test(p.grupos[0]?.grupo ?? "") ? "torres" : "grupos"}</span></td>
                   <td className="num" style={{ textAlign: "right" }}><b>{NUM.format(p.total)}</b></td>
                   <td className="num" style={{ textAlign: "right" }}>{NUM.format(p.digitales)} <span className="muted">({PCT(pct(p.digitales, p.total))})</span></td>
                   <td className="num" style={{ textAlign: "right" }}>{NUM.format(p.leads)}</td>

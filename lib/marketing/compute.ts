@@ -304,14 +304,28 @@ import type { VentaCartera } from "./types";
 export interface GrupoVentas { grupo: string; total: number; digitales: number; leads: number; valor: number; unidades: string[]; ultima: string | null }
 export interface ProyectoVentas { proyecto: string; total: number; digitales: number; leads: number; valor: number; grupos: GrupoVentas[] }
 
-/** "TORRE 5 APTO 419" → { grupo: "Torre 5", unidad: "Apto 419" }; "MANZANA 4 LOTE 10" → { grupo: "Manzana 4", unidad: "Lote 10" }. */
+// Lotes Reservas del Manantial se comercializa por ETAPAS, pero Smarthome solo
+// entrega la manzana en el código del módulo ("MANZANA 4 LOTE 20"): aquí está la
+// correspondencia manzana → etapa para poder agrupar las ventas como se vende.
+export const ETAPA_POR_MANZANA: Record<string, number> = { "3": 1, "4": 1, "5": 2 };
+
+/** "TORRE 5 APTO 419" → { grupo: "Torre 5", unidad: "Apto 419" }; "MANZANA 4 LOTE 10" → { grupo: "Etapa 1", unidad: "Mz 4 · Lote 10" }. */
 export function partirModulo(module: string): { grupo: string; unidad: string } {
   const m = String(module ?? "").trim();
   const re = /^(TORRE|BLOQUE|ETAPA|MANZANA|MZ|SECTOR|CONJUNTO)\s*([A-Z0-9-]+)\s*(.*)$/i;
   const x = re.exec(m);
   const cap = (s: string) => s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
-  if (x) return { grupo: cap(`${x[1] === "MZ" ? "Manzana" : x[1]} ${x[2]}`), unidad: cap(x[3] || "") || "—" };
-  return { grupo: "Sin agrupación", unidad: cap(m) || "—" };
+  if (!x) return { grupo: "Sin agrupación", unidad: cap(m) || "—" };
+  const tipo = x[1].toUpperCase();
+  const numero = x[2].toUpperCase();
+  const unidad = cap(x[3] || "") || "—";
+  if (tipo === "MANZANA" || tipo === "MZ") {
+    const etapa = ETAPA_POR_MANZANA[numero];
+    // Sin etapa conocida se conserva la manzana como agrupación.
+    if (!etapa) return { grupo: `Manzana ${numero}`, unidad };
+    return { grupo: `Etapa ${etapa}`, unidad: `Mz ${numero} · ${unidad}` };
+  }
+  return { grupo: cap(`${tipo} ${numero}`), unidad };
 }
 
 export function ventasPorProyecto(ventas: VentaCartera[]): ProyectoVentas[] {

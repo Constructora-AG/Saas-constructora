@@ -12,7 +12,11 @@ const BUCKET = "evidencias";
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36";
 const esCdn = (u: string) => /fbcdn\.net|cdninstagram\.com/.test(u);
 
-export async function cachearMiniaturas(supa: SupabaseClient): Promise<{ cacheadas: number; caducadas: number; reutilizadas: number }> {
+// `presupuestoMs` limita lo que puede tardar esta fase (0 = sin límite): es lo
+// accesorio del sync y lo que quede sin cachear se recoge en la siguiente pasada.
+export async function cachearMiniaturas(supa: SupabaseClient, presupuestoMs = 0): Promise<{ cacheadas: number; caducadas: number; reutilizadas: number }> {
+  const t0 = Date.now();
+  const sinTiempo = () => presupuestoMs > 0 && Date.now() - t0 > presupuestoMs;
   // Anuncios con miniatura aún apuntando al CDN
   const { data } = await supa.from("mk_leads").select("ad_id, ad_miniatura, fecha_creacion")
     .neq("ad_miniatura", "").neq("ad_id", "").order("fecha_creacion", { ascending: false }).limit(5000);
@@ -31,10 +35,11 @@ export async function cachearMiniaturas(supa: SupabaseClient): Promise<{ cachead
     await supa.from("mk_leads").update({ ad_miniatura: pub.publicUrl }).eq("ad_id", adId);
   };
   for (const [adId, url] of porAnuncio) {
+    if (sinTiempo()) break;
     const previo = (existentes ?? []).find((o) => o.name.replace(/\.[a-z]+$/, "") === adId);
     if (previo && enStorage.has(adId)) { await fijar(adId, `anuncios/${previo.name}`); reutilizadas++; continue; }
     try {
-      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10_000);
+      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 5_000);
       const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "image/*" }, signal: ctrl.signal });
       clearTimeout(t);
       const type = res.headers.get("content-type") ?? "";
