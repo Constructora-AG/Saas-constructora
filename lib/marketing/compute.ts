@@ -304,10 +304,13 @@ import type { VentaCartera } from "./types";
 export interface GrupoVentas { grupo: string; total: number; digitales: number; leads: number; valor: number; unidades: string[]; ultima: string | null }
 export interface ProyectoVentas { proyecto: string; total: number; digitales: number; leads: number; valor: number; grupos: GrupoVentas[] }
 
-// Lotes Reservas del Manantial se comercializa por ETAPAS, pero Smarthome solo
-// entrega la manzana en el código del módulo ("MANZANA 4 LOTE 20"): aquí está la
-// correspondencia manzana → etapa para poder agrupar las ventas como se vende.
-export const ETAPA_POR_MANZANA: Record<string, number> = { "3": 1, "4": 1, "5": 2 };
+// Lotes Reservas del Manantial se comercializa por ETAPAS, pero Smarthome no las
+// modela: el proyecto es uno solo y lo único que llega es la manzana dentro del
+// código del módulo ("MANZANA 4 LOTE 20"). Esta es la correspondencia real del
+// inventario: Manzana 4 = Etapa 1 (28 lotes), Manzanas 3 y 5 = Etapa 2 (18 c/u),
+// y el resto del terreno pendiente de urbanizar es la Etapa 3.
+export const ETAPA_POR_MANZANA: Record<string, number> = { "4": 1, "3": 2, "5": 2 };
+export const ETAPA_RESTO = 3;
 
 /** "TORRE 5 APTO 419" → { grupo: "Torre 5", unidad: "Apto 419" }; "MANZANA 4 LOTE 10" → { grupo: "Etapa 1", unidad: "Mz 4 · Lote 10" }. */
 export function partirModulo(module: string): { grupo: string; unidad: string } {
@@ -320,9 +323,7 @@ export function partirModulo(module: string): { grupo: string; unidad: string } 
   const numero = x[2].toUpperCase();
   const unidad = cap(x[3] || "") || "—";
   if (tipo === "MANZANA" || tipo === "MZ") {
-    const etapa = ETAPA_POR_MANZANA[numero];
-    // Sin etapa conocida se conserva la manzana como agrupación.
-    if (!etapa) return { grupo: `Manzana ${numero}`, unidad };
+    const etapa = ETAPA_POR_MANZANA[numero] ?? ETAPA_RESTO;
     return { grupo: `Etapa ${etapa}`, unidad: `Mz ${numero} · ${unidad}` };
   }
   return { grupo: cap(`${tipo} ${numero}`), unidad };
@@ -345,7 +346,21 @@ export function ventasPorProyecto(ventas: VentaCartera[]): ProyectoVentas[] {
     g.unidades.push(unidad);
   }
   const num = (s: string) => Number((s.match(/\d+/) ?? ["0"])[0]);
+  // "Mz 4 · Lote 3" antes que "Mz 4 · Lote 20": se comparan los números en orden.
+  const porNumeros = (a: string, b: string) => {
+    const na = a.match(/\d+/g) ?? [], nb = b.match(/\d+/g) ?? [];
+    for (let i = 0; i < Math.max(na.length, nb.length); i++) {
+      const d = Number(na[i] ?? 0) - Number(nb[i] ?? 0);
+      if (d) return d;
+    }
+    return a.localeCompare(b);
+  };
   return [...map.values()]
-    .map((p) => ({ ...p, grupos: p.grupos.sort((a, b) => num(a.grupo) - num(b.grupo) || a.grupo.localeCompare(b.grupo)) }))
+    .map((p) => ({
+      ...p,
+      grupos: p.grupos
+        .map((g) => ({ ...g, unidades: [...g.unidades].sort(porNumeros) }))
+        .sort((a, b) => num(a.grupo) - num(b.grupo) || a.grupo.localeCompare(b.grupo)),
+    }))
     .sort((a, b) => b.total - a.total);
 }

@@ -189,6 +189,8 @@ export function MarketingClient({ proyectos }: { proyectos: string[] }) {
 function VistaMarketing({ leads, compradores, ventas, contexto }: { leads: Lead[]; compradores: Prospecto[]; ventas: VentaCartera[]; contexto: string[] }) {
   const porProyecto = useMemo(() => ventasPorProyecto(ventas), [ventas]);
   const [abierto, setAbierto] = useState<string | null>(null);
+  // Grupo (torre / etapa) con la lista completa de unidades desplegada
+  const [grupoAbierto, setGrupoAbierto] = useState<string | null>(null);
   const e = useMemo(() => embudo(leads), [leads]);
   const creativos = useMemo(() => porCreativo(leads), [leads]);
   const canales = useMemo(() => agruparLeads(leads, (l) => l.canal), [leads]);
@@ -307,7 +309,7 @@ function VistaMarketing({ leads, compradores, ventas, contexto }: { leads: Lead[
 
       <div className="section-title">Ventas reales por proyecto (cartera) · {NUM.format(ventas.length)} unidades</div>
       <div className="muted" style={{ fontSize: 12.5, margin: "-6px 0 10px" }}>
-        Fuente de verdad: unidades con cartera activa en Smarthome. «Digitales» = el comprador entró por canal digital; «De campañas» = además figura como lead en las campañas sincronizadas desde enero de 2026. Clic en un proyecto para ver torres, manzanas o etapas.
+        Fuente de verdad: unidades con cartera activa en Smarthome. «Digitales» = el comprador entró por canal digital; «De campañas» = además figura como lead en las campañas sincronizadas desde enero de 2026. Clic en un proyecto para ver sus torres o etapas, y clic en una de ellas para ver todas sus unidades.
       </div>
       <div className="table-wrap" style={{ marginBottom: 18 }}>
         <table className="clean">
@@ -325,15 +327,22 @@ function VistaMarketing({ leads, compradores, ventas, contexto }: { leads: Lead[
                   <td className="num" style={{ textAlign: "right" }}>{NUM.format(p.leads)}</td>
                   <td className="num" style={{ textAlign: "right" }}>{COP.format(p.valor)}</td>
                 </tr>
-                {abierto === p.proyecto && p.grupos.map((g) => (
-                  <tr key={p.proyecto + g.grupo}>
-                    <td style={{ paddingLeft: 32 }}>{g.grupo} <span className="muted" style={{ fontSize: 12 }}>· {g.unidades.slice(0, 12).join(", ")}{g.unidades.length > 12 ? ` y ${g.unidades.length - 12} más` : ""}{g.ultima ? ` · última venta ${fechaCorta(g.ultima)}` : ""}</span></td>
+                {abierto === p.proyecto && p.grupos.map((g) => {
+                  const clave = p.proyecto + g.grupo;
+                  const todas = grupoAbierto === clave;
+                  const visibles = todas ? g.unidades : g.unidades.slice(0, 12);
+                  const ocultas = g.unidades.length - visibles.length;
+                  return (
+                  <tr key={clave} style={g.unidades.length > 12 ? { cursor: "pointer" } : undefined}
+                      onClick={g.unidades.length > 12 ? () => setGrupoAbierto(todas ? null : clave) : undefined}>
+                    <td style={{ paddingLeft: 32 }}>{g.grupo} <span className="muted" style={{ fontSize: 12 }}>· {visibles.join(", ")}{ocultas > 0 ? ` y ${ocultas} más ▸` : g.unidades.length > 12 ? " ▾" : ""}{g.ultima ? ` · última venta ${fechaCorta(g.ultima)}` : ""}</span></td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.total)}</td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.digitales)}</td>
                     <td className="num" style={{ textAlign: "right" }}>{NUM.format(g.leads)}</td>
                     <td className="num" style={{ textAlign: "right" }}>{COP.format(g.valor)}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </Fragment>
             ))}
             {porProyecto.length > 0 && (
