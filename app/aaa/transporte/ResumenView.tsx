@@ -30,6 +30,7 @@ import {
 import { num, type Servicio } from "@/lib/transporte/model";
 import { exportServicios, type ExportFormat } from "@/lib/transporte/export";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
+import { useRegistrosContrato } from "../FacturasRegistro";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
@@ -66,13 +67,17 @@ export function ResumenView({ t }: ViewProps) {
   const allItems = useMemo(() => allPairs.map(([, s]) => s), [allPairs]);
   const tot = useMemo(() => totales(allItems), [allItems]);
 
+  // Contrato de Alquiler: los registros del contrato (facturas AGF) también son ejecución.
+  const registros = useRegistrosContrato(t.ns === "alquiler" ? "alquiler" : null);
+  const valorRegistros = registros.rows.reduce((acc, r) => acc + Number(r.valor_total), 0);
+
   // KPIs (fórmulas SPEC §5.1)
-  const valorEjecutado = tot.valor;                          // Σ value
+  const valorEjecutado = tot.valor + valorRegistros;         // Σ value (+ registros del contrato)
   const pctValor = CONTRACT_VALUE > 0 ? (valorEjecutado / CONTRACT_VALUE) * 100 : 0;
   const saldo = CONTRACT_VALUE - valorEjecutado;             // CONTRACT_VALUE − Σ value
   const saldoBajo = saldo < CONTRACT_VALUE * 0.1;            // warn si saldo < 10% del contrato
   const totalPeajes = tot.peajes;                            // Σ tolls
-  const servicios = tot.servicios;                           // count
+  const servicios = tot.servicios + registros.rows.length;  // count (+ registros del contrato)
   const sinSoporte = tot.sinSoporte;                         // count(!photo || !approved)
 
   // Alertas contractuales (§4.9), máximo 8
@@ -88,9 +93,11 @@ export function ResumenView({ t }: ViewProps) {
       t.months.map((m) => ({
         key: m.key,
         label: m.label,
-        real: (t.servicesByMonth[m.key] ?? []).reduce((acc, s) => acc + num(s.value), 0),
+        real:
+          (t.servicesByMonth[m.key] ?? []).reduce((acc, s) => acc + num(s.value), 0) +
+          registros.rows.filter((r) => r.fecha.slice(0, 7) === m.key).reduce((acc, r) => acc + Number(r.valor_total), 0),
       })),
-    [t.months, t.servicesByMonth],
+    [t.months, t.servicesByMonth, registros.rows],
   );
   const maxMes = Math.max(1, presupuestoMes, ...ejecucionMensual.map((m) => m.real));
 
@@ -199,7 +206,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-label">Valor ejecutado</span>
           </div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(valorEjecutado)}</div>
-          <div className="kpi-foot">{pctValor.toFixed(1)}% del contrato</div>
+          <div className="kpi-foot">{pctValor.toFixed(1)}% del contrato{t.ns === "alquiler" && registros.error ? " · sin registros (error al cargarlos)" : ""}</div>
         </div>
         <div className="kpi">
           <div className="kpi-head">
@@ -233,7 +240,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-label">Servicios registrados</span>
           </div>
           <div className="kpi-value">{servicios.toLocaleString("es-CO")}</div>
-          <div className="kpi-foot">Acumulado del contrato</div>
+          <div className="kpi-foot">{t.ns === "alquiler" ? `${tot.servicios} servicio(s) + ${registros.rows.length} registro(s)` : "Acumulado del contrato"}</div>
         </div>
         <div className="kpi">
           <div className="kpi-head">

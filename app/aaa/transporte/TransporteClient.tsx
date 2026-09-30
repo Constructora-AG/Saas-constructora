@@ -53,12 +53,11 @@ import { ReportesView } from "./ReportesView";
 import { ResumenView } from "./ResumenView";
 import { TarifarioView } from "./TarifarioView";
 
-type Tab = "resumen" | "registros" | "facturas" | "tarifario" | "reportes" | "flota" | "personal" | "admin";
+type Tab = "resumen" | "registros" | "tarifario" | "reportes" | "flota" | "personal" | "admin";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "resumen", label: "Resumen" },
   { id: "registros", label: "Registros" },
-  { id: "facturas", label: "Facturas" }, // solo Contrato de Alquiler
   { id: "tarifario", label: "Tarifario" },
   { id: "reportes", label: "Reportes" },
   { id: "flota", label: "Flota" },
@@ -114,7 +113,7 @@ function TransporteShell({ t, titulo, subtitulo }: { t: UseTransporte; titulo?: 
 
       <div className="filters-bar" style={{ marginTop: 0 }}>
         <div className="segmented">
-          {TABS.filter((x) => x.id !== "facturas" || t.ns === "alquiler").map((x) => (
+          {TABS.map((x) => (
             <button key={x.id} className={`seg${tab === x.id ? " active" : ""}`} onClick={() => setTab(x.id)}>
               {x.label}
             </button>
@@ -132,8 +131,14 @@ function TransporteShell({ t, titulo, subtitulo }: { t: UseTransporte; titulo?: 
       ) : (
         <>
           {tab === "resumen" && <ResumenView t={t} />}
+          {tab === "registros" && t.ns === "alquiler" && (
+            <>
+              <div className="section-title" style={{ marginTop: 0 }}>Registros del contrato</div>
+              <FacturasRegistro contrato="alquiler" titulo="Contrato de Alquiler" />
+              <div className="section-title">Servicios por mes</div>
+            </>
+          )}
           {tab === "registros" && <RegistrosView t={t} />}
-          {tab === "facturas" && t.ns === "alquiler" && <FacturasRegistro contrato="alquiler" titulo="Contrato de Alquiler" />}
           {tab === "tarifario" && <TarifarioView t={t} />}
           {tab === "reportes" && <ReportesView t={t} />}
           {tab === "flota" && <FlotaView t={t} />}

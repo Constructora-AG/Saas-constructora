@@ -1,6 +1,6 @@
 "use client";
 // ════════════════════════════════════════════════════════════════════
-// Registro de facturas emitidas a Triple A (N° AGF …) de un contrato:
+// Registros del contrato (facturas N° AGF … emitidas a Triple A):
 // Otro Sí / Emergencia o Contrato de Alquiler. Tabla con buscador, filtro
 // por mes y totales; agregar / editar en drawer, eliminar y exportar a Excel.
 // Datos en aaa_facturas vía /api/aaa/facturas.
@@ -35,26 +35,20 @@ export function parseValor(txt: string): number {
 }
 const FORM0 = { numero: "", fecha: "", concepto: "", valor_total: "", nota: "" };
 
-export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrato: "alquiler" | "emergencia"; titulo: string; conceptos?: string[] }) {
+/** Registros (facturas AGF …) de un contrato desde /api/aaa/facturas. Lo usan esta tabla y el Resumen del Contrato de Alquiler. */
+export function useRegistrosContrato(contrato: "alquiler" | "emergencia" | null) {
   const [rows, setRows] = useState<FacturaRow[]>([]);
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(contrato !== null);
   const [demo, setDemo] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
-  const [buscar, setBuscar] = useState("");
-  const [mes, setMes] = useState("");
-  const [form, setForm] = useState(FORM0);
-  const [editando, setEditando] = useState<FacturaRow | null>(null);
-  const [mostrarForm, setMostrarForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-
   useEffect(() => {
+    if (!contrato) return; // sin contrato (p. ej. Transporte AAA): no hay registros que cargar
     let vivo = true;
     (async () => {
       try {
         const res = await fetch(`/api/aaa/facturas?contrato=${contrato}`);
         const j = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(j.error || "No se pudieron cargar las facturas.");
+        if (!res.ok) throw new Error(j.error || "No se pudieron cargar los registros.");
         if (vivo) { setRows(j.facturas ?? []); setDemo(!!j.demo); }
       } catch (e) {
         if (vivo) setError(e instanceof Error ? e.message : String(e));
@@ -64,6 +58,20 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
     })();
     return () => { vivo = false; };
   }, [contrato]);
+  return { rows, setRows, cargando, demo, error };
+}
+
+export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrato: "alquiler" | "emergencia"; titulo: string; conceptos?: string[] }) {
+  const { rows, setRows, cargando, demo, error: errorCarga } = useRegistrosContrato(contrato);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { if (errorCarga) setError(errorCarga); }, [errorCarga]);
+  const [ok, setOk] = useState<string | null>(null);
+  const [buscar, setBuscar] = useState("");
+  const [mes, setMes] = useState("");
+  const [form, setForm] = useState(FORM0);
+  const [editando, setEditando] = useState<FacturaRow | null>(null);
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const ordenadas = useMemo(() => [...rows].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.numero.localeCompare(b.numero, "es", { numeric: true })), [rows]);
   const meses = useMemo(() => [...new Set(ordenadas.map((r) => mesDe(r.fecha)))].sort(), [ordenadas]);
@@ -96,7 +104,7 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     setError(null); setOk(null);
-    if (demo) { setError("Modo demostración: conecta Supabase para guardar facturas."); return; }
+    if (demo) { setError("Modo demostración: conecta Supabase para guardar registros."); return; }
     setSaving(true);
     try {
       const body = { contrato, numero: form.numero, fecha: form.fecha, concepto: form.concepto, valor_total: parseValor(form.valor_total), nota: form.nota };
@@ -104,7 +112,7 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
         ? await llamar({ method: "PATCH", body: JSON.stringify({ id: editando.id, ...body }) })
         : await llamar({ method: "POST", body: JSON.stringify(body) });
       if (f) setRows((rs) => (editando ? rs.map((r) => (r.id === f.id ? f : r)) : [...rs, f]));
-      setOk(editando ? `Factura ${f?.numero} actualizada.` : `Factura ${f?.numero} registrada.`);
+      setOk(editando ? `Registro ${f?.numero} actualizado.` : `Registro ${f?.numero} agregado.`);
       cerrarForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -115,13 +123,13 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
 
   async function eliminar(r: FacturaRow) {
     if (demo) { setError("Modo demostración: conecta Supabase para eliminar."); return; }
-    if (!window.confirm(`¿Eliminar la factura ${r.numero}? Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar el registro ${r.numero}? Esta acción no se puede deshacer.`)) return;
     setError(null); setOk(null);
     try {
       await llamar({ method: "DELETE", body: JSON.stringify({ id: r.id }) });
       setRows((rs) => rs.filter((x) => x.id !== r.id));
       if (editando?.id === r.id) cerrarForm();
-      setOk(`Factura ${r.numero} eliminada.`);
+      setOk(`Registro ${r.numero} eliminado.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -130,12 +138,12 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
   async function exportar() {
     const XLSX = await import("xlsx");
     const datos = visibles.map((r, i) => ({ "N°": i + 1, "N° Factura": r.numero, Fecha: fFecha(r.fecha), Concepto: r.concepto, "Valor Total": Number(r.valor_total), Nota: r.nota ?? "" }));
-    datos.push({ "N°": "" as unknown as number, "N° Factura": "", Fecha: "", Concepto: "TOTAL", "Valor Total": total, Nota: `${visibles.length} factura(s)` });
+    datos.push({ "N°": "" as unknown as number, "N° Factura": "", Fecha: "", Concepto: "TOTAL", "Valor Total": total, Nota: `${visibles.length} registro(s)` });
     const ws = XLSX.utils.json_to_sheet(datos);
     ws["!cols"] = [{ wch: 5 }, { wch: 12 }, { wch: 12 }, { wch: 70 }, { wch: 18 }, { wch: 50 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, contrato === "emergencia" ? "EMERGENCIA" : "ALQUILER");
-    XLSX.writeFile(wb, `Facturas_${contrato === "emergencia" ? "EMERGENCIA" : "ALQUILER"}${mes ? `_${mes}` : ""}.xlsx`);
+    XLSX.writeFile(wb, `Registros_${contrato === "emergencia" ? "EMERGENCIA" : "ALQUILER"}${mes ? `_${mes}` : ""}.xlsx`);
   }
 
   const setF = (k: keyof typeof FORM0) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -144,20 +152,20 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
     <div>
       <div className="kpis">
         <div className="kpi">
-          <div className="kpi-head"><span className="kpi-label">Facturas registradas</span></div>
+          <div className="kpi-head"><span className="kpi-label">Registros</span></div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{rows.length}</div>
           {rows.length > 0 && <div className="kpi-foot">{fFecha(ordenadas[0].fecha)} — {fFecha(ordenadas[ordenadas.length - 1].fecha)}</div>}
         </div>
         <div className="kpi">
-          <div className="kpi-head"><span className="kpi-label">Total facturado</span></div>
+          <div className="kpi-head"><span className="kpi-label">Valor ejecutado</span></div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(totalGeneral)}</div>
-          <div className="kpi-foot">suma del valor total de las facturas</div>
+          <div className="kpi-foot">suma del valor total de los registros</div>
         </div>
         {(mes || buscar) && (
           <div className="kpi">
             <div className="kpi-head"><span className="kpi-label">Total del filtro</span></div>
             <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(total)}</div>
-            <div className="kpi-foot">{visibles.length} factura(s)</div>
+            <div className="kpi-foot">{visibles.length} registro(s)</div>
           </div>
         )}
       </div>
@@ -170,10 +178,10 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
         </select>
         <span style={{ flex: 1 }} />
         <button className="btn btn-ghost btn-sm" onClick={() => void exportar()} disabled={!visibles.length}><IconDownload /> Excel</button>
-        <button className="btn btn-primary btn-sm" onClick={nueva}>+ Nueva factura</button>
+        <button className="btn btn-primary btn-sm" onClick={nueva}>+ Nuevo registro</button>
       </div>
 
-      {demo && <div className="info-bar" style={{ marginBottom: 12 }}>Modo demostración: se muestran las facturas iniciales y los cambios no se guardan.</div>}
+      {demo && <div className="info-bar" style={{ marginBottom: 12 }}>Modo demostración: se muestran los registros iniciales y los cambios no se guardan.</div>}
       {!mostrarForm && error && <div style={{ color: "var(--high)", fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {ok && <div style={{ color: "var(--ok)", fontSize: 13, marginBottom: 12 }}>{ok}</div>}
 
@@ -190,8 +198,8 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
             </tr>
           </thead>
           <tbody>
-            {cargando && <tr><td colSpan={6} className="muted">Cargando facturas…</td></tr>}
-            {!cargando && !visibles.length && <tr><td colSpan={6} className="muted">{rows.length ? "Ninguna factura coincide con el filtro." : `Aún no hay facturas registradas de ${titulo}.`}</td></tr>}
+            {cargando && <tr><td colSpan={6} className="muted">Cargando registros…</td></tr>}
+            {!cargando && !visibles.length && <tr><td colSpan={6} className="muted">{rows.length ? "Ningún registro coincide con el filtro." : `Aún no hay registros de ${titulo}.`}</td></tr>}
             {visibles.map((r, i) => (
               <tr key={r.id}>
                 <td className="muted">{i + 1}</td>
@@ -209,7 +217,7 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
           {visibles.length > 0 && (
             <tfoot>
               <tr>
-                <td colSpan={4} style={{ textAlign: "right" }}><b>Total ({visibles.length} factura{visibles.length === 1 ? "" : "s"})</b></td>
+                <td colSpan={4} style={{ textAlign: "right" }}><b>Total ({visibles.length} registro{visibles.length === 1 ? "" : "s"})</b></td>
                 <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}><b>{COP.format(total)}</b></td>
                 <td />
               </tr>
@@ -221,10 +229,10 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
       {mostrarForm && (
         <>
           <div className="drawer-overlay" onClick={cerrarForm} />
-          <aside className="drawer" role="dialog" aria-modal="true" aria-label={editando ? `Editar factura ${editando.numero}` : "Nueva factura"}>
+          <aside className="drawer" role="dialog" aria-modal="true" aria-label={editando ? `Editar registro ${editando.numero}` : "Nuevo registro"}>
             <div className="drawer-head">
               <div style={{ flex: 1, minWidth: 0 }}>
-                <h2 className="drawer-title">{editando ? `Editar factura ${editando.numero}` : "Nueva factura"}</h2>
+                <h2 className="drawer-title">{editando ? `Editar registro ${editando.numero}` : "Nuevo registro"}</h2>
                 <span className="cc-dias">{titulo}</span>
               </div>
               <button className="drawer-close" onClick={cerrarForm} title="Cerrar (Esc)">×</button>
@@ -241,7 +249,7 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
                 <label className="field">Nota (opcional)<textarea className="input" rows={3} value={form.nota} onChange={setF("nota")} /></label>
                 {error && <div style={{ color: "var(--high)", fontSize: 13 }}>{error}</div>}
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Guardando…" : editando ? "Guardar cambios" : "Registrar factura"}</button>
+                  <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Guardando…" : editando ? "Guardar cambios" : "Agregar registro"}</button>
                   <button className="btn btn-ghost" type="button" onClick={cerrarForm}>Cancelar</button>
                 </div>
               </form>

@@ -342,7 +342,7 @@ export function AaaClient({ data, prefacturas, demo, tab, maestros }: { data: Co
 
       {tab === "emergencia" && (
         <>
-          <div className="section-title">Facturas emitidas — registro de facturas del Otro Sí / Emergencia</div>
+          <div className="section-title">Registros del Otro Sí / Emergencia</div>
           <FacturasRegistro contrato="emergencia" titulo="Otro Sí / Emergencia" conceptos={["Transporte de Residuos Especiales", "Alquiler Equipo tipo Volqueta"]} />
         </>
       )}

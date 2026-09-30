@@ -6,7 +6,7 @@ import iniciales from "@/lib/aaa/facturas-iniciales.json";
 // Registro de facturas emitidas a Triple A (tabla aaa_facturas, supabase/aaa_facturas.sql).
 // contrato: "emergencia" (Otro Sí) | "alquiler" (Contrato de Alquiler).
 const CONTRATOS = new Set(["alquiler", "emergencia"]);
-const SIN_TABLA = "Falta crear la tabla de facturas: ejecuta supabase/aaa_facturas.sql en Supabase > SQL Editor.";
+const SIN_TABLA = "Falta crear la tabla de registros: ejecuta supabase/aaa_facturas.sql en Supabase > SQL Editor.";
 
 function errorDb(e: { code?: string; message: string }) {
   // 42P01 = relación inexistente; PGRST205 = tabla fuera del caché de PostgREST
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   const f = limpiar(b, false);
   if ("error" in f) return NextResponse.json(f, { status: 400 });
   const { data, error } = await supabaseAdmin().from("aaa_facturas").insert(f).select().single();
-  if (error?.code === "23505") return NextResponse.json({ error: `La factura ${f.numero} ya está registrada en este contrato.` }, { status: 409 });
+  if (error?.code === "23505") return NextResponse.json({ error: `El registro ${f.numero} ya existe en este contrato.` }, { status: 409 });
   if (error) return errorDb(error);
   return NextResponse.json({ ok: true, factura: data });
 }
@@ -90,7 +90,7 @@ export async function PATCH(req: NextRequest) {
   const f = limpiar(b, true);
   if ("error" in f) return NextResponse.json(f, { status: 400 });
   const { data, error } = await supabaseAdmin().from("aaa_facturas").update(f).eq("id", String(b.id)).select().single();
-  if (error?.code === "23505") return NextResponse.json({ error: `La factura ${f.numero} ya está registrada en este contrato.` }, { status: 409 });
+  if (error?.code === "23505") return NextResponse.json({ error: `El registro ${f.numero} ya existe en este contrato.` }, { status: 409 });
   if (error) return errorDb(error);
   return NextResponse.json({ ok: true, factura: data });
 }
