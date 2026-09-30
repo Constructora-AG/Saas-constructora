@@ -5,7 +5,7 @@
 // VALOR TOTAL, Cant. Items, SUBTOTAL / IVA / TOTAL, "APROBAR O RECHAZAR" y
 // OBSERVACIONES. pdf-lib se importa dinámicamente (solo en el navegador).
 // ════════════════════════════════════════════════════════════════════
-import { ivaPctDe, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
+import { agruparItems, ivaPctDe, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { CLIENTE_AAA, EMPRESA, LOGO_AG_PNG_B64 } from "@/lib/aaa/empresa";
 import { b64ToBytes, downloadBlob } from "@/lib/transporte/export";
@@ -25,23 +25,6 @@ const fFecha = (iso: string | null | undefined, corto = false) => {
   if (!m) return "";
   return `${m[3]}/${m[2]}/${corto ? m[1].slice(2) : m[1]}`;
 };
-
-/** Consolida ítems con el mismo concepto, VR. UNIT e IVA en una sola línea sumando cantidad y valor. */
-function agruparItems(items: PrefacturaItem[]): PrefacturaItem[] {
-  const grupos = new Map<string, PrefacturaItem>();
-  for (const it of items) {
-    const valor = Number(it.valor_base) || Number(it.cantidad) * Number(it.vr_unit);
-    const clave = [String(it.item || "").trim().replace(/\s+/g, " ").toUpperCase(), Number(it.vr_unit), it.iva_pct ?? ""].join("|");
-    const g = grupos.get(clave);
-    if (g) {
-      g.cantidad = Number(g.cantidad) + Number(it.cantidad);
-      g.valor_base = Math.round((Number(g.valor_base) + valor) * 100) / 100;
-    } else {
-      grupos.set(clave, { ...it, cantidad: Number(it.cantidad), valor_base: valor });
-    }
-  }
-  return [...grupos.values()];
-}
 
 export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> {
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");

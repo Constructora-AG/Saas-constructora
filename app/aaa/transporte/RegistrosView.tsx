@@ -16,9 +16,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconDownload } from "../../icons";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
-import type { Servicio } from "@/lib/transporte/model";
+import type { Servicio, Tarifario } from "@/lib/transporte/model";
 import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
-import { fdate, fmtCOP, totales } from "@/lib/transporte/logic";
+import { fdate, findCategoria, findRuta, fmtCOP, recargosCobrados, totales } from "@/lib/transporte/logic";
+import { agruparItems } from "@/lib/aaa/catalogo";
 import { adjuntoSrc, openAttachment } from "@/lib/transporte/media";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 import { ServicioForm } from "./ServicioForm";
@@ -75,6 +76,19 @@ const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "operario", "peajes", "aprobo"]
 /** Descripción de un servicio como ítem de prefactura. */
 const descripcionServicio = (s: Servicio) =>
   [s.date ? fechaCorta(s.date) : "", s.plate, s.equipment, [s.pickup, s.destination].filter(Boolean).join(" → ")].filter(Boolean).join(" · ");
+
+/**
+ * Concepto de prefactura de un servicio de Transporte AAA: el ítem y la ruta del
+ * tarifario (más los recargos cobrados), sin fecha ni placa, para que los
+ * servicios del mismo tipo se sumen en una sola línea. Tarifa manual → equipo.
+ */
+const conceptoTransporte = (s: Servicio, tarifario: Tarifario | null) => {
+  const cat = tarifario ? findCategoria(tarifario, s.tarifaCategoria) : null;
+  const ruta = findRuta(cat, s.tarifaRuta);
+  if (!tarifario || !cat || !ruta) return `Transporte de ${s.equipment || "equipo"} (tarifa manual)`;
+  const rec = recargosCobrados(s, tarifario);
+  return [`${cat.label} - ${ruta.label}`, rec.nocturno ? "recargo nocturno" : "", rec.dominical ? "recargo dominical/festivo" : ""].filter(Boolean).join(" + ");
+};
 
 function leerOcultas(): Set<ColId> {
   try {
@@ -165,16 +179,16 @@ export function RegistrosView({ t }: ViewProps) {
         interventor: moda(lista.map((s) => s.interventor || "")) || null,
         lugar: moda(lista.map((s) => s.area || "")) || null,
         nota: `Generada desde Registros de ${t.ns === "alquiler" ? "Contrato de Alquiler" : "Transporte AAA"} (${mes.label})`,
-        items: t.ns === "alquiler"
+        items: agruparItems(t.ns === "alquiler"
           ? lista.flatMap((s) => {
-              const out: Array<Record<string, unknown>> = [];
+              const out: Array<{ item: string; maquina: string; unidad: string; cantidad: number; vr_unit: number; iva_pct: number }> = [];
               const horas = num(s.horasMaquina), vh = num(s.valorHora), viajes = num(s.viajesEquipo), vv = num(s.valorTransporte);
-              if (horas > 0 && vh > 0) out.push({ item: `Alquiler ${s.equipment || "equipo"} · ${s.date ? fechaCorta(s.date) : ""} · ${s.area || ""}`.trim(), maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
-              if (viajes > 0 && vv > 0) out.push({ item: `Transporte del equipo ${s.equipment || ""} · ${s.date ? fechaCorta(s.date) : ""}`.trim(), maquina: s.equipment || "", unidad: "VJ", cantidad: viajes, vr_unit: vv, iva_pct: s.ivaTransporte === false ? 0 : 0.19 });
+              if (horas > 0 && vh > 0) out.push({ item: `Alquiler ${s.equipment || "equipo"}`, maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
+              if (viajes > 0 && vv > 0) out.push({ item: `Transporte del equipo ${s.equipment || ""}`.trim(), maquina: s.equipment || "", unidad: "VJ", cantidad: viajes, vr_unit: vv, iva_pct: s.ivaTransporte === false ? 0 : 0.19 });
               if (!out.length) out.push({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value), iva_pct: 0.19 });
               return out;
             })
-          : lista.map((s) => ({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value) })),
+          : lista.map((s) => ({ item: conceptoTransporte(s, t.tarifario), maquina: "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value) }))),
         servicios: lista.map((s) => ({ monthKey: mes.key, id: s.id, date: s.date, plate: s.plate })),
       };
       const res = await fetch("/api/aaa/prefacturas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

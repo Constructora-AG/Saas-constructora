@@ -104,3 +104,20 @@ export interface AdjuntoPrefactura {
   type: string;
   dataUrl: string;
 }
+
+/** Consolida ítems con el mismo concepto, VR. UNIT e IVA en una sola línea sumando cantidad y valor. */
+export function agruparItems<T extends Pick<PrefacturaItem, "item" | "cantidad" | "vr_unit"> & Partial<PrefacturaItem>>(items: T[]): T[] {
+  const grupos = new Map<string, T>();
+  for (const it of items) {
+    const valor = Number(it.valor_base) || Number(it.cantidad) * Number(it.vr_unit);
+    const clave = [String(it.item || "").trim().replace(/\s+/g, " ").toUpperCase(), Number(it.vr_unit), it.iva_pct ?? ""].join("|");
+    const g = grupos.get(clave);
+    if (g) {
+      g.cantidad = Number(g.cantidad) + Number(it.cantidad);
+      g.valor_base = Math.round((Number(g.valor_base) + valor) * 100) / 100;
+    } else {
+      grupos.set(clave, { ...it, cantidad: Number(it.cantidad), valor_base: valor });
+    }
+  }
+  return [...grupos.values()];
+}
