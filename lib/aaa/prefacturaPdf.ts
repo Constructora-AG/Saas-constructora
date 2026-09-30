@@ -26,6 +26,23 @@ const fFecha = (iso: string | null | undefined, corto = false) => {
   return `${m[3]}/${m[2]}/${corto ? m[1].slice(2) : m[1]}`;
 };
 
+/** Consolida ítems con el mismo concepto, VR. UNIT e IVA en una sola línea sumando cantidad y valor. */
+function agruparItems(items: PrefacturaItem[]): PrefacturaItem[] {
+  const grupos = new Map<string, PrefacturaItem>();
+  for (const it of items) {
+    const valor = Number(it.valor_base) || Number(it.cantidad) * Number(it.vr_unit);
+    const clave = [String(it.item || "").trim().replace(/\s+/g, " ").toUpperCase(), Number(it.vr_unit), it.iva_pct ?? ""].join("|");
+    const g = grupos.get(clave);
+    if (g) {
+      g.cantidad = Number(g.cantidad) + Number(it.cantidad);
+      g.valor_base = Math.round((Number(g.valor_base) + valor) * 100) / 100;
+    } else {
+      grupos.set(clave, { ...it, cantidad: Number(it.cantidad), valor_base: valor });
+    }
+  }
+  return [...grupos.values()];
+}
+
 export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> {
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
   const doc = await PDFDocument.create();
@@ -36,7 +53,7 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
   const ink = rgb(0.1, 0.1, 0.1), gris = rgb(0.45, 0.45, 0.45), linea = rgb(0.2, 0.2, 0.2);
   const fondo = rgb(0.85, 0.85, 0.85), fondoClaro = rgb(0.93, 0.93, 0.93), blanco = rgb(1, 1, 1);
   const ivaPct = ivaPctDe(r.contrato, CORTE.iva_pct); // transporte: 0
-  const items = (r.items ?? []) as PrefacturaItem[];
+  const items = agruparItems((r.items ?? []) as PrefacturaItem[]);
 
   let page = doc.addPage([PW, PH]);
   let y = PH - M;
