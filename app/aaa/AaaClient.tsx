@@ -4,6 +4,7 @@ import type { Consolidado, CorteAaa, Maquina, ResumenFinanciero } from "@/lib/aa
 import { ADMIN_PCT, INGRESO_IVA_PCT, panelUtilidad } from "@/lib/aaa/compute";
 import { IconAlert, IconBuilding, IconChart, IconCheck, IconCoins, IconInfo, IconWallet } from "../icons";
 import type { PrefacturaRow } from "@/lib/aaa/catalogo";
+import { FacturasRegistro } from "./FacturasRegistro";
 import { PrefacturasClient } from "./PrefacturasClient";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -336,6 +337,13 @@ export function AaaClient({ data, prefacturas, demo, tab, maestros }: { data: Co
               </tbody>
             </table>
           </div>
+        </>
+      )}
+
+      {tab === "emergencia" && (
+        <>
+          <div className="section-title">Facturas emitidas — registro de facturas del Otro Sí / Emergencia</div>
+          <FacturasRegistro contrato="emergencia" titulo="Otro Sí / Emergencia" conceptos={["Transporte de Residuos Especiales", "Alquiler Equipo tipo Volqueta"]} />
         </>
       )}
 

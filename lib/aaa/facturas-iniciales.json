@@ -1,0 +1,778 @@
+[
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 606",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 364912835.98,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 609",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 180568819.76,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 610",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 8949279.57,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 611",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 9109683.24,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 612",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 14542579.45,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 613",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 89710416.95,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 614",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 15545660.2,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 615",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 44543208.92,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 616",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 23687625.92,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 617",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 45680324.13,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 618",
+  "fecha": "2026-07-10",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 1611469.44,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 619",
+  "fecha": "2026-07-18",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 100688044.38,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 620",
+  "fecha": "2026-07-18",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 9566559.94,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 621",
+  "fecha": "2026-07-18",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 11745929.51,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 622",
+  "fecha": "2026-07-18",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 6711960.57,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 623",
+  "fecha": "2026-07-18",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 5026031.64,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 624",
+  "fecha": "2026-07-18",
+  "concepto": "Alquiler Equipo tipo Volqueta",
+  "valor_total": 315718900.0,
+  "nota": "Alquiler de volqueta incluido en Emergencia."
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 646",
+  "fecha": "2026-09-02",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 559370.21,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 647",
+  "fecha": "2026-09-02",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 149238335.54,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 656",
+  "fecha": "2026-09-02",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 16263151.66,
+  "nota": "AGF 656 y AGF 675 tienen el mismo valor; revisar."
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 657",
+  "fecha": "2026-09-02",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 18219366.48,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 658",
+  "fecha": "2026-09-02",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 33834815.42,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 659",
+  "fecha": "2026-09-02",
+  "concepto": "Alquiler Equipo tipo Volqueta",
+  "valor_total": 255645320.0,
+  "nota": "Alquiler de volqueta incluido en Emergencia."
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 663",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 22556544.01,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 664",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 27503859.53,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 665",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 6935755.54,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 666",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 7539047.46,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 667",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 48989993.78,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 668",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 2796649.94,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 669",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 70553380.45,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 670",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 10523216.41,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 671",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 2237320.19,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 672",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 18327192.38,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 673",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 66878174.93,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 674",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 37787912.12,
+  "nota": null
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 675",
+  "fecha": "2026-09-11",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 16263151.66,
+  "nota": "AGF 656 y AGF 675 tienen el mismo valor; revisar."
+ },
+ {
+  "contrato": "emergencia",
+  "numero": "AGF 676",
+  "fecha": "2026-09-15",
+  "concepto": "Transporte de Residuos Especiales",
+  "valor_total": 16221730.14,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 560",
+  "fecha": "2026-03-25",
+  "concepto": "Alquiler: Retroexcavadora pajarita, transporte de equipo",
+  "valor_total": 18424680.75,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 561",
+  "fecha": "2026-03-25",
+  "concepto": "Alquiler: Mini cargador, transporte de equipo",
+  "valor_total": 7355955.25,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 563",
+  "fecha": "2026-03-31",
+  "concepto": "Alquiler: Retroexcavadora pajarita, Mini excavadora, Excavadora 22 m, transporte de equipo",
+  "valor_total": 51390566.5,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 564",
+  "fecha": "2026-03-31",
+  "concepto": "Alquiler: Mini cargador, Mini excavadora, Excavadora 22 m, transporte de equipo",
+  "valor_total": 97014571.5,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 565",
+  "fecha": "2026-03-31",
+  "concepto": "Alquiler: Cargador, Excavadora 22 m, transporte de equipo",
+  "valor_total": 43224072.5,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 566",
+  "fecha": "2026-04-01",
+  "concepto": "Alquiler: Excavadora 22 m, transporte de equipo",
+  "valor_total": 29735720.0,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 568",
+  "fecha": "2026-04-08",
+  "concepto": "Alquiler: Excavadora 22 m, transporte de equipo",
+  "valor_total": 36480687.61,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 569",
+  "fecha": "2026-04-08",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 23982367.51,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 570",
+  "fecha": "2026-04-08",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 19267885.01,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 571",
+  "fecha": "2026-04-08",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 30336670.01,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 572",
+  "fecha": "2026-04-10",
+  "concepto": "Alquiler: Retroexcavadora pajarita, Mini excavadora, transporte de equipo",
+  "valor_total": 54533386.25,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 575",
+  "fecha": "2026-04-14",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 10658830.01,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 576",
+  "fecha": "2026-04-14",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 19841822.01,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 577",
+  "fecha": "2026-04-14",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 16521186.51,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 578",
+  "fecha": "2026-04-16",
+  "concepto": "Alquiler: Mini excavadora, transporte de equipo",
+  "valor_total": 4893756.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 579",
+  "fecha": "2026-04-22",
+  "concepto": "Alquiler: Excavadora 22 m, transporte de equipo",
+  "valor_total": 18174989.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 580",
+  "fecha": "2026-04-27",
+  "concepto": "Alquiler: Mini cargador, transporte de equipo",
+  "valor_total": 4088899.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 581",
+  "fecha": "2026-04-27",
+  "concepto": "Alquiler: Mini cargador, Cargador, transporte de equipo",
+  "valor_total": 28728266.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 583",
+  "fecha": "2026-05-12",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 20743723.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 584",
+  "fecha": "2026-05-12",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 16685168.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 585",
+  "fecha": "2026-05-12",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 20292772.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 586",
+  "fecha": "2026-05-12",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 16029240.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 587",
+  "fecha": "2026-05-12",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 17710056.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 588",
+  "fecha": "2026-05-20",
+  "concepto": "Alquiler: Mini cargador, Retroexcavadora pajarita, Mini excavadora, Excavadora 22 m, Excavadora 19 t, transporte de equipo",
+  "valor_total": 106433629.75,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 589",
+  "fecha": "2026-05-26",
+  "concepto": "Alquiler: Mini cargador, Cargador, transporte de equipo",
+  "valor_total": 26322086.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 590",
+  "fecha": "2026-05-26",
+  "concepto": "Alquiler: Mini cargador, Retroexcavadora pajarita, transporte de equipo",
+  "valor_total": 9004224.25,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 591",
+  "fecha": "2026-06-01",
+  "concepto": "Alquiler: Mini excavadora, Excavadora 22 m, transporte de equipo",
+  "valor_total": 66436748.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 592",
+  "fecha": "2026-06-01",
+  "concepto": "Alquiler: Mini cargador, Mini excavadora, transporte de equipo",
+  "valor_total": 45360672.88,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 594",
+  "fecha": "2026-06-09",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 21153678.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 595",
+  "fecha": "2026-06-09",
+  "concepto": "Alquiler: Excavadora 19 t",
+  "valor_total": 20948700.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 596",
+  "fecha": "2026-06-09",
+  "concepto": "Alquiler: Bulldozer D6K, transporte de equipo",
+  "valor_total": 48559140.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 597",
+  "fecha": "2026-06-09",
+  "concepto": "Alquiler: Bulldozer D6K",
+  "valor_total": 9927456.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 598",
+  "fecha": "2026-06-09",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 13938470.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 599",
+  "fecha": "2026-06-09",
+  "concepto": "Alquiler: Excavadora 19 t",
+  "valor_total": 20538745.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 601",
+  "fecha": "2026-06-19",
+  "concepto": "Alquiler: Retroexcavadora pajarita, transporte de equipo",
+  "valor_total": 12825106.0,
+  "nota": "Factura escaneada: leída por OCR y verificada contra el valor en letras."
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 602",
+  "fecha": "2026-06-19",
+  "concepto": "Alquiler: Mini cargador, Cargador, transporte de equipo",
+  "valor_total": 75797496.25,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 604",
+  "fecha": "2026-06-19",
+  "concepto": "Alquiler: Cargador, transporte de equipo",
+  "valor_total": 28655943.75,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 605",
+  "fecha": "2026-06-24",
+  "concepto": "Alquiler: Mini excavadora, transporte de equipo",
+  "valor_total": 36776950.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 625",
+  "fecha": "2026-07-18",
+  "concepto": "Alquiler: Excavadora 22 m, transporte de equipo",
+  "valor_total": 62286147.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 626",
+  "fecha": "2026-07-27",
+  "concepto": "Alquiler: Mini cargador, Retroexcavadora pajarita, Mini excavadora, transporte de equipo",
+  "valor_total": 43993377.75,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 627",
+  "fecha": "2026-07-27",
+  "concepto": "Alquiler: Excavadora 19 t",
+  "valor_total": 16070236.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 628",
+  "fecha": "2026-07-28",
+  "concepto": "Alquiler: Bulldozer D6K",
+  "valor_total": 9801792.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 629",
+  "fecha": "2026-07-28",
+  "concepto": "Alquiler: Excavadora 19 t",
+  "valor_total": 17751051.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 630",
+  "fecha": "2026-07-28",
+  "concepto": "Alquiler: Bulldozer D6K",
+  "valor_total": 11875248.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 631",
+  "fecha": "2026-07-28",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 19636844.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 632",
+  "fecha": "2026-07-28",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 15742272.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 633",
+  "fecha": "2026-07-28",
+  "concepto": "Alquiler: Bulldozer D6K",
+  "valor_total": 12880560.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 634",
+  "fecha": "2026-07-28",
+  "concepto": "Alquiler: Bulldozer D6K, transporte de equipo",
+  "valor_total": 7844004.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 635",
+  "fecha": "2026-07-28",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 19677840.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 636",
+  "fecha": "2026-07-31",
+  "concepto": "Alquiler: Mini excavadora, transporte de equipo",
+  "valor_total": 23505356.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 637",
+  "fecha": "2026-08-03",
+  "concepto": "Alquiler: Cargador, transporte de equipo",
+  "valor_total": 6934725.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 639",
+  "fecha": "2026-08-06",
+  "concepto": "Alquiler: Mini cargador, transporte de equipo",
+  "valor_total": 3895524.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 641",
+  "fecha": "2026-08-13",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 19308880.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 642",
+  "fecha": "2026-08-13",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 15004353.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 643",
+  "fecha": "2026-08-13",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 19144898.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 644",
+  "fecha": "2026-08-13",
+  "concepto": "Alquiler: Excavadora 22 m",
+  "valor_total": 19349876.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 655",
+  "fecha": "2026-09-02",
+  "concepto": "Alquiler: Retroexcavadora pajarita, Mini excavadora, transporte de equipo",
+  "valor_total": 25433810.5,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 660",
+  "fecha": "2026-09-03",
+  "concepto": "Alquiler: Mini cargador, Cargador, Retroexcavadora pajarita, transporte de equipo",
+  "valor_total": 50829184.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 677",
+  "fecha": "2026-09-15",
+  "concepto": "Alquiler: Cargador, Excavadora 22 m, transporte de equipo",
+  "valor_total": 103162885.0,
+  "nota": null
+ },
+ {
+  "contrato": "alquiler",
+  "numero": "AGF 678",
+  "fecha": "2026-09-17",
+  "concepto": "Alquiler: Retroexcavadora pajarita, Mini excavadora, transporte de equipo",
+  "valor_total": 22548536.5,
+  "nota": null
+ }
+]
