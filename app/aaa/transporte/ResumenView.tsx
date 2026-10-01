@@ -138,8 +138,8 @@ export function ResumenView({ t }: ViewProps) {
 
   const ejecucionMensual = esAlquiler ? alq.meses : ejecucionTransporte;
 
-  // Transporte AAA — pago a contratistas (uso interno) con corte a una fecha:
-  // ejecutado y costo de los servicios hasta ese día; pagado según la fecha de pago.
+  // Transporte AAA — dinero en contratistas (uso interno) con corte a una fecha:
+  // valor ejecutado y costo neto de los servicios hechos hasta ese día.
   const [corte, setCorte] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
   const contr = useMemo(() => totalesContratista(allItems, t.tarifario, t.tarifarioCosto, corte || undefined), [allItems, t.tarifario, t.tarifarioCosto, corte]);
   const contrMeses = useMemo(
@@ -147,7 +147,9 @@ export function ResumenView({ t }: ViewProps) {
       t.ns !== "transporte" ? [] :
       t.months
         .map((m) => ({ key: m.key, label: m.label, tot: totalesContratista(t.servicesByMonth[m.key] ?? [], t.tarifario, t.tarifarioCosto, corte || undefined) }))
-        .filter((m) => m.tot.servicios > 0),
+        .filter((m) => m.tot.servicios > 0)
+        .reduce<Array<{ key: string; label: string; tot: ReturnType<typeof totalesContratista>; acumulado: number }>>(
+          (acc, m) => [...acc, { ...m, acumulado: (acc[acc.length - 1]?.acumulado ?? 0) + m.tot.costo }], []),
     [t.ns, t.months, t.servicesByMonth, t.tarifario, t.tarifarioCosto, corte],
   );
   const referenciaMes = esAlquiler ? alq.promedioMes : presupuestoMes;
@@ -392,7 +394,7 @@ export function ResumenView({ t }: ViewProps) {
       {t.ns === "transporte" && (
         <>
           <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span>Pago a contratistas <span className="muted" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>· uso interno</span></span>
+            <span>Dinero en contratistas <span className="muted" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>· uso interno</span></span>
             <span style={{ flex: 1 }} />
             <label style={{ display: "inline-flex", alignItems: "center", gap: 8, textTransform: "none", letterSpacing: 0, fontWeight: 400, fontSize: 13 }}>
               Corte al
@@ -411,19 +413,11 @@ export function ResumenView({ t }: ViewProps) {
               <div className="kpi-foot">{hayValor ? `Valor del contrato ${COP.format(valorContrato)} − ejecutado` : "Valor del contrato sin definir"}</div>
             </div>
             <div className="kpi">
-              <div className="kpi-head"><span className="kpi-ico s-brand"><IconWallet /></span><span className="kpi-label">Costo de lo ejecutado</span></div>
+              <div className="kpi-head"><span className="kpi-ico s-brand"><IconWallet /></span><span className="kpi-label">Dinero en contratistas al corte</span></div>
               <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(contr.costo)}</div>
-              <div className="kpi-foot">Neto a contratistas · {(contr.servicios - contr.sinCosto).toLocaleString("es-CO")} servicio(s) con costo{contr.sinCosto > 0 ? ` · ${contr.sinCosto} sin costo` : ""}</div>
-            </div>
-            <div className="kpi">
-              <div className="kpi-head"><span className="kpi-ico s-ok"><IconCheck /></span><span className="kpi-label">Pagado a contratistas al corte</span></div>
-              <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(contr.pagado)}</div>
-              <div className="kpi-foot">{contr.costo > 0 ? `${((contr.pagado / contr.costo) * 100).toFixed(1)}% del costo` : "—"}</div>
-            </div>
-            <div className="kpi">
-              <div className="kpi-head"><span className={`kpi-ico ${contr.porPagar > 0 ? "s-warn" : "s-ok"}`}><IconCoins /></span><span className="kpi-label">Por pagar a contratistas</span></div>
-              <div className="kpi-value" style={{ fontSize: 19, color: contr.porPagar > 0 ? "var(--warn)" : undefined }}>{COP.format(contr.porPagar)}</div>
-              <div className="kpi-foot">Se le debe al contratista por lo ejecutado</div>
+              <div className="kpi-foot">
+                Costo neto de lo ejecutado{contr.ingreso > 0 ? ` · ${((contr.costo / contr.ingreso) * 100).toFixed(1)}% del ejecutado` : ""}{contr.sinCosto > 0 ? ` · ${contr.sinCosto} servicio(s) sin costo` : ""}
+              </div>
             </div>
             <div className="kpi">
               <div className="kpi-head"><span className="kpi-ico s-ok"><IconChart /></span><span className="kpi-label">Margen bruto</span></div>
@@ -438,10 +432,9 @@ export function ResumenView({ t }: ViewProps) {
                   <th>Mes</th>
                   <th style={{ textAlign: "right" }}>Servicios</th>
                   <th style={{ textAlign: "right" }}>Valor ejecutado</th>
-                  <th style={{ textAlign: "right" }}>Costo contratistas</th>
+                  <th style={{ textAlign: "right" }}>En contratistas</th>
+                  <th style={{ textAlign: "right" }}>Acumulado en contratistas</th>
                   <th style={{ textAlign: "right" }}>Margen</th>
-                  <th style={{ textAlign: "right" }}>Pagado</th>
-                  <th style={{ textAlign: "right" }}>Por pagar</th>
                 </tr>
               </thead>
               <tbody>
@@ -451,14 +444,13 @@ export function ResumenView({ t }: ViewProps) {
                     <td className="num" style={{ textAlign: "right" }}>{m.tot.servicios.toLocaleString("es-CO")}</td>
                     <td className="num" style={{ textAlign: "right" }}>{COP.format(m.tot.ingreso)}</td>
                     <td className="num" style={{ textAlign: "right" }}>{COP.format(m.tot.costo)}</td>
+                    <td className="num" style={{ textAlign: "right" }}>{COP.format(m.acumulado)}</td>
                     <td className="num" style={{ textAlign: "right", color: m.tot.margen < 0 ? "var(--high)" : undefined }}>
                       {COP.format(m.tot.margen)}{m.tot.ingreso > 0 ? <span className="muted"> · {((m.tot.margen / m.tot.ingreso) * 100).toFixed(1)}%</span> : null}
                     </td>
-                    <td className="num" style={{ textAlign: "right" }}>{COP.format(m.tot.pagado)}</td>
-                    <td className="num" style={{ textAlign: "right", color: m.tot.porPagar > 0 ? "var(--warn)" : undefined }}>{COP.format(m.tot.porPagar)}</td>
                   </tr>
                 ))}
-                {contrMeses.length === 0 && <tr><td colSpan={7} className="muted">Aún no hay servicios registrados.</td></tr>}
+                {contrMeses.length === 0 && <tr><td colSpan={6} className="muted">Aún no hay servicios registrados.</td></tr>}
               </tbody>
             </table>
           </div>

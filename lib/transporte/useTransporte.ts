@@ -110,8 +110,6 @@ export interface UseTransporte {
   ) => Promise<void>;
   saveTarifarioCfg: (t: Tarifario) => Promise<void>;
   saveTarifarioCostoCfg: (t: Tarifario) => Promise<void>;
-  /** Marca / desmarca servicios como pagados al contratista (uso interno). */
-  marcarPagadoContratista: (pairs: Array<{ monthKey: string; id: string }>, pagado: boolean) => Promise<void>;
   resetTarifario: () => Promise<void>;
   /** Actualiza el valor de todos los servicios registrados con las tarifas dadas (los manuales no se tocan). */
   recalcularServicios: (t: Tarifario) => Promise<{ servicios: number; diferencia: number }>;
@@ -472,21 +470,6 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     }
   }, [tarifarioCosto, saveTarifarioCosto]);
 
-  const marcarPagadoContratista = useCallback(
-    async (pairs: Array<{ monthKey: string; id: string }>, pagado: boolean) => {
-      const porMes = new Map<string, Set<string>>();
-      pairs.forEach(({ monthKey, id }) => porMes.set(monthKey, new Set([...(porMes.get(monthKey) ?? []), id])));
-      const d = new Date();
-      const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      for (const [mk, ids] of porMes) {
-        const prev = servicesByMonth[mk] ?? [];
-        const next = prev.map((sv) => (ids.has(sv.id) ? { ...sv, pagadoContratista: pagado, pagadoContratistaAt: pagado ? hoy : undefined } : sv));
-        await persistMonth(mk, next, prev);
-      }
-    },
-    [servicesByMonth, persistMonth],
-  );
-
   const resetTarifario = useCallback(async () => {
     await saveTarifarioCfg(tarifarioDefaultDe(ns));
   }, [saveTarifarioCfg, ns]);
@@ -603,7 +586,6 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     toggleInvoiced,
     markInvoiced,
     saveTarifarioCostoCfg,
-    marcarPagadoContratista,
     importServices,
     markPrefacturada,
     saveTarifarioCfg,

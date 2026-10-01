@@ -39,7 +39,7 @@ const COLS_KEY = "transporte.registros.columnas.v1";
 
 type ColId =
   | "fecha" | "tipo" | "area" | "placa" | "cap" | "conductor" | "operario" | "equipo" | "destino"
-  | "valor" | "peajes" | "soportes" | "vobo" | "factura" | "costo" | "margen" | "pagoC" | "aprobo" | "acciones";
+  | "valor" | "peajes" | "soportes" | "vobo" | "factura" | "costo" | "margen" | "aprobo" | "acciones";
 interface Columna { id: ColId; label: string; fija?: boolean; w: number; num?: boolean }
 
 /** Fecha compacta para la tabla: "01 sep 2026". */
@@ -72,13 +72,12 @@ const COLUMNAS: ReadonlyArray<Columna> = [
   // Transporte AAA — uso interno (no salen en PDF ni exportaciones)
   { id: "costo", label: "Costo contratista", w: 9, num: true },
   { id: "margen", label: "Margen", w: 8, num: true },
-  { id: "pagoC", label: "Pago contratista", w: 8 },
   { id: "aprobo", label: "Aprobó", w: 7 },
   { id: "acciones", label: "", fija: true, w: 4 },
 ];
 const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "operario", "peajes", "aprobo"];
 /** Columnas internas de costo a contratistas: solo Transporte AAA. */
-const SOLO_TRANSPORTE = new Set<ColId>(["costo", "margen", "pagoC"]);
+const SOLO_TRANSPORTE = new Set<ColId>(["costo", "margen"]);
 
 /** Descripción de un servicio como ítem de prefactura. */
 const descripcionServicio = (s: Servicio) =>
@@ -269,16 +268,6 @@ export function RegistrosView({ t }: ViewProps) {
     }
   };
 
-  const pagoContratista = async (s: Servicio) => {
-    if (!mes) return;
-    setRowError(null);
-    try {
-      await t.marcarPagadoContratista([{ monthKey: mes.key, id: s.id }], !s.pagadoContratista);
-    } catch (e) {
-      setRowError(e instanceof Error ? e.message : "No se pudo cambiar el pago al contratista.");
-    }
-  };
-
   const ordenPdf = async (s: Servicio) => {
     setRowError(null);
     setMenuId(null);
@@ -373,7 +362,7 @@ export function RegistrosView({ t }: ViewProps) {
         <span>{FICHA_MODULO[t.ns].registros ? "Registros" : "Servicios"} de {mes.label}</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
         <span className="muted" style={{ fontSize: 12.5, textTransform: "none", letterSpacing: 0 }}>
-          Servicios: {tot.servicios}{esTransporte ? ` · Costo contratistas: ${fmtCOP(totC.costo)} (por pagar ${fmtCOP(totC.porPagar)}) · Margen: ${fmtCOP(totC.margen)}` : ""} · Valor del mes{conIva ? " (con IVA)" : ""}: {fmtCOP(valorMes)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
+          Servicios: {tot.servicios}{esTransporte ? ` · En contratistas: ${fmtCOP(totC.costo)} · Margen: ${fmtCOP(totC.margen)}` : ""} · Valor del mes{conIva ? " (con IVA)" : ""}: {fmtCOP(valorMes)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
         </span>
         <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>{FICHA_MODULO[t.ns].registros ? "+ Nuevo registro" : "+ Agregar servicio"}</button>
       </div>
@@ -579,20 +568,6 @@ export function RegistrosView({ t }: ViewProps) {
                     const m = c !== null ? num(s.value) - c : null;
                     return <td className="num" style={{ textAlign: "right", color: m !== null && m < 0 ? "var(--high)" : undefined }}>{m !== null ? <span className="nowrap">{fmtCOP(m)}</span> : "—"}</td>;
                   })()}
-                  {esTransporte && ver("pagoC") && (
-                    <td>
-                      {costoDe(s) !== null ? (
-                        <button
-                          className={`badge ${s.pagadoContratista ? "ok" : "warn"}`}
-                          style={chipBtn}
-                          onClick={() => void pagoContratista(s)}
-                          title={s.pagadoContratista ? `Pagado el ${s.pagadoContratistaAt ? fdate(s.pagadoContratistaAt.slice(0, 10)) : "—"} · clic para marcar como por pagar` : "Clic para marcar como pagado hoy (la fecha se corrige en Editar)"}
-                        >
-                          {s.pagadoContratista ? "Pagado" : "Por pagar"}
-                        </button>
-                      ) : <span className="muted">—</span>}
-                    </td>
-                  )}
                   {ver("aprobo") && <td><span className="clamp">{aprobadorDe(s) || "—"}</span></td>}
                   {ver("acciones") && (
                     <td className="row-actions" style={{ textAlign: "right" }}>

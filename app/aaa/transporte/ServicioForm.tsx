@@ -239,9 +239,6 @@ export function ServicioForm({
     const calc = costoCalculado(editing, t.tarifario, t.tarifarioCosto);
     return calc !== null && calc === num(editing.costoContratista) ? "" : String(editing.costoContratista);
   });
-  const [pagadoC, setPagadoC] = useState<boolean>(!!editing?.pagadoContratista);
-  const hoyIso = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
-  const [fechaPagoC, setFechaPagoC] = useState<string>(editing?.pagadoContratistaAt?.slice(0, 10) || hoyIso);
   const costoAuto = esTransporte
     ? costoCalculado({ tarifaCategoria: f.tarifaCategoria || null, tarifaRuta: f.tarifaRuta || null, value: f.value, recargoNocturno: f.recNocturno, recargoDominical: f.recDominical } as Servicio, t.tarifario, t.tarifarioCosto)
     : null;
@@ -474,8 +471,6 @@ export function ServicioForm({
       tarifaRuta: manual ? null : f.tarifaRuta || null,
       ...(esTransporte ? {
         costoContratista: costoFinal !== null ? String(costoFinal) : undefined,
-        pagadoContratista: pagadoC,
-        pagadoContratistaAt: pagadoC ? (fechaPagoC || hoyIso) : undefined,
       } : {}),
       ...r.stamp, // approvedBy / approvedByKey / approvedAt (siempre se re-aprueba)
     };
@@ -747,7 +742,7 @@ export function ServicioForm({
 
             {esTransporte && (
               <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: "10px 12px", display: "grid", gap: 8, background: "var(--surface-2)" }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600 }}>Pago al contratista <span className="muted" style={{ fontWeight: 400 }}>· uso interno, no sale en PDF ni exportaciones</span></div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>Costo del contratista <span className="muted" style={{ fontWeight: 400 }}>· uso interno, no sale en PDF ni exportaciones</span></div>
                 <div style={gridAuto}>
                   <label className="field">Costo contratista (neto, COP)
                     <input className="input num" type="number" step="1" min="0" value={costoTxt}
@@ -763,18 +758,6 @@ export function ServicioForm({
                   {costoTxt.trim() !== ""
                     ? "Costo fijado a mano. Bórralo para usar la tarifa de costo de la ruta."
                     : costoAuto !== null ? `Automático: tarifa de costo de la ruta${f.recNocturno || f.recDominical ? " + recargos" : ""} = ${fmtCOP(costoAuto)}.` : "Tarifa manual: digita el costo que se le paga al contratista."}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-                  <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13 }}>
-                    <input type="checkbox" checked={pagadoC} onChange={(e) => setPagadoC(e.target.checked)} />
-                    Pagado al contratista
-                  </label>
-                  {pagadoC && (
-                    <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13 }}>
-                      Fecha de pago
-                      <input className="input" type="date" value={fechaPagoC} onChange={(e) => setFechaPagoC(e.target.value)} style={{ width: 160 }} />
-                    </label>
-                  )}
                 </div>
               </div>
             )}

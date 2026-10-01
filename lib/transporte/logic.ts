@@ -540,18 +540,15 @@ export interface TotalesContratista {
   ingreso: number;
   costo: number;
   margen: number;
-  pagado: number;
-  porPagar: number;
   sinCosto: number;
 }
 
 /**
  * Totales internos de contratistas para un conjunto de servicios. Con `hasta`
- * ('AAAA-MM-DD') es un corte a esa fecha: solo cuenta servicios ejecutados hasta
- * ese día y como pagados los que tienen fecha de pago hasta ese día.
+ * ('AAAA-MM-DD') es un corte a esa fecha: solo cuenta servicios ejecutados hasta ese día.
  */
 export function totalesContratista(items: Servicio[], venta: Tarifario | null, costo: Tarifario | null, hasta?: string): TotalesContratista {
-  const t: TotalesContratista = { servicios: 0, ingreso: 0, costo: 0, margen: 0, pagado: 0, porPagar: 0, sinCosto: 0 };
+  const t: TotalesContratista = { servicios: 0, ingreso: 0, costo: 0, margen: 0, sinCosto: 0 };
   for (const s of items) {
     if (hasta && s.date > hasta) continue;
     t.servicios += 1;
@@ -559,8 +556,6 @@ export function totalesContratista(items: Servicio[], venta: Tarifario | null, c
     const c = costoServicio(s, venta, costo);
     if (c === null) { t.sinCosto += 1; continue; }
     t.costo += c;
-    const pagadoAlCorte = !!s.pagadoContratista && (!hasta || !s.pagadoContratistaAt || s.pagadoContratistaAt.slice(0, 10) <= hasta);
-    if (pagadoAlCorte) t.pagado += c; else t.porPagar += c;
   }
   t.margen = t.ingreso - t.costo;
   return t;
