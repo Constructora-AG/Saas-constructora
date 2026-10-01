@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CONTRACT_VALUE,
   POLL_INTERVAL_MS,
+  CONTRATO_EMERGENCIA,
   FICHA_MODULO,
   tarifarioDefaultDe,
   applySeed,
@@ -213,6 +214,14 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
             a.migraciones = [...(a.migraciones ?? []), MIG_TIPO];
             migrado = true;
           } catch { /* si falla, se reintenta en la próxima carga; el panel carga igual */ }
+        }
+        // Otro Sí / Emergencia (una sola vez): el valor sembrado del corte de subgerencia
+        // se corrige al del contrato N° 2026-060; un valor digitado a mano no se toca.
+        const MIG_VALOR = "valor-contrato-2026-060";
+        if (ns === "emergencia" && !(a.migraciones ?? []).includes(MIG_VALOR)) {
+          if (num(a.contractValue) === CONTRATO_EMERGENCIA.valorCorte) a.contractValue = CONTRATO_EMERGENCIA.valor;
+          a.migraciones = [...(a.migraciones ?? []), MIG_VALOR];
+          migrado = true;
         }
         if (nuevo || seeded || contratoAlq || migrado) await saveAdmin(a).catch(() => undefined);
         if (!alive) return;

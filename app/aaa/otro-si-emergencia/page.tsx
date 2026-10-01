@@ -15,7 +15,7 @@ export default function OtroSiEmergenciaPage() {
     <TransporteClient
       ns="emergencia"
       titulo="Otro Sí / Emergencia"
-      subtitulo="Contrato CW2238311 — Otro Sí de emergencia con Triple A / Anaya Giraldo (transporte de residuos especiales): registros, tarifario, reportes y avance del contrato."
+      subtitulo="Contrato N° 2026-060 — transporte de residuos especiales no peligrosos y sólidos ordinarios no aprovechables (contratación directa por emergencia) con Triple A / Anaya Giraldo: registros, tarifario, reportes y avance."
     />
   );
 }

@@ -17,7 +17,7 @@ import {
   IconTruck,
   IconWallet,
 } from "../../icons";
-import { CONTRATANTE, CONTRATISTA, FICHA_MODULO } from "@/lib/transporte/constants";
+import { CONTRATANTE, CONTRATISTA, CONTRATO_EMERGENCIA, FICHA_MODULO } from "@/lib/transporte/constants";
 import {
   ALERTAS_MAX,
   ALERTAS_VACIO,
@@ -367,6 +367,33 @@ export function ResumenView({ t }: ViewProps) {
       </div>
 
         </>
+      )}
+
+      {/* Otro Sí / Emergencia: alcance contratado por área (Cláusula Cuarta) */}
+      {t.ns === "emergencia" && (
+        <div className="chart-card" style={{ marginTop: 18 }}>
+          <div className="chart-title">Alcance contratado por área</div>
+          <div className="chart-sub">
+            Cláusula Cuarta · {CONTRATO_EMERGENCIA.modalidad} · servicio a todo costo (volquetas con conductor, combustible y
+            peajes) · destino: relleno sanitario Parque Ambiental Los Pocitos · solo se pagan horas efectivas
+          </div>
+          <div className="table-wrap" style={{ marginTop: 10 }}>
+            <table className="clean" style={{ width: "100%" }}>
+              <thead>
+                <tr><th>Área solicitante</th><th>Servicio</th><th style={{ textAlign: "right" }}>Cantidad contratada</th></tr>
+              </thead>
+              <tbody>
+                {CONTRATO_EMERGENCIA.alcance.map((x) => (
+                  <tr key={x.area}>
+                    <td><b>{x.area}</b></td>
+                    <td>{x.servicio}</td>
+                    <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{x.cantidad.toLocaleString("es-CO")} {x.unidad}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Ejecución mensual — divs CSS (patrón bars-month), sin Chart.js */}

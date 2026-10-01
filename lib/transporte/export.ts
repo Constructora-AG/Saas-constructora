@@ -14,6 +14,7 @@ import type { PDFFont, PDFImage, PDFPage, RGB } from "pdf-lib";
 import {
   CONTRACT_VALUE,
   CONTRATO_ALQUILER,
+  CONTRATO_EMERGENCIA,
   FICHA_MODULO,
   type ModuloContrato,
   CONTRATANTE,
@@ -375,7 +376,7 @@ export async function buildReportPdf(
     const titulo = ns === "alquiler" ? "CUADRO DE CONTROL DE SERVICIOS DE ALQUILER" : ns === "emergencia" ? "CUADRO DE CONTROL - OTRO SÍ / EMERGENCIA" : "CUADRO DE CONTROL DE SERVICIOS DE TRANSPORTE";
     const sub = ns === "alquiler"
       ? `Contrato No. ${CONTRATO_ALQUILER.numero} - Alquiler de Equipos y/o Maquinaria Pesada a Todo Costo (Grupo 1)`
-      : ns === "emergencia" ? `Contrato ${FICHA_MODULO.emergencia.numero} - ${FICHA_MODULO.emergencia.objeto}` : "Contrato IS No. 04-2026 - Transporte de Equipos y Maquinaria Propia";
+      : ns === "emergencia" ? `Contrato No. ${CONTRATO_EMERGENCIA.numero} - Transporte de Residuos Especiales No Peligrosos (Emergencia)` : "Contrato IS No. 04-2026 - Transporte de Equipos y Maquinaria Propia";
     safeDrawText(page, titulo, { x: MARGIN, y, size: 16, font: bold, color: GRAYDARK });
     y -= 22;
     safeDrawText(page, sub, { x: MARGIN, y, size: 10.5, font, color: MUTED });

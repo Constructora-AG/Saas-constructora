@@ -411,17 +411,29 @@ export function applySeed(admin: AdminConfig): boolean {
 }
 
 // ── Otro Sí / Emergencia ───────────────────────────────────────────
-// Fuente: corte de subgerencia (lib/aaa/corte-2026-07-31.json): contrato
-// CW2238311, transporte de residuos especiales (Otro Sí de emergencia).
+// Fuente: contrato de prestación de servicios N° 2026-060 firmado el
+// 21/05/2026 (contratación directa por situación de emergencia). CW2238311 es
+// el código del documento en Adobe Sign, no el número del contrato.
 // Datos propios del módulo: nunca se mezclan con Alquiler ni Transporte AAA.
 
 export const CONTRATO_EMERGENCIA = {
-  numero: "CW2238311",
-  objeto: "Contrato de emergencia — transporte de residuos especiales (Otro Sí)",
-  /** Presupuesto del contrato con IVA según el corte de subgerencia. */
-  valor: 5726100960,
+  numero: "2026-060",
+  objeto: "Servicio de transporte de residuos especiales no peligrosos, sólidos ordinarios no aprovechables",
+  modalidad: "Contratación directa (situación de emergencia)",
+  /** Cláusula Tercera: hasta $5.726.101.096, IVA incluido. */
+  valor: 5726101096,
+  /** Valor que se usó antes (presupuesto del corte de subgerencia); se corrige una vez. */
+  valorCorte: 5726100960,
+  /** Suscripción (firma de ambas partes) — Cláusula Segunda: hasta el 29/10/2026 o hasta agotar el valor. */
   inicio: "2026-05-21",
   fin: "2026-10-29",
+  /** Cláusula Cuarta: alcance por área solicitante (servicio a todo costo con volquetas). */
+  alcance: [
+    { area: "Business Partner de Aseo", servicio: "Transporte de residuos no peligrosos (volquetas doble troque y sencillas)", cantidad: 9158, unidad: "horas" },
+    { area: "Jefatura de Operaciones", servicio: "Transporte de residuos sólidos ordinarios no aprovechables", cantidad: 3212, unidad: "horas" },
+    { area: "Dirección de proyectos de operación", servicio: "Transporte de residuos no peligrosos (volquetas doble troque)", cantidad: 20520, unidad: "m³" },
+    { area: "Disposición Final", servicio: "Transporte de RCD (volquetas doble troque)", cantidad: 7920, unidad: "horas" },
+  ],
 };
 
 /** Sin precios cargados todavía: los registros llevan el valor digitado. */
@@ -448,7 +460,7 @@ export const FICHA_MODULO: Record<ModuloContrato, {
 }> = {
   transporte: { nombre: "Transporte AAA", numero: "IS No. 04-2026", objeto: "Transporte de equipos y maquinaria propia", prefijoOrden: "TP", registros: false, ivaIncluido: false, contrato: null },
   alquiler: { nombre: "Contrato de Alquiler", numero: `N° ${CONTRATO_ALQUILER.numero}`, objeto: CONTRATO_ALQUILER.objeto, prefijoOrden: "AL", registros: true, ivaIncluido: true, contrato: CONTRATO_ALQUILER },
-  emergencia: { nombre: "Otro Sí / Emergencia", numero: CONTRATO_EMERGENCIA.numero, objeto: CONTRATO_EMERGENCIA.objeto, prefijoOrden: "EM", registros: true, ivaIncluido: true, contrato: CONTRATO_EMERGENCIA },
+  emergencia: { nombre: "Otro Sí / Emergencia", numero: `N° ${CONTRATO_EMERGENCIA.numero}`, objeto: CONTRATO_EMERGENCIA.objeto, prefijoOrden: "EM", registros: true, ivaIncluido: true, contrato: CONTRATO_EMERGENCIA },
 };
 
 /** Tarifario inicial de cada módulo (cada uno con el suyo). */
