@@ -44,7 +44,7 @@ import { IconInfo } from "../../icons";
 import { useTransporte, syncLabel, type UseTransporte } from "@/lib/transporte/useTransporte";
 import { TransporteSessionProvider, useTransporteSession } from "@/lib/transporte/session";
 import type { ModuloNs } from "@/lib/transporte/storage";
-import { FacturasRegistro } from "../FacturasRegistro";
+import { ImportarFacturasAlquiler } from "./ImportarFacturasAlquiler";
 import { AdminView } from "./AdminView";
 import { FlotaView } from "./FlotaView";
 import { PersonalView } from "./PersonalView";
@@ -131,13 +131,7 @@ function TransporteShell({ t, titulo, subtitulo }: { t: UseTransporte; titulo?: 
       ) : (
         <>
           {tab === "resumen" && <ResumenView t={t} />}
-          {tab === "registros" && t.ns === "alquiler" && (
-            <>
-              <div className="section-title" style={{ marginTop: 0 }}>Registros del contrato</div>
-              <FacturasRegistro contrato="alquiler" titulo="Contrato de Alquiler" />
-              <div className="section-title">Servicios por mes</div>
-            </>
-          )}
+          {tab === "registros" && t.ns === "alquiler" && <ImportarFacturasAlquiler t={t} />}
           {tab === "registros" && <RegistrosView t={t} />}
           {tab === "tarifario" && <TarifarioView t={t} />}
           {tab === "reportes" && <ReportesView t={t} />}

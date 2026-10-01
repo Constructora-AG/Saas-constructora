@@ -30,8 +30,8 @@ import {
 import { num, type Servicio } from "@/lib/transporte/model";
 import { exportServicios, type ExportFormat } from "@/lib/transporte/export";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
-import { useRegistrosContrato } from "../FacturasRegistro";
 
+const fFechaIso = (iso: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); return m ? `${m[3]}/${m[2]}/${m[1]}` : iso; };
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
 // ── Barra horizontal de progreso (patrón AaaClient/RecaudoClient) ──
@@ -67,17 +67,16 @@ export function ResumenView({ t }: ViewProps) {
   const allItems = useMemo(() => allPairs.map(([, s]) => s), [allPairs]);
   const tot = useMemo(() => totales(allItems), [allItems]);
 
-  // Contrato de Alquiler: los registros del contrato (facturas AGF) también son ejecución.
-  const registros = useRegistrosContrato(t.ns === "alquiler" ? "alquiler" : null);
-  const valorRegistros = registros.rows.reduce((acc, r) => acc + Number(r.valor_total), 0);
+  // Contrato de Alquiler: la ejecución es el día a día de la pestaña Registros.
+  const esAlquiler = t.ns === "alquiler";
 
   // KPIs (fórmulas SPEC §5.1)
-  const valorEjecutado = tot.valor + valorRegistros;         // Σ value (+ registros del contrato)
+  const valorEjecutado = tot.valor;                          // Σ value de los registros
   const pctValor = CONTRACT_VALUE > 0 ? (valorEjecutado / CONTRACT_VALUE) * 100 : 0;
   const saldo = CONTRACT_VALUE - valorEjecutado;             // CONTRACT_VALUE − Σ value
   const saldoBajo = saldo < CONTRACT_VALUE * 0.1;            // warn si saldo < 10% del contrato
   const totalPeajes = tot.peajes;                            // Σ tolls
-  const servicios = tot.servicios + registros.rows.length;  // count (+ registros del contrato)
+  const servicios = tot.servicios;                           // count
   const sinSoporte = tot.sinSoporte;                         // count(!photo || !approved)
 
   // Alertas contractuales (§4.9), máximo 8
@@ -88,18 +87,48 @@ export function ResumenView({ t }: ViewProps) {
 
   // Ejecución mensual: barra = ejecutado del mes, track = presupuesto promedio
   const presupuestoMes = t.allMonths.length > 0 ? CONTRACT_VALUE / t.allMonths.length : 0;
-  const ejecucionMensual = useMemo(
+  const ejecucionTransporte = useMemo(
     () =>
       t.months.map((m) => ({
         key: m.key,
         label: m.label,
-        real:
-          (t.servicesByMonth[m.key] ?? []).reduce((acc, s) => acc + num(s.value), 0) +
-          registros.rows.filter((r) => r.fecha.slice(0, 7) === m.key).reduce((acc, r) => acc + Number(r.valor_total), 0),
+        real: (t.servicesByMonth[m.key] ?? []).reduce((acc, s) => acc + num(s.value), 0),
       })),
-    [t.months, t.servicesByMonth, registros.rows],
+    [t.months, t.servicesByMonth],
   );
-  const maxMes = Math.max(1, presupuestoMes, ...ejecucionMensual.map((m) => m.real));
+
+  // Alquiler: meses desde el primer registro hasta el mes actual (o el último registro).
+  const alq = useMemo(() => {
+    const porMes = new Map<string, number>();
+    for (const s of allItems) {
+      const k = s.date.slice(0, 7);
+      porMes.set(k, (porMes.get(k) ?? 0) + num(s.value));
+    }
+    const claves = [...porMes.keys()].sort();
+    const hoy = new Date();
+    const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+    const meses: Array<{ key: string; label: string; real: number }> = [];
+    if (claves.length > 0) {
+      const fin = claves[claves.length - 1] > mesActual ? claves[claves.length - 1] : mesActual;
+      let [y, m] = claves[0].split("-").map(Number);
+      for (let k = claves[0]; k <= fin; k = `${y}-${String(m).padStart(2, "0")}`) {
+        meses.push({ key: k, label: fmtMes(k), real: porMes.get(k) ?? 0 });
+        if (++m > 12) { m = 1; y++; }
+      }
+    }
+    const ordenados = [...allItems].sort((a, b) => a.date.localeCompare(b.date) || String(a.orderNo).localeCompare(String(b.orderNo), "es", { numeric: true }));
+    return {
+      meses,
+      mesActual: porMes.get(mesActual) ?? 0,
+      promedioMes: meses.length > 0 ? tot.valor / meses.length : 0,
+      primero: ordenados[0] ?? null,
+      ultimo: ordenados[ordenados.length - 1] ?? null,
+    };
+  }, [allItems, tot.valor]);
+
+  const ejecucionMensual = esAlquiler ? alq.meses : ejecucionTransporte;
+  const referenciaMes = esAlquiler ? alq.promedioMes : presupuestoMes;
+  const maxMes = Math.max(1, referenciaMes, ...ejecucionMensual.map((m) => m.real));
 
   // Vigencia mostrada
   const inicio = t.contractStart;
@@ -157,10 +186,12 @@ export function ResumenView({ t }: ViewProps) {
       {/* Datos del contrato */}
       <div className="section-title">Resumen del contrato</div>
       <div className="estado-panel">
-        <div className="estado-item">
-          <span className="estado-label">Contrato</span>
-          <span className="estado-val">IS No. 04-2026</span>
-        </div>
+        {!esAlquiler && (
+          <div className="estado-item">
+            <span className="estado-label">Contrato</span>
+            <span className="estado-val">IS No. 04-2026</span>
+          </div>
+        )}
         <div className="estado-item">
           <span className="estado-label">Contratante</span>
           <span className="estado-val">{CONTRATANTE}</span>
@@ -182,7 +213,8 @@ export function ResumenView({ t }: ViewProps) {
         </div>
       </div>
 
-      {/* Línea de tiempo: tiempo transcurrido vs. valor ejecutado */}
+      {/* Línea de tiempo: tiempo transcurrido vs. valor ejecutado (Transporte: valor del contrato conocido) */}
+      {!esAlquiler && (
       <div className="chart-card" style={{ marginTop: 18 }}>
         <div className="chart-title">Línea de tiempo del contrato</div>
         <div className="chart-sub">
@@ -196,7 +228,60 @@ export function ResumenView({ t }: ViewProps) {
         />
         <Bar label="Valor ejecutado" value={valorEjecutado} total={CONTRACT_VALUE} pctLabel="del contrato" />
       </div>
+      )}
 
+      {esAlquiler ? (
+        <>
+      {/* Indicadores del Contrato de Alquiler: todo sale de los registros */}
+      <div className="section-title">Indicadores del contrato</div>
+      <div className="kpis">
+        <div className="kpi">
+          <div className="kpi-head">
+            <span className="kpi-ico s-ok"><IconChart /></span>
+            <span className="kpi-label">Valor ejecutado</span>
+          </div>
+          <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(valorEjecutado)}</div>
+          <div className="kpi-foot">Suma de {tot.servicios.toLocaleString("es-CO")} registro(s)</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-head">
+            <span className="kpi-ico s-brand"><IconTruck /></span>
+            <span className="kpi-label">Registros</span>
+          </div>
+          <div className="kpi-value">{tot.servicios.toLocaleString("es-CO")}</div>
+          <div className="kpi-foot">
+            {alq.primero && alq.ultimo ? `${fFechaIso(alq.primero.date)} — ${fFechaIso(alq.ultimo.date)}` : "Sin registros"}
+          </div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-head">
+            <span className="kpi-ico s-brand"><IconWallet /></span>
+            <span className="kpi-label">Ejecutado este mes</span>
+          </div>
+          <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(alq.mesActual)}</div>
+          <div className="kpi-foot">{fmtMes(new Date().toISOString().slice(0, 7))}</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-head">
+            <span className="kpi-ico"><IconCoins /></span>
+            <span className="kpi-label">Promedio mensual</span>
+          </div>
+          <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(alq.promedioMes)}</div>
+          <div className="kpi-foot">{alq.meses.length} mes(es) desde el primer registro</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-head">
+            <span className="kpi-ico s-ok"><IconCheck /></span>
+            <span className="kpi-label">Último registro</span>
+          </div>
+          <div className="kpi-value" style={{ fontSize: 19 }}>{alq.ultimo ? COP.format(num(alq.ultimo.value)) : "—"}</div>
+          <div className="kpi-foot">{alq.ultimo ? `${[alq.ultimo.orderNo, alq.ultimo.facturaAGF].filter(Boolean).join(" · ")} · ${fFechaIso(alq.ultimo.date)}` : "Sin registros"}</div>
+        </div>
+      </div>
+
+        </>
+      ) : (
+        <>
       {/* 6 KPIs (fórmulas SPEC §5.1) */}
       <div className="section-title">Indicadores del contrato</div>
       <div className="kpis">
@@ -206,7 +291,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-label">Valor ejecutado</span>
           </div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(valorEjecutado)}</div>
-          <div className="kpi-foot">{pctValor.toFixed(1)}% del contrato{t.ns === "alquiler" && registros.error ? " · sin registros (error al cargarlos)" : ""}</div>
+          <div className="kpi-foot">{pctValor.toFixed(1)}% del contrato</div>
         </div>
         <div className="kpi">
           <div className="kpi-head">
@@ -240,7 +325,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-label">Servicios registrados</span>
           </div>
           <div className="kpi-value">{servicios.toLocaleString("es-CO")}</div>
-          <div className="kpi-foot">{t.ns === "alquiler" ? `${tot.servicios} servicio(s) + ${registros.rows.length} registro(s)` : "Acumulado del contrato"}</div>
+          <div className="kpi-foot">Acumulado del contrato</div>
         </div>
         <div className="kpi">
           <div className="kpi-head">
@@ -256,26 +341,29 @@ export function ResumenView({ t }: ViewProps) {
         </div>
       </div>
 
+        </>
+      )}
+
       {/* Ejecución mensual — divs CSS (patrón bars-month), sin Chart.js */}
       <div className="chart-card" style={{ marginTop: 18 }}>
-        <div className="chart-title">Ejecución mensual (valor facturado)</div>
+        <div className="chart-title">Ejecución mensual ({esAlquiler ? "suma de registros" : "valor facturado"})</div>
         <div className="chart-sub">
-          {t.months.length > 0 ? `${t.months[0].label} — ${t.months[t.months.length - 1].label}` : "—"} · barra =
-          ejecutado del mes · fondo = presupuesto mensual promedio ({fmtShort(presupuestoMes)})
+          {ejecucionMensual.length > 0 ? `${ejecucionMensual[0].label} — ${ejecucionMensual[ejecucionMensual.length - 1].label}` : "—"} · barra =
+          ejecutado del mes · fondo = {esAlquiler ? "promedio mensual ejecutado" : "presupuesto mensual promedio"} ({fmtShort(referenciaMes)})
         </div>
         <div className="chart-legend">
-          <span><span className="legend-dot" style={{ background: "var(--brand-soft)" }} />Presupuesto promedio mensual</span>
+          <span><span className="legend-dot" style={{ background: "var(--brand-soft)" }} />{esAlquiler ? "Promedio mensual" : "Presupuesto promedio mensual"}</span>
           <span><span className="legend-dot" style={{ background: "var(--brand-600)" }} />Ejecutado</span>
         </div>
         <div className="bars-month">
           {ejecucionMensual.map((m) => {
-            const th = (Math.max(presupuestoMes, m.real) / maxMes) * 100;   // altura del track
+            const th = (Math.max(referenciaMes, m.real) / maxMes) * 100;   // altura del track
             const fh = th > 0 ? ((m.real / maxMes) * 100 / th) * 100 : 0;   // fill en % del track
             return (
               <div
                 key={m.key}
                 className="month-col"
-                title={`${m.label} · ejecutado ${COP.format(m.real)} · presupuesto ${COP.format(presupuestoMes)}`}
+                title={`${m.label} · ejecutado ${COP.format(m.real)} · ${esAlquiler ? "promedio" : "presupuesto"} ${COP.format(referenciaMes)}`}
               >
                 <div className="month-bar-wrap">
                   <div className="month-track" style={{ height: `${Math.max(2, th)}%` }}>

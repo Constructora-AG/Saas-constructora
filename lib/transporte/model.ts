@@ -161,6 +161,8 @@ export interface Servicio {
   ivaAlquiler?: boolean;
   ivaTransporte?: boolean;
   valorIva?: NumLike;
+  /** Contrato de Alquiler: N° de la factura AGF de la que se creó el registro (facturas migradas a Registros). */
+  facturaAGF?: string;
   /** N° de la prefactura (PF0001…) en la que quedó incluido el servicio; null/undefined = sin prefacturar. */
   prefactura?: string | null;
   /** Recargos aplicados (SPEC §3.3): se persisten para precargar los checkboxes al editar. */

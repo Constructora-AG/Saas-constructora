@@ -100,6 +100,8 @@ export interface UseTransporte {
   markInvoiced: (pairs: Array<{ monthKey: string; id: string }>) => Promise<void>;
   /** Marca servicios con el N° de prefactura que los incluyó (null = desmarcar). */
   markPrefacturada: (pairs: Array<{ monthKey: string; id: string }>, numero: string | null) => Promise<void>;
+  /** Agrega varios servicios de una vez (lee cada mes fresco del servidor y los añade al final). */
+  importServices: (items: Array<{ monthKey: string; item: Servicio }>) => Promise<void>;
   saveTarifarioCfg: (t: Tarifario) => Promise<void>;
   resetTarifario: () => Promise<void>;
   /** Actualiza el valor de todos los servicios registrados con las tarifas dadas (los manuales no se tocan). */
@@ -301,6 +303,19 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     [servicesByMonth, persistMonth],
   );
 
+  const importServices = useCallback(
+    async (items: Array<{ monthKey: string; item: Servicio }>) => {
+      const porMes = new Map<string, Servicio[]>();
+      items.forEach(({ monthKey, item }) => porMes.set(monthKey, [...(porMes.get(monthKey) ?? []), item]));
+      for (const [mk, nuevos] of porMes) {
+        const prev = await loadMonth(mk);
+        const ids = new Set(prev.map((s) => s.id));
+        await persistMonth(mk, [...prev, ...nuevos.filter((s) => !ids.has(s.id))], prev);
+      }
+    },
+    [persistMonth],
+  );
+
   const deleteService = useCallback(
     async (monthKey: string, id: string) => {
       const prev = servicesByMonth[monthKey] ?? [];
@@ -463,6 +478,7 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     deleteService,
     toggleInvoiced,
     markInvoiced,
+    importServices,
     markPrefacturada,
     saveTarifarioCfg,
     resetTarifario,

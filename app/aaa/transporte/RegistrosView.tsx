@@ -339,12 +339,12 @@ export function RegistrosView({ t }: ViewProps) {
 
       {/* Toolbar del mes + botón de registro */}
       <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span>Servicios de {mes.label}</span>
+        <span>{t.ns === "alquiler" ? "Registros" : "Servicios"} de {mes.label}</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
         <span className="muted" style={{ fontSize: 12.5, textTransform: "none", letterSpacing: 0 }}>
           Servicios: {tot.servicios} · Valor del mes: {fmtCOP(tot.valor)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
         </span>
-        <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>+ Agregar servicio</button>
+        <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>{t.ns === "alquiler" ? "+ Nuevo registro" : "+ Agregar servicio"}</button>
       </div>
 
       {/* Exportación mensual (SPEC §5.2) + selector de columnas */}
