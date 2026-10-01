@@ -29,6 +29,7 @@ import {
   CONTRACT_VALUE,
   POLL_INTERVAL_MS,
   CONTRATO_EMERGENCIA,
+  ZONAS_EMERGENCIA,
   FICHA_MODULO,
   tarifarioDefaultDe,
   applySeed,
@@ -96,8 +97,14 @@ export interface UseTransporte {
   markInvoiced: (pairs: Array<{ monthKey: string; id: string }>) => Promise<void>;
   /** Marca servicios con el N° de prefactura que los incluyó (null = desmarcar). */
   markPrefacturada: (pairs: Array<{ monthKey: string; id: string }>, numero: string | null) => Promise<void>;
-  /** Agrega varios servicios de una vez (lee cada mes fresco del servidor y los añade al final). */
-  importServices: (items: Array<{ monthKey: string; item: Servicio }>) => Promise<void>;
+  /**
+   * Agrega varios servicios de una vez (lee cada mes fresco del servidor y los añade al final).
+   * Con `quitar`, además elimina de los meses indicados los servicios que cumplan la condición.
+   */
+  importServices: (
+    items: Array<{ monthKey: string; item: Servicio }>,
+    quitar?: { meses: string[]; si: (s: Servicio) => boolean },
+  ) => Promise<void>;
   saveTarifarioCfg: (t: Tarifario) => Promise<void>;
   resetTarifario: () => Promise<void>;
   /** Actualiza el valor de todos los servicios registrados con las tarifas dadas (los manuales no se tocan). */
@@ -214,6 +221,11 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
             a.migraciones = [...(a.migraciones ?? []), MIG_TIPO];
             migrado = true;
           } catch { /* si falla, se reintenta en la próxima carga; el panel carga igual */ }
+        }
+        // Otro Sí / Emergencia: sus zonas (centros de costo) B2B y B2G como áreas AAA.
+        if (ns === "emergencia") {
+          const faltan = ZONAS_EMERGENCIA.filter((z) => !a!.areas.includes(z));
+          if (faltan.length) { a.areas = [...faltan, ...a.areas]; migrado = true; }
         }
         // Otro Sí / Emergencia (una sola vez): el valor sembrado del corte de subgerencia
         // se corrige al del contrato N° 2026-060; un valor digitado a mano no se toca.
@@ -344,13 +356,17 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
   );
 
   const importServices = useCallback(
-    async (items: Array<{ monthKey: string; item: Servicio }>) => {
+    async (items: Array<{ monthKey: string; item: Servicio }>, quitar?: { meses: string[]; si: (s: Servicio) => boolean }) => {
       const porMes = new Map<string, Servicio[]>();
+      quitar?.meses.forEach((mk) => porMes.set(mk, []));
       items.forEach(({ monthKey, item }) => porMes.set(monthKey, [...(porMes.get(monthKey) ?? []), item]));
       for (const [mk, nuevos] of porMes) {
         const prev = await loadMonth(mk);
-        const ids = new Set(prev.map((s) => s.id));
-        await persistMonth(mk, [...prev, ...nuevos.filter((s) => !ids.has(s.id))], prev);
+        const base = quitar ? prev.filter((s) => !quitar.si(s)) : prev;
+        const ids = new Set(base.map((s) => s.id));
+        const next = [...base, ...nuevos.filter((s) => !ids.has(s.id))];
+        if (next.length === prev.length && nuevos.length === 0) continue; // nada que cambiar en el mes
+        await persistMonth(mk, next, prev);
       }
     },
     [persistMonth],

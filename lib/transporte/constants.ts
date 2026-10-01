@@ -436,11 +436,41 @@ export const CONTRATO_EMERGENCIA = {
   ],
 };
 
-/** Sin precios cargados todavía: los registros llevan el valor digitado. */
+/**
+ * Tarifas por hora de volqueta según la conciliación de volquetas (grupos GP):
+ * la conciliación las da con IVA; aquí se guardan SIN IVA (÷ 1,19) y el IVA 19%
+ * se suma aparte en cada registro, como en Contrato de Alquiler.
+ */
+const sinIva = (conIva: number) => Math.round((conIva / 1.19) * 100) / 100;
+export const TARIFAS_GP_EMERGENCIA: Record<string, { zona: string; conIva: number; sencilla?: boolean }> = {
+  GP1: { zona: "Barranquilla", conIva: 239164 },
+  GP1P: { zona: "Barranquilla con peaje", conIva: 279665 },
+  GP4: { zona: "Barranquilla con peaje puerto", conIva: 352446 },
+  GP2: { zona: "Ponedera", conIva: 314127 },
+  GP3: { zona: "Sabanalarga", conIva: 279665 },
+  GP1S: { zona: "Barranquilla", conIva: 201433.68, sencilla: true },
+};
 export const TARIFARIO_EMERGENCIA_DEFAULT: Tarifario = {
   recargos: { nocturno: 0, dominicalFestivo: 0 },
-  categorias: [],
+  categorias: [
+    {
+      id: "vqdt",
+      label: "Ítem 1 · Servicio de Volqueta doble troque",
+      capacidad: 14,
+      rutas: Object.entries(TARIFAS_GP_EMERGENCIA).filter(([, v]) => !v.sencilla)
+        .map(([gp, v]) => ({ id: gp, label: `${v.zona} (HR)`, unitario: sinIva(v.conIva) })),
+    },
+    {
+      id: "vqs",
+      label: "Ítem 2 · Servicio de Volqueta sencilla",
+      capacidad: 8,
+      rutas: Object.entries(TARIFAS_GP_EMERGENCIA).filter(([, v]) => v.sencilla)
+        .map(([gp, v]) => ({ id: gp, label: `${v.zona} (HR)`, unitario: sinIva(v.conIva) })),
+    },
+  ],
 };
+/** Zonas (centros de costo) del servicio de emergencia: B2B y B2G. */
+export const ZONAS_EMERGENCIA = ["B2B", "B2G"];
 
 /** Módulos del motor de registros (cada uno con su espacio de datos en transporte_kv). */
 export type ModuloContrato = "transporte" | "alquiler" | "emergencia";

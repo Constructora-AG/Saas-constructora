@@ -135,6 +135,10 @@ export function RegistrosView({ t }: ViewProps) {
     [t.activeServices],
   );
   const tot = useMemo(() => totales(items), [items]);
+  // Alquiler / Emergencia: contratos con IVA → la tabla muestra base + IVA de cada registro.
+  const conIva = FICHA_MODULO[t.ns].registros;
+  const valorDe = (s: Servicio) => num(s.value) + (conIva ? num(s.valorIva) : 0);
+  const valorMes = conIva ? items.reduce((a, s) => a + valorDe(s), 0) : tot.valor;
   const diasMes = mes ? new Date(mes.year, mes.month + 1, 0).getDate() : 0;
 
   // Paginación (10 por página); vuelve a la página 1 al cambiar de mes
@@ -188,11 +192,11 @@ export function RegistrosView({ t }: ViewProps) {
           interventor: moda(grupo.map((s) => s.interventor || "")) || null,
           lugar: moda(grupo.map((s) => s.area || "")) || null,
           nota: `Generada desde Registros de ${FICHA_MODULO[t.ns].nombre} (${mes.label})`,
-          items: agruparItems(t.ns === "alquiler"
+          items: agruparItems(t.ns !== "transporte"
             ? grupo.flatMap((s) => {
                 const out: Array<{ item: string; maquina: string; unidad: string; cantidad: number; vr_unit: number; iva_pct: number }> = [];
                 const horas = num(s.horasMaquina), vh = num(s.valorHora), viajes = num(s.viajesEquipo), vv = num(s.valorTransporte);
-                if (horas > 0 && vh > 0) out.push({ item: `Alquiler ${s.equipment || "equipo"}`, maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
+                if (horas > 0 && vh > 0) out.push({ item: t.ns === "emergencia" ? `Servicio de ${(s.equipment || "volqueta").toLowerCase()} · ${s.area || "zona sin definir"}` : `Alquiler ${s.equipment || "equipo"}`, maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
                 if (viajes > 0 && vv > 0) out.push({ item: `Transporte del equipo ${s.equipment || ""}`.trim(), maquina: s.equipment || "", unidad: "VJ", cantidad: viajes, vr_unit: vv, iva_pct: s.ivaTransporte === false ? 0 : 0.19 });
                 if (!out.length) out.push({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value), iva_pct: 0.19 });
                 return out;
@@ -345,7 +349,7 @@ export function RegistrosView({ t }: ViewProps) {
         <span>{FICHA_MODULO[t.ns].registros ? "Registros" : "Servicios"} de {mes.label}</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
         <span className="muted" style={{ fontSize: 12.5, textTransform: "none", letterSpacing: 0 }}>
-          Servicios: {tot.servicios} · Valor del mes: {fmtCOP(tot.valor)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
+          Servicios: {tot.servicios} · Valor del mes{conIva ? " (con IVA)" : ""}: {fmtCOP(valorMes)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
         </span>
         <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>{FICHA_MODULO[t.ns].registros ? "+ Nuevo registro" : "+ Agregar servicio"}</button>
       </div>
@@ -490,7 +494,7 @@ export function RegistrosView({ t }: ViewProps) {
                   )}
                   {ver("valor") && (
                     <td className="num" style={{ textAlign: "right" }}>
-                      <b className="nowrap">{fmtCOP(s.value)}</b>
+                      <b className="nowrap">{fmtCOP(valorDe(s))}</b>
                       {!ver("peajes") && num(s.tolls) > 0 && <span className="sub">+ {fmtCOP(s.tolls)} peajes</span>}
                     </td>
                   )}
@@ -568,8 +572,8 @@ export function RegistrosView({ t }: ViewProps) {
               const trailing = columnas.length - lead - (iVal >= 0 ? 1 : 0) - (iPea >= 0 ? 1 : 0);
               return (
                 <tr style={{ background: "var(--surface-2)" }}>
-                  <td colSpan={Math.max(1, lead)}><b>Total del mes</b>{lead === columnas.length && <span className="muted"> · {fmtCOP(tot.valor)}</span>}</td>
-                  {iVal >= 0 && <td className="num" style={{ textAlign: "right", fontWeight: 700 }}>{fmtCOP(tot.valor)}</td>}
+                  <td colSpan={Math.max(1, lead)}><b>Total del mes</b>{lead === columnas.length && <span className="muted"> · {fmtCOP(valorMes)}</span>}</td>
+                  {iVal >= 0 && <td className="num" style={{ textAlign: "right", fontWeight: 700 }}>{fmtCOP(valorMes)}</td>}
                   {iPea >= 0 && <td className="num" style={{ textAlign: "right", fontWeight: 700 }}>{fmtCOP(tot.peajes)}</td>}
                   {trailing > 0 && (
                     <td colSpan={trailing} className="muted">

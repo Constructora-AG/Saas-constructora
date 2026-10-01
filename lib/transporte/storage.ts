@@ -231,7 +231,7 @@ export function storageFor(ns: ModuloNs) {
     // Tarifario de Transporte AAA sembrado por error en otro módulo → se reemplaza por el propio.
     const ajeno = !!t && (ns === "alquiler"
       ? !t.categorias.some((c) => /alquiler/i.test(c.label))
-      : ns === "emergencia" && t.categorias.some((c) => /^cat\d+$/.test(c.id)));
+      : ns === "emergencia" && (t.categorias.length === 0 || t.categorias.some((c) => /^cat\d+$/.test(c.id))));
     if (t && !ajeno) return t;
     const d = tarifarioDefaultDe(ns);
     await saveTarifario(d).catch(() => undefined);

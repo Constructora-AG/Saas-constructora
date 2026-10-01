@@ -73,7 +73,10 @@ export function ResumenView({ t }: ViewProps) {
   const esAlquiler = ficha.registros;
 
   // KPIs (fórmulas SPEC §5.1)
-  const valorEjecutado = tot.valor;                          // Σ value de los registros
+  // Alquiler / Emergencia: el contrato es con IVA → ejecutado = base + IVA de cada registro
+  // (los creados desde facturas AGF ya traen el total con IVA en value y sin valorIva).
+  const valorConIva = (s: Servicio) => num(s.value) + (esAlquiler ? num(s.valorIva) : 0);
+  const valorEjecutado = esAlquiler ? allItems.reduce((acc, s) => acc + valorConIva(s), 0) : tot.valor;
   const valorContrato = t.contractValue;                      // propio del módulo (0 = sin definir)
   const hayValor = valorContrato > 0;
   const pctValor = hayValor ? (valorEjecutado / valorContrato) * 100 : 0;
@@ -106,7 +109,7 @@ export function ResumenView({ t }: ViewProps) {
     const porMes = new Map<string, number>();
     for (const s of allItems) {
       const k = s.date.slice(0, 7);
-      porMes.set(k, (porMes.get(k) ?? 0) + num(s.value));
+      porMes.set(k, (porMes.get(k) ?? 0) + valorConIva(s));
     }
     const claves = [...porMes.keys()].sort();
     const hoy = new Date();
@@ -124,11 +127,12 @@ export function ResumenView({ t }: ViewProps) {
     return {
       meses,
       mesActual: porMes.get(mesActual) ?? 0,
-      promedioMes: meses.length > 0 ? tot.valor / meses.length : 0,
+      promedioMes: meses.length > 0 ? valorEjecutado / meses.length : 0,
       primero: ordenados[0] ?? null,
       ultimo: ordenados[ordenados.length - 1] ?? null,
     };
-  }, [allItems, tot.valor]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allItems, valorEjecutado]);
 
   const ejecucionMensual = esAlquiler ? alq.meses : ejecucionTransporte;
   const referenciaMes = esAlquiler ? alq.promedioMes : presupuestoMes;
@@ -299,7 +303,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-ico s-ok"><IconCheck /></span>
             <span className="kpi-label">Último registro</span>
           </div>
-          <div className="kpi-value" style={{ fontSize: 19 }}>{alq.ultimo ? COP.format(num(alq.ultimo.value)) : "—"}</div>
+          <div className="kpi-value" style={{ fontSize: 19 }}>{alq.ultimo ? COP.format(valorConIva(alq.ultimo)) : "—"}</div>
           <div className="kpi-foot">{alq.ultimo ? `${[alq.ultimo.orderNo, alq.ultimo.facturaAGF].filter(Boolean).join(" · ")} · ${fFechaIso(alq.ultimo.date)}` : "Sin registros"}</div>
         </div>
       </div>
