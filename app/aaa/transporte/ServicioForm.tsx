@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { UseTransporte } from "@/lib/transporte/useTransporte";
 import type { AdjuntoFile, AdminConfig, MonthInfo, NumLike, Servicio, Tarifario } from "@/lib/transporte/model";
 import { areaAAADe, aprobadorDe, num, nuevoServicioId } from "@/lib/transporte/model";
+import { FICHA_MODULO, type ModuloContrato } from "@/lib/transporte/constants";
 import { autoRecargos, computeValor, fdate, fmtCOP, respHours, sugerenciasCampo } from "@/lib/transporte/logic";
 import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
@@ -186,7 +187,7 @@ function buildInit(args: {
 
 /** Prefijo de las órdenes: TP (Transporte AAA) o AL (Contrato de Alquiler); las prefacturas usan PF. */
 export const PREFIJO_ORDEN = "TP";
-export const prefijoOrdenDe = (ns: string) => (ns === "alquiler" ? "AL" : PREFIJO_ORDEN);
+export const prefijoOrdenDe = (ns: string) => FICHA_MODULO[ns as ModuloContrato]?.prefijoOrden ?? PREFIJO_ORDEN;
 
 /** Siguiente N° de orden consecutivo (TP0001, TP0002, …) considerando todos los meses cargados. */
 export function siguienteOrden(servicesByMonth: Record<string, Servicio[]>, ns = "transporte"): string {

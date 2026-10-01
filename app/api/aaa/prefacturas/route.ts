@@ -264,9 +264,9 @@ export async function DELETE(req: NextRequest) {
   const { data: row } = await supa.from("aaa_prefacturas").select("numero, contrato, servicios").eq("id", b.id).maybeSingle();
   const { error } = await supa.from("aaa_prefacturas").delete().eq("id", b.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  // Prefactura de Transporte AAA o Contrato de Alquiler: liberar los servicios que tenía
+  // Prefactura de Transporte AAA, Contrato de Alquiler u Otro Sí / Emergencia: liberar los servicios que tenía
   // incluidos, cada uno en el espacio de datos de SU módulo (nunca se cruzan).
-  const prefijo = row?.contrato === "alquiler" ? "alquiler:" : row?.contrato === "transporte" ? "" : null;
+  const prefijo = row?.contrato === "alquiler" ? "alquiler:" : row?.contrato === "emergencia" ? "emergencia:" : row?.contrato === "transporte" ? "" : null;
   if (prefijo === null) return NextResponse.json({ ok: true, liberados: 0 });
   const servicios = Array.isArray(row?.servicios) ? (row!.servicios as Array<{ monthKey: string; id: string }>) : [];
   const porMes = new Map<string, Set<string>>();

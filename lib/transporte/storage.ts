@@ -14,6 +14,7 @@ import {
   SAVE_WARN_CHARS,
   STORAGE_TIMEOUT_MS,
   tarifarioDefaultDe,
+  type ModuloContrato,
 } from "./constants";
 import type { AdminConfig, Backup, MonthInfo, Servicio, Tarifario } from "./model";
 import { normalizeAdmin } from "./constants";
@@ -26,7 +27,7 @@ const API = "/api/aaa/transporte";
 // transporte_kv: "" para Transporte (claves históricas sin prefijo) y
 // "alquiler:" para Contrato de Alquiler. useTransporte(ns) lo fija al
 // renderizar; los módulos nunca están montados a la vez.
-export type ModuloNs = "transporte" | "alquiler";
+export type ModuloNs = ModuloContrato;
 const prefijoDe = (ns: ModuloNs) => (ns === "transporte" ? "" : `${ns}:`);
 
 /** true cuando hay backend real (Supabase); false = modo demo en memoria. */
@@ -222,12 +223,15 @@ export function storageFor(ns: ModuloNs) {
 
   /**
    * Carga el tarifario y, si no existe, escribe y devuelve el del módulo.
-   * Contrato de Alquiler: si quedó sembrado con el de Transporte AAA (versiones
-   * anteriores), se reemplaza por los precios del contrato de alquiler.
+   * Alquiler / Emergencia: si quedó sembrado con el de Transporte AAA (versiones
+   * anteriores), se reemplaza por el propio del módulo.
    */
   async function loadTarifarioOrSeed(): Promise<Tarifario> {
     const t = await loadTarifario();
-    const ajeno = ns === "alquiler" && !!t && !t.categorias.some((c) => /alquiler/i.test(c.label));
+    // Tarifario de Transporte AAA sembrado por error en otro módulo → se reemplaza por el propio.
+    const ajeno = !!t && (ns === "alquiler"
+      ? !t.categorias.some((c) => /alquiler/i.test(c.label))
+      : ns === "emergencia" && t.categorias.some((c) => /^cat\d+$/.test(c.id)));
     if (t && !ajeno) return t;
     const d = tarifarioDefaultDe(ns);
     await saveTarifario(d).catch(() => undefined);

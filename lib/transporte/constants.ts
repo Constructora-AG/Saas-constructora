@@ -410,7 +410,49 @@ export function applySeed(admin: AdminConfig): boolean {
   return true;
 }
 
+// ── Otro Sí / Emergencia ───────────────────────────────────────────
+// Fuente: corte de subgerencia (lib/aaa/corte-2026-07-31.json): contrato
+// CW2238311, transporte de residuos especiales (Otro Sí de emergencia).
+// Datos propios del módulo: nunca se mezclan con Alquiler ni Transporte AAA.
+
+export const CONTRATO_EMERGENCIA = {
+  numero: "CW2238311",
+  objeto: "Contrato de emergencia — transporte de residuos especiales (Otro Sí)",
+  /** Presupuesto del contrato con IVA según el corte de subgerencia. */
+  valor: 5726100960,
+  inicio: "2026-05-21",
+  fin: "2026-10-29",
+};
+
+/** Sin precios cargados todavía: los registros llevan el valor digitado. */
+export const TARIFARIO_EMERGENCIA_DEFAULT: Tarifario = {
+  recargos: { nocturno: 0, dominicalFestivo: 0 },
+  categorias: [],
+};
+
+/** Módulos del motor de registros (cada uno con su espacio de datos en transporte_kv). */
+export type ModuloContrato = "transporte" | "alquiler" | "emergencia";
+
+/** Ficha de cada módulo: nombre, contrato y prefijo de órdenes. */
+export const FICHA_MODULO: Record<ModuloContrato, {
+  nombre: string;
+  numero: string;
+  objeto: string;
+  prefijoOrden: string;
+  /** Módulo de registros (Alquiler / Emergencia): el ejecutado es la suma de los registros. */
+  registros: boolean;
+  /** El valor del contrato incluye IVA. */
+  ivaIncluido: boolean;
+  /** Datos del contrato firmado que se aplican al admin si aún no tiene valor (Transporte usa los suyos). */
+  contrato: { valor: number; inicio: string; fin: string } | null;
+}> = {
+  transporte: { nombre: "Transporte AAA", numero: "IS No. 04-2026", objeto: "Transporte de equipos y maquinaria propia", prefijoOrden: "TP", registros: false, ivaIncluido: false, contrato: null },
+  alquiler: { nombre: "Contrato de Alquiler", numero: `N° ${CONTRATO_ALQUILER.numero}`, objeto: CONTRATO_ALQUILER.objeto, prefijoOrden: "AL", registros: true, ivaIncluido: true, contrato: CONTRATO_ALQUILER },
+  emergencia: { nombre: "Otro Sí / Emergencia", numero: CONTRATO_EMERGENCIA.numero, objeto: CONTRATO_EMERGENCIA.objeto, prefijoOrden: "EM", registros: true, ivaIncluido: true, contrato: CONTRATO_EMERGENCIA },
+};
+
 /** Tarifario inicial de cada módulo (cada uno con el suyo). */
-export function tarifarioDefaultDe(ns: "transporte" | "alquiler"): Tarifario {
-  return JSON.parse(JSON.stringify(ns === "alquiler" ? TARIFARIO_ALQUILER_DEFAULT : TARIFARIO_DEFAULT)) as Tarifario;
+export function tarifarioDefaultDe(ns: ModuloContrato): Tarifario {
+  const t = ns === "alquiler" ? TARIFARIO_ALQUILER_DEFAULT : ns === "emergencia" ? TARIFARIO_EMERGENCIA_DEFAULT : TARIFARIO_DEFAULT;
+  return JSON.parse(JSON.stringify(t)) as Tarifario;
 }

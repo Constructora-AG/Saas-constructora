@@ -17,7 +17,7 @@ import {
   IconTruck,
   IconWallet,
 } from "../../icons";
-import { CONTRATANTE, CONTRATISTA, CONTRATO_ALQUILER } from "@/lib/transporte/constants";
+import { CONTRATANTE, CONTRATISTA, FICHA_MODULO } from "@/lib/transporte/constants";
 import {
   ALERTAS_MAX,
   ALERTAS_VACIO,
@@ -68,7 +68,9 @@ export function ResumenView({ t }: ViewProps) {
   const tot = useMemo(() => totales(allItems), [allItems]);
 
   // Contrato de Alquiler: la ejecución es el día a día de la pestaña Registros.
-  const esAlquiler = t.ns === "alquiler";
+  // Alquiler / Emergencia: módulos de registros (cada uno con sus propios datos).
+  const ficha = FICHA_MODULO[t.ns];
+  const esAlquiler = ficha.registros;
 
   // KPIs (fórmulas SPEC §5.1)
   const valorEjecutado = tot.valor;                          // Σ value de los registros
@@ -192,8 +194,8 @@ export function ResumenView({ t }: ViewProps) {
       <div className="estado-panel">
         <div className="estado-item">
           <span className="estado-label">Contrato</span>
-          <span className="estado-val">{esAlquiler ? `N° ${CONTRATO_ALQUILER.numero}` : "IS No. 04-2026"}</span>
-          {esAlquiler && <span className="estado-sub">{CONTRATO_ALQUILER.objeto}</span>}
+          <span className="estado-val">{ficha.numero}</span>
+          {esAlquiler && <span className="estado-sub">{ficha.objeto}</span>}
         </div>
         <div className="estado-item">
           <span className="estado-label">Contratante</span>
@@ -254,7 +256,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-label">Valor del contrato</span>
           </div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{hayValor ? COP.format(valorContrato) : "Sin definir"}</div>
-          <div className="kpi-foot">{hayValor ? "IVA incluido (Cláusula Tercera)" : "Defínelo en Administración"}</div>
+          <div className="kpi-foot">{hayValor ? (t.ns === "alquiler" ? "IVA incluido (Cláusula Tercera)" : "IVA incluido") : "Defínelo en Administración"}</div>
         </div>
         <div className="kpi">
           <div className="kpi-head">

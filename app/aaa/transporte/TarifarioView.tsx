@@ -130,6 +130,12 @@ export function TarifarioView({ t }: ViewProps) {
         otrosí u OFAC. Los cambios se guardan para todo el equipo.
       </p>
 
+      {tarifario.categorias.length === 0 && (
+        <div className="info-bar" style={{ marginBottom: 14 }}>
+          Este contrato aún no tiene precios unitarios cargados: los registros llevan el valor digitado (tarifa manual).
+        </div>
+      )}
+
       {desactualizados && desactualizados.servicios > 0 && !dirty && (
         <div
           className="table-wrap"

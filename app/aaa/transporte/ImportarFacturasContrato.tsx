@@ -1,7 +1,8 @@
 "use client";
 // ════════════════════════════════════════════════════════════════════
-// Contrato de Alquiler — paso único: las facturas AGF que se cargaron como
-// tabla aparte (aaa_facturas) pasan a ser registros (servicios) del módulo.
+// Contrato de Alquiler / Otro Sí – Emergencia: las facturas AGF (tabla aparte
+// aaa_facturas o un Excel) pasan a ser registros (servicios) del módulo. Cada
+// módulo usa SOLO sus facturas y su espacio de datos; nunca se mezclan.
 // Cada factura crea un registro con fecha, equipo y valor; lo demás
 // (interventor, área, placa, horas…) queda en blanco para completarlo luego.
 // Los ya migrados se reconocen por `facturaAGF` y no se duplican.
@@ -15,13 +16,15 @@ import { siguienteOrden } from "./ServicioForm";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
-function registroDe(f: FacturaRow, orderNo: string): Servicio {
+type ContratoRegistros = "alquiler" | "emergencia";
+
+function registroDe(f: FacturaRow, orderNo: string, contrato: ContratoRegistros): Servicio {
   const equipos = f.concepto.replace(/^Alquiler:\s*/i, "").trim();
   return {
     id: nuevoServicioId(),
     date: f.fecha,
     orderNo,
-    serviceType: "",
+    serviceType: contrato === "emergencia" ? "Emergencia" : "",
     interventor: "",
     areaAAA: "",
     plate: "",
@@ -51,8 +54,8 @@ function registroDe(f: FacturaRow, orderNo: string): Servicio {
   };
 }
 
-export function ImportarFacturasAlquiler({ t }: { t: UseTransporte }) {
-  const facturas = useRegistrosContrato("alquiler");
+export function ImportarFacturasContrato({ t, contrato }: { t: UseTransporte; contrato: ContratoRegistros }) {
+  const facturas = useRegistrosContrato(contrato);
   const [trabajando, setTrabajando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
 
@@ -71,7 +74,7 @@ export function ImportarFacturasAlquiler({ t }: { t: UseTransporte }) {
   );
   const total = pendientes.reduce((s, f) => s + Number(f.valor_total), 0);
 
-  /** Crea un registro por factura (sin duplicar las ya registradas), con AL#### consecutivo en orden cronológico. */
+  /** Crea un registro por factura (sin duplicar las ya registradas), con N° de orden consecutivo del módulo (AL / EM) en orden cronológico. */
   async function crearRegistros(lista: FacturaRow[], origen: string) {
     const nuevas = lista
       .filter((f) => !yaMigradas.has(f.numero.toUpperCase()))
@@ -92,10 +95,12 @@ export function ImportarFacturasAlquiler({ t }: { t: UseTransporte }) {
       if (!t.admin?.contractStart || primera < t.admin.contractStart) {
         await t.saveAdminCfg((a) => { a.contractStart = `${primera.slice(0, 7)}-01`; });
       }
-      const base = parseInt(siguienteOrden(t.servicesByMonth, "alquiler").replace(/\D/g, ""), 10);
+      const sig = siguienteOrden(t.servicesByMonth, contrato);
+      const prefijo = sig.replace(/\d+$/, "");
+      const base = parseInt(sig.replace(/\D/g, ""), 10);
       const items = nuevas.map((f, i) => ({
         monthKey: f.fecha.slice(0, 7),
-        item: registroDe(f, `AL${String(base + i).padStart(4, "0")}`),
+        item: registroDe(f, `${prefijo}${String(base + i).padStart(4, "0")}`, contrato),
       }));
       await t.importServices(items);
       setMsg({ ok: true, texto: `Listo: ${items.length} registro(s) creados desde ${origen}${aviso}. Complétalos con «Editar» en cada mes.` });
@@ -108,7 +113,7 @@ export function ImportarFacturasAlquiler({ t }: { t: UseTransporte }) {
 
   async function importarExcel(file: File) {
     try {
-      const lista = await leerFacturasExcel(file);
+      const lista = await leerFacturasExcel(file, contrato);
       if (lista.length === 0) {
         setMsg({ ok: false, texto: "No se encontraron facturas en el archivo (se esperan columnas «N° Factura», «Fecha», «Concepto» y «Valor Total»)." });
         return;
@@ -150,7 +155,7 @@ export function ImportarFacturasAlquiler({ t }: { t: UseTransporte }) {
 }
 
 /** Lee un Excel de facturas (N° Factura, Fecha, Concepto, Valor Total) buscando la fila de encabezados. */
-async function leerFacturasExcel(file: File): Promise<FacturaRow[]> {
+async function leerFacturasExcel(file: File, contrato: ContratoRegistros): Promise<FacturaRow[]> {
   const XLSX = await import("xlsx");
   const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
   const norm = (v: unknown) => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -175,7 +180,7 @@ async function leerFacturasExcel(file: File): Promise<FacturaRow[]> {
       const valor = typeof r[cValor] === "number" ? (r[cValor] as number) : parseValor(String(r[cValor] ?? ""));
       const fecha = iso(r[cFecha]);
       if (!/^AGF\s*\d+/.test(numero) || !fecha || !(valor > 0)) continue;
-      out.push({ id: numero, contrato: "alquiler", numero, fecha, concepto: String(r[cConc] ?? "").trim(), valor_total: valor, nota: null });
+      out.push({ id: numero, contrato, numero, fecha, concepto: String(r[cConc] ?? "").trim(), valor_total: valor, nota: null });
     }
   }
   return out;

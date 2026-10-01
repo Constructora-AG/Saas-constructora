@@ -24,6 +24,7 @@ import { adjuntoSrc, openAttachment } from "@/lib/transporte/media";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 import { ServicioForm } from "./ServicioForm";
 import { buildOrderPdf } from "./ordenPdf";
+import { FICHA_MODULO } from "@/lib/transporte/constants";
 
 const TIPO_BADGE: Record<string, { label: string; cls: string }> = {
   Programado: { label: "Programado", cls: "ok" },
@@ -170,7 +171,7 @@ export function RegistrosView({ t }: ViewProps) {
     const grupos = [...porArea.entries()].sort((x, y) => x[0].localeCompare(y[0], "es"));
     const total = lista.reduce((a, s) => a + num(s.value), 0);
     const detalle = grupos.map(([area, g]) => `• ${area}: ${g.length} servicio(s) por ${fmtCOP(g.reduce((a, s) => a + num(s.value), 0))}`).join("\n");
-    if (!window.confirm(`Se creará${grupos.length > 1 ? `n ${grupos.length} prefacturas` : " una prefactura"} de ${t.ns === "alquiler" ? "Contrato de Alquiler" : "Transporte AAA"}, una por centro de costo, con ${lista.length} servicio(s) por ${fmtCOP(total)} (sin peajes):\n\n${detalle}\n\n¿Continuar?`)) return;
+    if (!window.confirm(`Se creará${grupos.length > 1 ? `n ${grupos.length} prefacturas` : " una prefactura"} de ${FICHA_MODULO[t.ns].nombre}, una por centro de costo, con ${lista.length} servicio(s) por ${fmtCOP(total)} (sin peajes):\n\n${detalle}\n\n¿Continuar?`)) return;
     setPrefacturando(true); setPrefMsg(null);
     const creadas: string[] = [];
     try {
@@ -178,7 +179,7 @@ export function RegistrosView({ t }: ViewProps) {
       for (const [area, grupo] of grupos) {
         const fechas = grupo.map((s) => s.date).filter(Boolean).sort();
         const body = {
-          contrato: t.ns === "alquiler" ? "alquiler" : "transporte",
+          contrato: t.ns,
           origen: "modulo",
           fecha_generacion: new Date().toISOString().slice(0, 10),
           periodo_desde: fechas[0] || null,
@@ -186,7 +187,7 @@ export function RegistrosView({ t }: ViewProps) {
           area_aaa: area === SIN_AREA ? null : area,
           interventor: moda(grupo.map((s) => s.interventor || "")) || null,
           lugar: moda(grupo.map((s) => s.area || "")) || null,
-          nota: `Generada desde Registros de ${t.ns === "alquiler" ? "Contrato de Alquiler" : "Transporte AAA"} (${mes.label})`,
+          nota: `Generada desde Registros de ${FICHA_MODULO[t.ns].nombre} (${mes.label})`,
           items: agruparItems(t.ns === "alquiler"
             ? grupo.flatMap((s) => {
                 const out: Array<{ item: string; maquina: string; unidad: string; cantidad: number; vr_unit: number; iva_pct: number }> = [];
@@ -341,12 +342,12 @@ export function RegistrosView({ t }: ViewProps) {
 
       {/* Toolbar del mes + botón de registro */}
       <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span>{t.ns === "alquiler" ? "Registros" : "Servicios"} de {mes.label}</span>
+        <span>{FICHA_MODULO[t.ns].registros ? "Registros" : "Servicios"} de {mes.label}</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
         <span className="muted" style={{ fontSize: 12.5, textTransform: "none", letterSpacing: 0 }}>
           Servicios: {tot.servicios} · Valor del mes: {fmtCOP(tot.valor)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
         </span>
-        <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>{t.ns === "alquiler" ? "+ Nuevo registro" : "+ Agregar servicio"}</button>
+        <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>{FICHA_MODULO[t.ns].registros ? "+ Nuevo registro" : "+ Agregar servicio"}</button>
       </div>
 
       {/* Exportación mensual (SPEC §5.2) + selector de columnas */}

@@ -28,7 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CONTRACT_VALUE,
   POLL_INTERVAL_MS,
-  CONTRATO_ALQUILER,
+  FICHA_MODULO,
   tarifarioDefaultDe,
   applySeed,
   normalizeAdmin,
@@ -51,7 +51,7 @@ import {
 } from "./storage";
 
 export interface UseTransporte {
-  /** Módulo (espacio de datos): "transporte" = Transporte AAA, "alquiler" = Contrato de Alquiler. */
+  /** Módulo (espacio de datos): "transporte" = Transporte AAA, "alquiler" = Contrato de Alquiler, "emergencia" = Otro Sí / Emergencia. */
   ns: ModuloNs;
   // Estado de carga y sincronización
   loading: boolean;
@@ -189,12 +189,13 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
         const nuevo = !a;
         a = a ?? normalizeAdmin(adminDefault());
         const seeded = applySeed(a);
-        // Contrato de Alquiler: vigencia y valor del contrato firmado si aún no se han definido.
+        // Alquiler / Emergencia: vigencia y valor del contrato firmado si aún no se han definido.
         let contratoAlq = false;
-        if (ns === "alquiler" && !(num(a.contractValue) > 0)) {
-          a.contractStart = CONTRATO_ALQUILER.inicio;
-          a.contractEnd = CONTRATO_ALQUILER.fin;
-          a.contractValue = CONTRATO_ALQUILER.valor;
+        const ficha = FICHA_MODULO[ns].contrato;
+        if (ficha && !(num(a.contractValue) > 0)) {
+          a.contractStart = ficha.inicio;
+          a.contractEnd = ficha.fin;
+          a.contractValue = ficha.valor;
           contratoAlq = true;
         }
         if (nuevo || seeded || contratoAlq) await saveAdmin(a).catch(() => undefined);
