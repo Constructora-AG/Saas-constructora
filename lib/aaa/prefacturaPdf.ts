@@ -5,7 +5,8 @@
 // VALOR TOTAL, Cant. Items, SUBTOTAL / IVA / TOTAL, "APROBAR O RECHAZAR" y
 // OBSERVACIONES. pdf-lib se importa dinámicamente (solo en el navegador).
 // ════════════════════════════════════════════════════════════════════
-import { agruparItems, ivaPctDe, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
+import { agruparItems, itemConZona, ivaPctDe, zonaDeTarifa, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
+import { TARIFARIO_ALQUILER_DEFAULT } from "@/lib/transporte/constants";
 import { CORTE } from "@/lib/aaa/compute";
 import { CLIENTE_AAA, EMPRESA, LOGO_AG_PNG_B64 } from "@/lib/aaa/empresa";
 import { b64ToBytes, downloadBlob } from "@/lib/transporte/export";
@@ -36,7 +37,14 @@ export async function buildPrefacturaPdf(r: PrefacturaRow): Promise<Uint8Array> 
   const ink = rgb(0.1, 0.1, 0.1), gris = rgb(0.45, 0.45, 0.45), linea = rgb(0.2, 0.2, 0.2);
   const fondo = rgb(0.85, 0.85, 0.85), fondoClaro = rgb(0.93, 0.93, 0.93), blanco = rgb(1, 1, 1);
   const ivaPct = ivaPctDe(r.contrato, CORTE.iva_pct); // transporte: 0
-  const items = agruparItems((r.items ?? []) as PrefacturaItem[]);
+  // Contrato de Alquiler: cada ítem dice su zona (Barranquilla y su área metropolitana / Municipios);
+  // en prefacturas que no la escribieron se deduce del valor unitario del contrato.
+  const unitariosAlq = new Map<number, string>();
+  if (r.contrato === "alquiler") {
+    TARIFARIO_ALQUILER_DEFAULT.categorias.forEach((c) => c.rutas.forEach((rt) => unitariosAlq.set(Math.round(Number(rt.unitario)), zonaDeTarifa(rt.label))));
+  }
+  const items = agruparItems(((r.items ?? []) as PrefacturaItem[]).map((it) =>
+    r.contrato === "alquiler" ? { ...it, item: itemConZona(String(it.item || ""), Number(it.vr_unit), unitariosAlq) } : it));
 
   let page = doc.addPage([PW, PH]);
   let y = PH - M;

@@ -121,3 +121,31 @@ export function agruparItems<T extends Pick<PrefacturaItem, "item" | "cantidad" 
   }
   return [...grupos.values()];
 }
+
+// ── Zona de los ítems de Contrato de Alquiler ──────────────────────
+// Cada ítem del contrato tiene un precio distinto por zona (Barranquilla y su
+// área metropolitana / Municipios), así que en las prefacturas que no la
+// escriben se deduce del valor unitario.
+
+export const ZONA_BQ = "Barranquilla y su área metropolitana";
+export const ZONA_MUN = "Municipios";
+
+/** Zona según la etiqueta de la tarifa del tarifario de alquiler. */
+export function zonaDeTarifa(label: string): string {
+  return /municipio/i.test(label) ? ZONA_MUN : ZONA_BQ;
+}
+
+/** ¿El texto del ítem ya dice la zona? */
+export function itemTieneZona(item: string): boolean {
+  return /municip|barranquilla|b\/?quilla|\bbq\b|metropolitana/i.test(item);
+}
+
+/**
+ * Texto del ítem con la zona: si no la trae y el valor unitario corresponde a
+ * una única zona del tarifario de alquiler (`unitarios`: valor → zona), se agrega.
+ */
+export function itemConZona(item: string, vrUnit: number, unitarios: Map<number, string>): string {
+  if (itemTieneZona(item)) return item;
+  const zona = unitarios.get(Math.round(Number(vrUnit)));
+  return zona ? `${item} - ${zona}` : item;
+}

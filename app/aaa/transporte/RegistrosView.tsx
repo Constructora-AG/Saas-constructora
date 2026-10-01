@@ -19,7 +19,7 @@ import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { Servicio, Tarifario } from "@/lib/transporte/model";
 import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
 import { fdate, findCategoria, findRuta, fmtCOP, recargosCobrados, totales } from "@/lib/transporte/logic";
-import { agruparItems } from "@/lib/aaa/catalogo";
+import { agruparItems, zonaDeTarifa } from "@/lib/aaa/catalogo";
 import { adjuntoSrc, openAttachment } from "@/lib/transporte/media";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 import { ServicioForm } from "./ServicioForm";
@@ -196,8 +196,11 @@ export function RegistrosView({ t }: ViewProps) {
             ? grupo.flatMap((s) => {
                 const out: Array<{ item: string; maquina: string; unidad: string; cantidad: number; vr_unit: number; iva_pct: number }> = [];
                 const horas = num(s.horasMaquina), vh = num(s.valorHora), viajes = num(s.viajesEquipo), vv = num(s.valorTransporte);
-                if (horas > 0 && vh > 0) out.push({ item: t.ns === "emergencia" ? `Servicio de ${(s.equipment || "volqueta").toLowerCase()} · ${s.area || "zona sin definir"}` : `Alquiler ${s.equipment || "equipo"}`, maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
-                if (viajes > 0 && vv > 0) out.push({ item: `Transporte del equipo ${s.equipment || ""}`.trim(), maquina: s.equipment || "", unidad: "VJ", cantidad: viajes, vr_unit: vv, iva_pct: s.ivaTransporte === false ? 0 : 0.19 });
+                // Alquiler: la zona sale de la tarifa elegida (Barranquilla y su área metropolitana / Municipios).
+                const ruta = t.tarifario ? findRuta(findCategoria(t.tarifario, s.tarifaCategoria), s.tarifaRuta) : null;
+                const zona = ruta ? ` - ${zonaDeTarifa(ruta.label)}` : "";
+                if (horas > 0 && vh > 0) out.push({ item: t.ns === "emergencia" ? `Servicio de ${(s.equipment || "volqueta").toLowerCase()} · ${s.area || "zona sin definir"}` : `Alquiler ${s.equipment || "equipo"}${zona}`, maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
+                if (viajes > 0 && vv > 0) out.push({ item: `Transporte del equipo ${s.equipment || ""}`.trim() + (t.ns === "alquiler" ? zona : ""), maquina: s.equipment || "", unidad: "VJ", cantidad: viajes, vr_unit: vv, iva_pct: s.ivaTransporte === false ? 0 : 0.19 });
                 if (!out.length) out.push({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value), iva_pct: 0.19 });
                 return out;
               })
