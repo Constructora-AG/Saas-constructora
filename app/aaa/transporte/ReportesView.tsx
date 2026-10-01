@@ -140,6 +140,7 @@ export function ReportesView({ t }: ViewProps) {
       vigencia: `${fdate(isoOf(t.contractStart))} - ${fdate(isoOf(lastDay))}`,
       totalGlobalValue: allPairs.reduce((s, p) => s + num(p.item.value), 0),
       valorContrato: t.contractValue,
+      ns: t.ns,
       tarifario: t.ns === "transporte" ? t.tarifario : null,
     };
   }, [t.contractStart, t.contractEndExclusive, allPairs, t.ns, t.tarifario, t.contractValue]);

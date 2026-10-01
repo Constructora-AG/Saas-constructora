@@ -47,6 +47,107 @@ export const CONTRATANTE = "Triple A de B/Q S.A. E.S.P.";
 export const CONTRATISTA = "Constructora Anaya Giraldo S.A.S.";
 export const CONTRATISTA_NIT = "900.530.150-5";
 
+// ── Contrato de Alquiler (Grupo 1) ─────────────────────────────────
+// Fuente: contrato de prestación de servicios CW2236995 firmado, acta de
+// inicio N° 2026-003 y «A.1.2 Formulario de Cantidades y Precios Contractuales»
+// (oferta de AG, hoja GRUPO 1). Datos propios del módulo: nunca se mezclan
+// con los de Transporte AAA.
+
+export const CONTRATO_ALQUILER = {
+  numero: "2026-003",
+  objeto: "Servicio de alquiler de equipos y/o maquinaria pesada a todo costo (Grupo 1)",
+  modalidad: "Invitación abierta a ofertar IAO No. 29-2025",
+  /** Cláusula Tercera: hasta $4.126.025.908, IVA incluido. */
+  valor: 4126025908,
+  /** Acta de inicio: 12 meses o hasta agotar el valor, lo primero que ocurra. */
+  inicio: "2026-02-02",
+  fin: "2027-02-02",
+};
+
+/** Precios unitarios contractuales sin IVA (acta de inicio / formulario de precios). */
+export const TARIFARIO_ALQUILER_DEFAULT: Tarifario = {
+  recargos: { nocturno: 0, dominicalFestivo: 0 },
+  categorias: [
+    {
+      id: "alq1",
+      label: "Ítem 1 · Servicio de Alquiler de Excavadora 22 m",
+      capacidad: "",
+      rutas: [
+        { id: "1.1", label: "Barranquilla y su área metropolitana (HR)", unitario: 344500 },
+        { id: "1.2", label: "Municipios (HR)", unitario: 370500 },
+        { id: "1.3", label: "Transporte del equipo · Barranquilla y su área metropolitana", unitario: 1470000 },
+        { id: "1.4", label: "Transporte del equipo · Municipios", unitario: 1715000 },
+      ],
+    }, // sobre oruga, alcance mín. 22 m, cucharón 0,9 m³
+    {
+      id: "alq2",
+      label: "Ítem 2 · Servicio de Alquiler de Excavadora 19 t",
+      capacidad: "",
+      rutas: [
+        { id: "2.1", label: "Barranquilla y su área metropolitana (HR)", unitario: 344500 },
+        { id: "2.2", label: "Municipios (HR)", unitario: 370500 },
+        { id: "2.3", label: "Transporte del equipo · Barranquilla y su área metropolitana", unitario: 1470000 },
+        { id: "2.4", label: "Transporte del equipo · Municipios", unitario: 1715000 },
+      ],
+    }, // sobre oruga, peso mín. 19 t, excavación mín. 6 m, cucharón 0,9 m³
+    {
+      id: "alq3",
+      label: "Ítem 3 · Servicio de Alquiler de Bulldozer",
+      capacidad: "",
+      rutas: [
+        { id: "3.1", label: "Barranquilla y su área metropolitana (HR)", unitario: 264000 },
+        { id: "3.2", label: "Municipios (HR)", unitario: 234000 },
+        { id: "3.3", label: "Transporte del equipo · Barranquilla y su área metropolitana", unitario: 1470000 },
+        { id: "3.4", label: "Transporte del equipo · Municipios", unitario: 1715000 },
+      ],
+    }, // tractor topador sobre oruga, peso mín. 22 t, hoja 5 m³
+    {
+      id: "alq4",
+      label: "Ítem 4 · Servicio de Alquiler de Cargador",
+      capacidad: "",
+      rutas: [
+        { id: "4.1", label: "Barranquilla y su área metropolitana (HR)", unitario: 206250 },
+        { id: "4.2", label: "Municipios (HR)", unitario: 218750 },
+        { id: "4.3", label: "Transporte del equipo · Barranquilla y su área metropolitana", unitario: 1470000 },
+        { id: "4.4", label: "Transporte del equipo · Municipios", unitario: 1715000 },
+      ],
+    }, // pala frontal sobre ruedas, peso mín. 12 t, cucharón 2,2 m³
+    {
+      id: "alq5",
+      label: "Ítem 5 · Servicio de Alquiler de Mini cargador",
+      capacidad: "",
+      rutas: [
+        { id: "5.1", label: "Barranquilla y su área metropolitana (HR)", unitario: 81250 },
+        { id: "5.2", label: "Municipios (HR)", unitario: 93750 },
+        { id: "5.3", label: "Transporte del equipo · Barranquilla y su área metropolitana", unitario: 676200 },
+        { id: "5.4", label: "Transporte del equipo · Municipios", unitario: 882000 },
+      ],
+    }, // frontal sobre ruedas, balde mín. 0,4 m³
+    {
+      id: "alq6",
+      label: "Ítem 6 · Servicio de Alquiler de Retroexcavadora pajarita",
+      capacidad: "",
+      rutas: [
+        { id: "6.1", label: "Barranquilla y su área metropolitana (HR)", unitario: 181250 },
+        { id: "6.2", label: "Municipios (HR)", unitario: 200000 },
+        { id: "6.3", label: "Transporte del equipo · Barranquilla y su área metropolitana", unitario: 676200 },
+        { id: "6.4", label: "Transporte del equipo · Municipios", unitario: 882000 },
+      ],
+    }, // cargadora sobre ruedas, excavación mín. 4 m, 10.500 kg, cucharón 0,8 m³
+    {
+      id: "alq7",
+      label: "Ítem 7 · Servicio de Alquiler de Mini excavadora",
+      capacidad: "",
+      rutas: [
+        { id: "7.1", label: "Barranquilla y su área metropolitana (HR)", unitario: 230000 },
+        { id: "7.2", label: "Municipios (HR)", unitario: 276000 },
+        { id: "7.3", label: "Transporte del equipo · Barranquilla y su área metropolitana", unitario: 676200 },
+        { id: "7.4", label: "Transporte del equipo · Municipios", unitario: 882000 },
+      ],
+    }, // sobre oruga, peso mín. 3,5 t, excavación mín. 3,1 m
+  ],
+};
+
 // ── Tarifario por defecto (§1.3) ───────────────────────────────────
 // Valores del «FORMATO 2 — Formulario de cantidades y precios» (sep 2026).
 
@@ -307,4 +408,9 @@ export function applySeed(admin: AdminConfig): boolean {
 
   admin.seedVersion = SEED_VERSION;
   return true;
+}
+
+/** Tarifario inicial de cada módulo (cada uno con el suyo). */
+export function tarifarioDefaultDe(ns: "transporte" | "alquiler"): Tarifario {
+  return JSON.parse(JSON.stringify(ns === "alquiler" ? TARIFARIO_ALQUILER_DEFAULT : TARIFARIO_DEFAULT)) as Tarifario;
 }

@@ -13,7 +13,7 @@ import {
   SAVE_BLOCK_CHARS,
   SAVE_WARN_CHARS,
   STORAGE_TIMEOUT_MS,
-  TARIFARIO_DEFAULT,
+  tarifarioDefaultDe,
 } from "./constants";
 import type { AdminConfig, Backup, MonthInfo, Servicio, Tarifario } from "./model";
 import { normalizeAdmin } from "./constants";
@@ -220,12 +220,18 @@ export function storageFor(ns: ModuloNs) {
     await kvSet(KEY_TARIFARIO, JSON.stringify(t));
   }
 
-  /** Carga el tarifario y, si no existe, escribe y devuelve el default (como el init original). */
+  /**
+   * Carga el tarifario y, si no existe, escribe y devuelve el del módulo.
+   * Contrato de Alquiler: si quedó sembrado con el de Transporte AAA (versiones
+   * anteriores), se reemplaza por los precios del contrato de alquiler.
+   */
   async function loadTarifarioOrSeed(): Promise<Tarifario> {
     const t = await loadTarifario();
-    if (t) return t;
-    await saveTarifario(TARIFARIO_DEFAULT).catch(() => undefined);
-    return TARIFARIO_DEFAULT;
+    const ajeno = ns === "alquiler" && !!t && !t.categorias.some((c) => /alquiler/i.test(c.label));
+    if (t && !ajeno) return t;
+    const d = tarifarioDefaultDe(ns);
+    await saveTarifario(d).catch(() => undefined);
+    return d;
   }
 
   // ── Backup / restore (formato del SPEC §2.4) ───────────────────────

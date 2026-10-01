@@ -14,7 +14,7 @@ export default function ContratoAlquilerPage() {
     <TransporteClient
       ns="alquiler"
       titulo="Contrato de Alquiler"
-      subtitulo="Contrato de alquiler de maquinaria con Triple A / Anaya Giraldo: registro de servicios, tarifario, reportes y avance del contrato."
+      subtitulo="Contrato N° 2026-003 — alquiler de equipos y/o maquinaria pesada a todo costo (Grupo 1) con Triple A / Anaya Giraldo: registros, tarifario del contrato, reportes y avance."
     />
   );
 }

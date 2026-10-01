@@ -101,7 +101,7 @@ function buildInit(args: {
     interventorSel: "", interventorOtro: "",
     areaAAASel: "", areaAAAOtro: "",
     plateSel: "", plateOtro: "",
-    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false, viajesEquipo: "0", horasMaquina: "", ivaAlquiler: true, ivaTransporte: true,
+    driverSel: "", driverOtro: "", operario: "", transporteEquipo: false, viajesEquipo: "0", horasMaquina: "", ivaAlquiler: true, ivaTransporte: false, // formulario de precios: el transporte del equipo no grava IVA
     equipmentSel: "", equipmentOtro: "",
     capacity: "", weight: "",
     pickup: "", destination: "", area: "",

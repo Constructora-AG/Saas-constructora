@@ -150,7 +150,7 @@ export function TarifarioView({ t }: ViewProps) {
           <div key={cat.id} className="table-wrap" style={{ padding: 18 }}>
             <h3 style={{ margin: "0 0 2px", fontSize: 14.5 }}>{cat.label}</h3>
             <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-              Capacidad mínima sugerida: {num(cat.capacidad)} Ton
+              {num(cat.capacidad) > 0 ? `Capacidad mínima sugerida: ${num(cat.capacidad)} Ton` : "Valores unitarios sin IVA (HR = hora máquina)"}
             </div>
             <div style={{ display: "grid", gap: 10 }}>
               {cat.rutas.map((ruta) => {

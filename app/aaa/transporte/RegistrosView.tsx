@@ -286,6 +286,7 @@ export function RegistrosView({ t }: ViewProps) {
         vigencia: `${fF(t.contractStart)} - ${fF(finIncl)}`,
         totalGlobalValue,
         valorContrato: t.contractValue,
+        ns: t.ns,
         tarifario: t.ns === "transporte" ? t.tarifario : null,
       });
       // askInvoice: ¿marcar los pendientes exportados como facturados?

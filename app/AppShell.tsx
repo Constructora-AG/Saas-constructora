@@ -69,7 +69,7 @@ const TITLES: Record<string, string> = {
   "/aaa/transporte": "Proyecto Triple A — Control Transporte AAA (Contrato IS No. 04-2026)",
   "/aaa/consolidado": "Proyecto Triple A — Consolidado",
   "/aaa/alquiler": "Proyecto Triple A — Contrato Alquiler (Old)",
-  "/aaa/contrato-alquiler": "Proyecto Triple A — Contrato de Alquiler",
+  "/aaa/contrato-alquiler": "Proyecto Triple A — Contrato de Alquiler (Contrato N° 2026-003)",
   "/aaa/emergencia": "Proyecto Triple A — Otro Sí / Emergencia",
   "/aaa/prefacturas": "Proyecto Triple A — Prefacturas",
   "/aaa": "Proyecto Triple A",

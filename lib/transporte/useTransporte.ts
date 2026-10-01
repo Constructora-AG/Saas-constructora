@@ -28,7 +28,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CONTRACT_VALUE,
   POLL_INTERVAL_MS,
-  TARIFARIO_DEFAULT,
+  CONTRATO_ALQUILER,
+  tarifarioDefaultDe,
   applySeed,
   normalizeAdmin,
   adminDefault,
@@ -188,7 +189,15 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
         const nuevo = !a;
         a = a ?? normalizeAdmin(adminDefault());
         const seeded = applySeed(a);
-        if (nuevo || seeded) await saveAdmin(a).catch(() => undefined);
+        // Contrato de Alquiler: vigencia y valor del contrato firmado si aún no se han definido.
+        let contratoAlq = false;
+        if (ns === "alquiler" && !(num(a.contractValue) > 0)) {
+          a.contractStart = CONTRATO_ALQUILER.inicio;
+          a.contractEnd = CONTRATO_ALQUILER.fin;
+          a.contractValue = CONTRATO_ALQUILER.valor;
+          contratoAlq = true;
+        }
+        if (nuevo || seeded || contratoAlq) await saveAdmin(a).catch(() => undefined);
         if (!alive) return;
         setAdmin(a);
         await applyAdminContract(a, true);
@@ -371,8 +380,8 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
   }, [tarifario]);
 
   const resetTarifario = useCallback(async () => {
-    await saveTarifarioCfg(JSON.parse(JSON.stringify(TARIFARIO_DEFAULT)) as Tarifario);
-  }, [saveTarifarioCfg]);
+    await saveTarifarioCfg(tarifarioDefaultDe(ns));
+  }, [saveTarifarioCfg, ns]);
 
   const recalcularServicios = useCallback(
     async (tar: Tarifario) => {

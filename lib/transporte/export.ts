@@ -13,6 +13,7 @@
 import type { PDFFont, PDFImage, PDFPage, RGB } from "pdf-lib";
 import {
   CONTRACT_VALUE,
+  CONTRATO_ALQUILER,
   CONTRATANTE,
   CONTRATISTA,
   CONTRATISTA_NIT,
@@ -38,6 +39,8 @@ export interface ExportContexto {
   totalGlobalValue: number;
   /** Valor del contrato del módulo (por defecto el de Transporte AAA; 0 = sin definir). */
   valorContrato?: number;
+  /** Módulo del reporte (encabezado del PDF); por defecto Transporte AAA. */
+  ns?: "transporte" | "alquiler";
   /** Tarifario para discriminar el valor en servicio + recargos (solo Transporte; null = sin desglose). */
   tarifario?: Tarifario | null;
 }
@@ -365,9 +368,10 @@ export async function buildReportPdf(
     const { page, y: y0 } = newPage("landscape");
     let y = y0 - 10;
     const { width } = page.getSize();
-    safeDrawText(page, "CUADRO DE CONTROL DE SERVICIOS DE TRANSPORTE", { x: MARGIN, y, size: 16, font: bold, color: GRAYDARK });
+    const alq = ctx.ns === "alquiler";
+    safeDrawText(page, alq ? "CUADRO DE CONTROL DE SERVICIOS DE ALQUILER" : "CUADRO DE CONTROL DE SERVICIOS DE TRANSPORTE", { x: MARGIN, y, size: 16, font: bold, color: GRAYDARK });
     y -= 22;
-    safeDrawText(page, "Contrato IS No. 04-2026 - Transporte de Equipos y Maquinaria Propia", { x: MARGIN, y, size: 10.5, font, color: MUTED });
+    safeDrawText(page, alq ? `Contrato No. ${CONTRATO_ALQUILER.numero} - Alquiler de Equipos y/o Maquinaria Pesada a Todo Costo (Grupo 1)` : "Contrato IS No. 04-2026 - Transporte de Equipos y Maquinaria Propia", { x: MARGIN, y, size: 10.5, font, color: MUTED });
     y -= 26;
     page.drawRectangle({ x: MARGIN, y: y - 2, width: width - MARGIN * 2, height: 1, color: GRAYLINE });
     y -= 20;
@@ -376,7 +380,7 @@ export async function buildReportPdf(
       ["Contratista", CONTRATISTA],
       ["NIT Contratista", CONTRATISTA_NIT],
       ["Vigencia del contrato", ctx.vigencia],
-      ["Valor del contrato", (ctx.valorContrato ?? CONTRACT_VALUE) > 0 ? fmtCOP(ctx.valorContrato ?? CONTRACT_VALUE) : "Sin definir"],
+      ["Valor del contrato", (ctx.valorContrato ?? CONTRACT_VALUE) > 0 ? `${fmtCOP(ctx.valorContrato ?? CONTRACT_VALUE)} ${alq ? "(IVA incluido)" : "(IVA excl.)"}` : "Sin definir"],
       ["Alcance de este reporte", scopeLabel],
       ["Generado el", generatedAt],
     ];
