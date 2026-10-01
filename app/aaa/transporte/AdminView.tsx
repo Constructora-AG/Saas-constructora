@@ -16,7 +16,8 @@ import type { PerfilKey, PermKey } from "@/lib/transporte/model";
 import { num } from "@/lib/transporte/model";
 import { validateBackup } from "@/lib/transporte/storage";
 import { FESTIVOS_DEFAULT, PERM_KEYS, PERM_LABELS, allFestivos } from "@/lib/transporte/constants";
-import { fdate } from "@/lib/transporte/logic";
+import { fdate, fmtCOP } from "@/lib/transporte/logic";
+import { parseValor } from "../FacturasRegistro";
 import { useTransporteSession } from "@/lib/transporte/session";
 import { Chip, MsgInline } from "./CatalogoTabla";
 
@@ -248,14 +249,14 @@ export function AdminView({ t }: ViewProps) {
   // Formularios locales
   const [eqNuevo, setEqNuevo] = useState({ name: "", weight: "", clase: "" });
   const [festNuevo, setFestNuevo] = useState({ date: "", label: "" });
-  const [contrato, setContrato] = useState({ inicio: "", fin: "" });
+  const [contrato, setContrato] = useState({ inicio: "", fin: "", valor: "" });
   const [restaurando, setRestaurando] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Fechas de vigencia desde adminconfig
   useEffect(() => {
-    if (t.admin) setContrato({ inicio: t.admin.contractStart || "", fin: t.admin.contractEnd || "" });
-  }, [t.admin]);
+    if (t.admin) setContrato({ inicio: t.admin.contractStart || "", fin: t.admin.contractEnd || "", valor: t.contractValue > 0 ? String(t.contractValue) : "" });
+  }, [t.admin, t.contractValue]);
 
   const admin = t.admin;
   if (!admin) {
@@ -313,14 +314,18 @@ export function AdminView({ t }: ViewProps) {
     if (!esGerencia) { setMsgContrato({ error: "Solo Gerencia puede modificar la vigencia del contrato." }); return; }
     if (!contrato.inicio || !contrato.fin) { setMsgContrato({ error: "Debes indicar fecha de inicio y fecha de fin." }); return; }
     if (contrato.fin <= contrato.inicio) { setMsgContrato({ error: "La fecha de fin debe ser posterior a la de inicio." }); return; }
+    const valor = contrato.valor.trim() === "" ? 0 : parseValor(contrato.valor);
+    if (!Number.isFinite(valor) || valor < 0) { setMsgContrato({ error: "El valor del contrato no es válido." }); return; }
     const vigencia = `${fdate(contrato.inicio)} → ${fdate(contrato.fin)}`;
-    if (!window.confirm(`¿Actualizar la vigencia del contrato a ${vigencia}? El panel recalculará los meses visibles y la línea de tiempo.`)) return;
+    const valorTxt = valor > 0 ? fmtCOP(valor) : "sin definir";
+    if (!window.confirm(`¿Actualizar el contrato? Vigencia ${vigencia} · Valor ${valorTxt}. El panel recalculará los meses visibles y la línea de tiempo.`)) return;
     try {
       await t.saveAdminCfg((a) => {
         a.contractStart = contrato.inicio;
         a.contractEnd = contrato.fin;
+        a.contractValue = valor;
       });
-      setMsgContrato({ ok: `Vigencia actualizada: ${vigencia}.` });
+      setMsgContrato({ ok: `Contrato actualizado: ${vigencia} · Valor ${valorTxt}.` });
     } catch (err) {
       setMsgContrato({ error: err instanceof Error ? err.message : "No se pudo actualizar la vigencia." });
     }
@@ -501,8 +506,8 @@ export function AdminView({ t }: ViewProps) {
 
         {esGerencia && (
           <Seccion
-            titulo="Vigencia del contrato"
-            sub="Al guardar, el panel recalcula los meses visibles y la línea de tiempo (fecha fin inclusiva)."
+            titulo="Vigencia y valor del contrato"
+            sub="Al guardar, el panel recalcula los meses visibles, la línea de tiempo y el saldo (fecha fin inclusiva). Cada módulo tiene su propio valor."
           >
             <form onSubmit={guardarContrato} style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
@@ -513,9 +518,12 @@ export function AdminView({ t }: ViewProps) {
                   <input className="input" type="date" required value={contrato.fin} onChange={(e) => setContrato((c) => ({ ...c, fin: e.target.value }))} />
                 </label>
               </div>
+              <label className="field">Valor del contrato (COP)
+                <input className="input" inputMode="decimal" placeholder="Ej. 2.891.433.496" value={contrato.valor} onChange={(e) => setContrato((c) => ({ ...c, valor: e.target.value }))} />
+              </label>
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <button className="btn btn-primary btn-sm" type="submit" disabled={t.saving}>
-                  {t.saving ? "Guardando…" : "Actualizar vigencia"}
+                  {t.saving ? "Guardando…" : "Actualizar contrato"}
                 </button>
                 <span className="muted" style={{ fontSize: 12 }}>Meses actuales: {t.months.length}</span>
               </div>

@@ -360,6 +360,7 @@ export function computeAlertas(
   servicesByMonth: Record<string, Servicio[]>,
   admin: AdminConfig | null,
   today = new Date(),
+  valorContrato = CONTRACT_VALUE,
 ): Alerta[] {
   const alertas: Alerta[] = [];
   let totalValue = 0;
@@ -426,11 +427,11 @@ export function computeAlertas(
   });
 
   // 6. 90% del valor del contrato
-  if (totalValue > CONTRACT_VALUE * 0.9) {
+  if (valorContrato > 0 && totalValue > valorContrato * 0.9) {
     alertas.unshift({
       nivel: "high",
       titulo: "Valor del contrato próximo a agotarse",
-      detalle: `Ejecutado ${((totalValue / CONTRACT_VALUE) * 100).toFixed(1)}% del valor total (Cláusula Segunda)`,
+      detalle: `Ejecutado ${((totalValue / valorContrato) * 100).toFixed(1)}% del valor total (Cláusula Segunda)`,
     });
   }
 

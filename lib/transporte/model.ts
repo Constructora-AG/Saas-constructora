@@ -86,6 +86,8 @@ export interface AdminConfig {
   festivosCustom: FestivoCustom[];
   contractStart: string; // 'AAAA-MM-DD'
   contractEnd: string;   // 'AAAA-MM-DD' (inclusiva) o ''
+  /** Valor del contrato en COP propio del módulo (0/ausente = Transporte usa CONTRACT_VALUE; Alquiler, sin definir). */
+  contractValue?: number;
   backupLastAt: string | null; // ISO
   seedVersion: number;
 }

@@ -36,6 +36,8 @@ export interface ExportContexto {
   vigencia: string;
   /** Valor total ejecutado de TODO el contrato (el saldo del PDF es global). */
   totalGlobalValue: number;
+  /** Valor del contrato del módulo (por defecto el de Transporte AAA; 0 = sin definir). */
+  valorContrato?: number;
   /** Tarifario para discriminar el valor en servicio + recargos (solo Transporte; null = sin desglose). */
   tarifario?: Tarifario | null;
 }
@@ -374,7 +376,7 @@ export async function buildReportPdf(
       ["Contratista", CONTRATISTA],
       ["NIT Contratista", CONTRATISTA_NIT],
       ["Vigencia del contrato", ctx.vigencia],
-      ["Valor del contrato (IVA excl.)", fmtCOP(CONTRACT_VALUE)],
+      ["Valor del contrato", (ctx.valorContrato ?? CONTRACT_VALUE) > 0 ? fmtCOP(ctx.valorContrato ?? CONTRACT_VALUE) : "Sin definir"],
       ["Alcance de este reporte", scopeLabel],
       ["Generado el", generatedAt],
     ];
@@ -387,7 +389,7 @@ export async function buildReportPdf(
     page.drawRectangle({ x: MARGIN, y: y - 68, width: width - MARGIN * 2, height: 68, color: rgb(0.965, 0.965, 0.945) });
     const kpiCells: Array<[string, string]> = [
       ["Valor ejecutado", fmtCOP(scopedValue)],
-      ["Saldo disponible", fmtCOP(CONTRACT_VALUE - ctx.totalGlobalValue)],
+      ["Saldo disponible", (ctx.valorContrato ?? CONTRACT_VALUE) > 0 ? fmtCOP((ctx.valorContrato ?? CONTRACT_VALUE) - ctx.totalGlobalValue) : "—"],
       ["Servicios en este reporte", String(rows.length)],
       ["Pendientes por facturar", String(pendientes)],
     ];

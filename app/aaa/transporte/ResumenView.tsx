@@ -17,7 +17,7 @@ import {
   IconTruck,
   IconWallet,
 } from "../../icons";
-import { CONTRACT_VALUE, CONTRATANTE, CONTRATISTA } from "@/lib/transporte/constants";
+import { CONTRATANTE, CONTRATISTA } from "@/lib/transporte/constants";
 import {
   ALERTAS_MAX,
   ALERTAS_VACIO,
@@ -36,7 +36,7 @@ const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP",
 
 // ── Barra horizontal de progreso (patrón AaaClient/RecaudoClient) ──
 
-function Bar({ label, value, total, pctLabel }: { label: string; value: number; total: number; pctLabel: string }) {
+function Bar({ label, value, total, pctLabel, valText }: { label: string; value: number; total: number; pctLabel: string; valText?: string }) {
   const p = total > 0 ? (value / total) * 100 : 0;
   return (
     <div className="bar-row">
@@ -48,7 +48,7 @@ function Bar({ label, value, total, pctLabel }: { label: string; value: number; 
         />
       </div>
       <div className="bar-val">
-        <b>{fmtShort(value)}</b>
+        <b>{valText ?? fmtShort(value)}</b>
         <div className="bar-pct">{p.toFixed(1)}% {pctLabel}</div>
       </div>
     </div>
@@ -72,21 +72,23 @@ export function ResumenView({ t }: ViewProps) {
 
   // KPIs (fórmulas SPEC §5.1)
   const valorEjecutado = tot.valor;                          // Σ value de los registros
-  const pctValor = CONTRACT_VALUE > 0 ? (valorEjecutado / CONTRACT_VALUE) * 100 : 0;
-  const saldo = CONTRACT_VALUE - valorEjecutado;             // CONTRACT_VALUE − Σ value
-  const saldoBajo = saldo < CONTRACT_VALUE * 0.1;            // warn si saldo < 10% del contrato
+  const valorContrato = t.contractValue;                      // propio del módulo (0 = sin definir)
+  const hayValor = valorContrato > 0;
+  const pctValor = hayValor ? (valorEjecutado / valorContrato) * 100 : 0;
+  const saldo = valorContrato - valorEjecutado;              // valor del contrato − Σ value
+  const saldoBajo = hayValor && saldo < valorContrato * 0.1; // warn si saldo < 10% del contrato
   const totalPeajes = tot.peajes;                            // Σ tolls
   const servicios = tot.servicios;                           // count
   const sinSoporte = tot.sinSoporte;                         // count(!photo || !approved)
 
   // Alertas contractuales (§4.9), máximo 8
   const alertas = useMemo(
-    () => computeAlertas(t.servicesByMonth, t.admin).slice(0, ALERTAS_MAX),
-    [t.servicesByMonth, t.admin],
+    () => computeAlertas(t.servicesByMonth, t.admin, new Date(), valorContrato).slice(0, ALERTAS_MAX),
+    [t.servicesByMonth, t.admin, valorContrato],
   );
 
   // Ejecución mensual: barra = ejecutado del mes, track = presupuesto promedio
-  const presupuestoMes = t.allMonths.length > 0 ? CONTRACT_VALUE / t.allMonths.length : 0;
+  const presupuestoMes = t.allMonths.length > 0 ? valorContrato / t.allMonths.length : 0;
   const ejecucionTransporte = useMemo(
     () =>
       t.months.map((m) => ({
@@ -160,10 +162,11 @@ export function ResumenView({ t }: ViewProps) {
     () => ({
       vigencia: `${fFecha(inicio)} - ${fFecha(finIncl)}`,
       totalGlobalValue: valorEjecutado,
+      valorContrato,
       tarifario: t.ns === "transporte" ? t.tarifario : null,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t.contractStart, t.contractEndExclusive, valorEjecutado, t.ns, t.tarifario],
+    [t.contractStart, t.contractEndExclusive, valorEjecutado, valorContrato, t.ns, t.tarifario],
   );
 
   async function exportar(fmt: ExportFormat) {
@@ -213,22 +216,22 @@ export function ResumenView({ t }: ViewProps) {
         </div>
       </div>
 
-      {/* Línea de tiempo: tiempo transcurrido vs. valor ejecutado (Transporte: valor del contrato conocido) */}
-      {!esAlquiler && (
+      {/* Línea de tiempo: tiempo transcurrido vs. valor ejecutado */}
       <div className="chart-card" style={{ marginTop: 18 }}>
         <div className="chart-title">Línea de tiempo del contrato</div>
         <div className="chart-sub">
-          Tiempo transcurrido: {t.status.pctTiempo.toFixed(1)}% · Valor ejecutado: {Math.min(100, pctValor).toFixed(1)}%
+          Tiempo transcurrido: {t.status.pctTiempo.toFixed(1)}%
+          {hayValor ? ` · Valor ejecutado: ${Math.min(100, pctValor).toFixed(1)}%` : " · Valor del contrato sin definir (Administración → Vigencia y valor del contrato)"}
         </div>
         <Bar
           label="Tiempo transcurrido"
-          value={(t.status.pctTiempo / 100) * CONTRACT_VALUE}
-          total={CONTRACT_VALUE}
+          value={t.status.pctTiempo}
+          total={100}
+          valText={t.status.label.split(" · ")[0]}
           pctLabel="del plazo"
         />
-        <Bar label="Valor ejecutado" value={valorEjecutado} total={CONTRACT_VALUE} pctLabel="del contrato" />
+        {hayValor && <Bar label="Valor ejecutado" value={valorEjecutado} total={valorContrato} pctLabel="del contrato" />}
       </div>
-      )}
 
       {esAlquiler ? (
         <>
@@ -241,7 +244,27 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-label">Valor ejecutado</span>
           </div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(valorEjecutado)}</div>
-          <div className="kpi-foot">Suma de {tot.servicios.toLocaleString("es-CO")} registro(s)</div>
+          <div className="kpi-foot">
+            Suma de {tot.servicios.toLocaleString("es-CO")} registro(s){hayValor ? ` · ${pctValor.toFixed(1)}% del contrato` : ""}
+          </div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-head">
+            <span className="kpi-ico s-brand"><IconWallet /></span>
+            <span className="kpi-label">Valor del contrato</span>
+          </div>
+          <div className="kpi-value" style={{ fontSize: 19 }}>{hayValor ? COP.format(valorContrato) : "Sin definir"}</div>
+          <div className="kpi-foot">{hayValor ? "Configurable en Administración" : "Defínelo en Administración"}</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-head">
+            <span className={`kpi-ico${saldoBajo ? " s-warn" : ""}`}><IconCoins /></span>
+            <span className="kpi-label">Saldo disponible</span>
+          </div>
+          <div className="kpi-value" style={{ fontSize: 19, color: saldoBajo ? "var(--warn)" : undefined }}>
+            {hayValor ? COP.format(saldo) : "—"}
+          </div>
+          <div className="kpi-foot">Valor del contrato − ejecutado</div>
         </div>
         <div className="kpi">
           <div className="kpi-head">
@@ -298,7 +321,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-ico s-brand"><IconWallet /></span>
             <span className="kpi-label">Valor del contrato</span>
           </div>
-          <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(CONTRACT_VALUE)}</div>
+          <div className="kpi-value" style={{ fontSize: 19 }}>{hayValor ? COP.format(valorContrato) : "Sin definir"}</div>
           <div className="kpi-foot">IVA excluido</div>
         </div>
         <div className="kpi">

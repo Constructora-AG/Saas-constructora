@@ -139,9 +139,10 @@ export function ReportesView({ t }: ViewProps) {
     return {
       vigencia: `${fdate(isoOf(t.contractStart))} - ${fdate(isoOf(lastDay))}`,
       totalGlobalValue: allPairs.reduce((s, p) => s + num(p.item.value), 0),
+      valorContrato: t.contractValue,
       tarifario: t.ns === "transporte" ? t.tarifario : null,
     };
-  }, [t.contractStart, t.contractEndExclusive, allPairs, t.ns, t.tarifario]);
+  }, [t.contractStart, t.contractEndExclusive, allPairs, t.ns, t.tarifario, t.contractValue]);
 
   // Datalist del filtro «Área AAA solicitante»: maestras + usadas (con alias legado).
   const areasAAAConocidas = useMemo(() => {

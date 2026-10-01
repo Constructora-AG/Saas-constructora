@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  CONTRACT_VALUE,
   POLL_INTERVAL_MS,
   TARIFARIO_DEFAULT,
   applySeed,
@@ -39,7 +40,7 @@ import {
   fdate,
   recalcularValores,
 } from "./logic";
-import type { AdminConfig, Backup, MonthInfo, Servicio, Tarifario } from "./model";
+import { num, type AdminConfig, type Backup, type MonthInfo, type Servicio, type Tarifario } from "./model";
 import {
   backupFileName,
   storageAvailable,
@@ -77,6 +78,8 @@ export interface UseTransporte {
   // Contrato
   contractStart: Date;
   contractEndExclusive: Date;
+  /** Valor del contrato de ESTE módulo (0 = sin definir). */
+  contractValue: number;
   status: { label: string; activo: boolean; pctTiempo: number };
 
   // Polling
@@ -472,6 +475,7 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     activeServices,
     contractStart: contract.start,
     contractEndExclusive: contract.endExclusive,
+    contractValue: num(admin?.contractValue) > 0 ? num(admin?.contractValue) : ns === "transporte" ? CONTRACT_VALUE : 0,
     status,
     isModalOpen,
     setModalOpen,
