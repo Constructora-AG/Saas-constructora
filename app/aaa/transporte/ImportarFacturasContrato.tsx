@@ -18,13 +18,13 @@ const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP",
 
 type ContratoRegistros = "alquiler" | "emergencia";
 
-function registroDe(f: FacturaRow, orderNo: string, contrato: ContratoRegistros): Servicio {
+function registroDe(f: FacturaRow, orderNo: string): Servicio {
   const equipos = f.concepto.replace(/^Alquiler:\s*/i, "").trim();
   return {
     id: nuevoServicioId(),
     date: f.fecha,
     orderNo,
-    serviceType: contrato === "emergencia" ? "Emergencia" : "",
+    serviceType: "", // las facturas no indican el tipo (Programado / No Programado / Emergencia): se completa al editar
     interventor: "",
     areaAAA: "",
     plate: "",
@@ -100,7 +100,7 @@ export function ImportarFacturasContrato({ t, contrato }: { t: UseTransporte; co
       const base = parseInt(sig.replace(/\D/g, ""), 10);
       const items = nuevas.map((f, i) => ({
         monthKey: f.fecha.slice(0, 7),
-        item: registroDe(f, `${prefijo}${String(base + i).padStart(4, "0")}`, contrato),
+        item: registroDe(f, `${prefijo}${String(base + i).padStart(4, "0")}`),
       }));
       await t.importServices(items);
       setMsg({ ok: true, texto: `Listo: ${items.length} registro(s) creados desde ${origen}${aviso}. Complétalos con «Editar» en cada mes.` });
