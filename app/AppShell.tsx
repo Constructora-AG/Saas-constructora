@@ -45,9 +45,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
         accion: { href: "/aaa/contratos", title: "Crear un contrato nuevo", modulo: "contratos" },
         children: [
           { href: "/aaa/consolidado", label: "Consolidado", icon: null, modulo: "aaa" },
-          { href: "/aaa/alquiler", label: "Contrato Alquiler (Old)", icon: null, modulo: "aaa" },
           { href: "/aaa/contrato-alquiler", label: "Contrato de Alquiler", icon: <IconBuilding />, modulo: "alquiler" },
-          { href: "/aaa/emergencia", label: "Otro Sí / Emergencia (Old)", icon: null, modulo: "aaa" },
           { href: "/aaa/otro-si-emergencia", label: "Otro Sí / Emergencia", icon: <IconBuilding />, modulo: "emergencia" },
           { href: "/aaa/prefacturas", label: "Prefacturas", icon: null, modulo: "aaa" },
           { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte" },
