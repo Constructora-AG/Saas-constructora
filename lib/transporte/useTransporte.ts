@@ -42,18 +42,9 @@ import {
 import type { AdminConfig, Backup, MonthInfo, Servicio, Tarifario } from "./model";
 import {
   backupFileName,
-  buildBackup,
-  loadAdminRaw,
-  loadMonth,
-  loadTarifarioOrSeed,
-  restoreBackup,
-  saveAdmin,
-  saveMonth,
-  saveTarifario,
   storageAvailable,
+  storageFor,
   validateBackup,
-  kvMeta,
-  setStorageNamespace,
   type ModuloNs,
 } from "./storage";
 
@@ -114,8 +105,19 @@ export interface UseTransporte {
 }
 
 export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
-  // Fija el espacio de datos ANTES de cualquier lectura (render sincrónico).
-  setStorageNamespace(ns);
+  // Storage fijo de ESTE módulo: Transporte AAA y Contrato de Alquiler nunca comparten datos.
+  const [st] = useState(() => storageFor(ns));
+  const {
+    buildBackup,
+    kvMeta,
+    loadAdminRaw,
+    loadMonth,
+    loadTarifarioOrSeed,
+    restoreBackup,
+    saveAdmin,
+    saveMonth,
+    saveTarifario,
+  } = st;
   const demo = !storageAvailable();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

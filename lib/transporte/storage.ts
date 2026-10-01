@@ -27,12 +27,7 @@ const API = "/api/aaa/transporte";
 // "alquiler:" para Contrato de Alquiler. useTransporte(ns) lo fija al
 // renderizar; los módulos nunca están montados a la vez.
 export type ModuloNs = "transporte" | "alquiler";
-let NS_PREFIX = "";
-export function setStorageNamespace(ns: ModuloNs): void {
-  NS_PREFIX = ns === "transporte" ? "" : `${ns}:`;
-}
-export function storageNamespacePrefix(): string { return NS_PREFIX; }
-const nsKey = (key: string) => `${NS_PREFIX}${key}`;
+const prefijoDe = (ns: ModuloNs) => (ns === "transporte" ? "" : `${ns}:`);
 
 /** true cuando hay backend real (Supabase); false = modo demo en memoria. */
 export function storageAvailable(): boolean {
@@ -57,71 +52,11 @@ async function api<T>(path: string, init?: RequestInit, etiqueta = "storage", ms
   return body;
 }
 
-// ── Contrato get/set/delete/list (valores string JSON) ─────────────
-
-export async function kvGet(key: string): Promise<string | null> {
-  const k = nsKey(key);
-  if (!storageAvailable()) return demoStore.get(k) ?? null;
-  const r = await api<{ key: string; value: string | null }>(`${API}?key=${encodeURIComponent(k)}`, undefined, `get ${key}`);
-  return r.value;
-}
-
-export async function kvSet(key: string, value: string, timeoutMs = STORAGE_TIMEOUT_MS): Promise<void> {
-  const k = nsKey(key);
-  if (!storageAvailable()) { demoStore.set(k, value); return; }
-  await api(`${API}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: k, value }),
-  }, `set ${key}`, timeoutMs);
-}
-
-export async function kvDelete(key: string): Promise<void> {
-  const k = nsKey(key);
-  if (!storageAvailable()) { demoStore.delete(k); return; }
-  await api(`${API}?key=${encodeURIComponent(k)}`, { method: "DELETE" }, `delete ${key}`);
-}
-
-/** Fecha de actualización por clave (solo las de este módulo, sin prefijo). Sirve para recargar solo lo que cambió. */
-export async function kvMeta(): Promise<Record<string, string>> {
-  if (!storageAvailable()) return Object.fromEntries([...demoStore.keys()].map((k) => [k, ""]));
-  const r = await api<{ keys: string[]; updated?: Record<string, string> }>(`${API}?list=1`, undefined, "meta");
-  const out: Record<string, string> = {};
-  Object.entries(r.updated ?? {}).forEach(([k, v]) => {
-    if (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z]+:(adminconfig|tarifario|services:)/.test(k)) out[NS_PREFIX ? k.slice(NS_PREFIX.length) : k] = v;
-  });
-  return out;
-}
-
-export async function kvList(): Promise<string[]> {
-  // Solo las claves de ESTE módulo, sin su prefijo (Transporte excluye las de otros módulos)
-  const propias = (keys: string[]) => keys
-    .filter((k) => (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z]+:(adminconfig|tarifario|services:)/.test(k)))
-    .map((k) => (NS_PREFIX ? k.slice(NS_PREFIX.length) : k));
-  if (!storageAvailable()) return propias([...demoStore.keys()]);
-  const r = await api<{ keys: string[] }>(`${API}?list=1`, undefined, "list");
-  return propias(r.keys);
-}
-
 // ── Claves ─────────────────────────────────────────────────────────
 
 export const KEY_ADMIN = "adminconfig";
 export const KEY_TARIFARIO = "tarifario";
 export const monthStorageKey = (monthKey: string) => `services:${monthKey}`;
-
-// ── Meses ──────────────────────────────────────────────────────────
-
-/** Carga el arreglo de servicios de un mes ('AAAA-MM'); [] si no existe o es inválido. */
-export async function loadMonth(monthKey: string): Promise<Servicio[]> {
-  const raw = await kvGet(monthStorageKey(monthKey));
-  if (!raw) return [];
-  try {
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? (arr as Servicio[]) : [];
-  } catch {
-    return [];
-  }
-}
 
 /** Peso de un mes en caracteres de JSON y MB, con banderas de aviso/bloqueo. */
 export function monthSizeInfo(items: Servicio[]): { chars: number; mb: number; warn: boolean; block: boolean } {
@@ -134,6 +69,7 @@ export function monthSizeInfo(items: Servicio[]): { chars: number; mb: number; w
   };
 }
 
+
 export interface SaveMonthOptions {
   /**
    * Se llama cuando el mes supera el umbral de aviso (8 MB). Recibe los MB con
@@ -141,80 +77,6 @@ export interface SaveMonthOptions {
    * Por defecto se guarda sin preguntar (el hook pasa window.confirm).
    */
   onWarn?: (mb: string) => boolean;
-}
-
-/**
- * Guarda el arreglo del mes con verificación de límites de peso:
- * bloqueo > SAVE_BLOCK_CHARS (~20 MB) y aviso confirmable > SAVE_WARN_CHARS (~8 MB).
- */
-export async function saveMonth(monthKey: string, items: Servicio[], opts: SaveMonthOptions = {}): Promise<void> {
-  const size = monthSizeInfo(items);
-  if (size.block) {
-    throw new Error(
-      `El mes ${monthKey} supera el límite de ${(SAVE_BLOCK_CHARS / 1048576).toFixed(0)} MB en adjuntos y no se puede guardar. Elimina o reduce archivos adjuntos.`,
-    );
-  }
-  if (size.warn && opts.onWarn) {
-    const ok = opts.onWarn(size.mb.toFixed(1));
-    if (!ok) throw new Error("Guardado cancelado por el usuario (mes demasiado pesado).");
-  }
-  await kvSet(monthStorageKey(monthKey), JSON.stringify(items));
-}
-
-// ── adminconfig / tarifario ────────────────────────────────────────
-
-export async function loadAdminRaw(): Promise<AdminConfig | null> {
-  const raw = await kvGet(KEY_ADMIN);
-  if (!raw) return null;
-  try {
-    return normalizeAdmin(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
-
-export async function saveAdmin(admin: AdminConfig): Promise<void> {
-  await kvSet(KEY_ADMIN, JSON.stringify(admin));
-}
-
-export async function loadTarifario(): Promise<Tarifario | null> {
-  const raw = await kvGet(KEY_TARIFARIO);
-  if (!raw) return null;
-  try {
-    const t = JSON.parse(raw) as Tarifario;
-    return t && Array.isArray(t.categorias) ? t : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function saveTarifario(t: Tarifario): Promise<void> {
-  await kvSet(KEY_TARIFARIO, JSON.stringify(t));
-}
-
-/** Carga el tarifario y, si no existe, escribe y devuelve el default (como el init original). */
-export async function loadTarifarioOrSeed(): Promise<Tarifario> {
-  const t = await loadTarifario();
-  if (t) return t;
-  await saveTarifario(TARIFARIO_DEFAULT).catch(() => undefined);
-  return TARIFARIO_DEFAULT;
-}
-
-// ── Backup / restore (formato del SPEC §2.4) ───────────────────────
-
-/** Construye el payload de backup: adminconfig + tarifario + todos los services:*. */
-export async function buildBackup(months: MonthInfo[]): Promise<Backup> {
-  const wanted = new Set<string>([KEY_ADMIN, KEY_TARIFARIO, ...months.map((m) => monthStorageKey(m.key))]);
-  const listed = await kvList().catch(() => [] as string[]);
-  listed.forEach((k) => {
-    if (k === KEY_ADMIN || k === KEY_TARIFARIO || k.startsWith("services:")) wanted.add(k);
-  });
-  const keys: Record<string, string> = {};
-  for (const k of wanted) {
-    const v = await kvGet(k);
-    if (v !== null) keys[k] = v;
-  }
-  return { app: "control_contrato_aaa", version: 1, generatedAt: new Date().toISOString(), keys };
 }
 
 /** Nombre de archivo del backup: backup_control_aaa_AAAA-MM-DD_HHMM.json */
@@ -240,9 +102,156 @@ export function validateBackup(
   return { ok: true, backup: p as Backup, blocks: Object.keys(p.keys).length, fecha };
 }
 
-/** Restaura todas las claves del backup (SOBRESCRIBE; timeout 20 s por clave). */
-export async function restoreBackup(backup: Backup): Promise<void> {
-  for (const [k, v] of Object.entries(backup.keys)) {
-    await kvSet(k, v, RESTORE_TIMEOUT_MS);
+// ── Storage de un módulo ───────────────────────────────────────────
+// Cada módulo (Transporte AAA, Contrato de Alquiler) tiene su propio espacio
+// de datos en transporte_kv y NUNCA se mezclan: el prefijo queda fijo al crear
+// el storage, así una operación en curso no puede escribir en otro módulo
+// aunque el usuario cambie de página a mitad del guardado.
+export function storageFor(ns: ModuloNs) {
+  const NS_PREFIX = prefijoDe(ns);
+  const nsKey = (key: string) => `${NS_PREFIX}${key}`;
+
+  // ── Contrato get/set/delete/list (valores string JSON) ─────────────
+
+  async function kvGet(key: string): Promise<string | null> {
+    const k = nsKey(key);
+    if (!storageAvailable()) return demoStore.get(k) ?? null;
+    const r = await api<{ key: string; value: string | null }>(`${API}?key=${encodeURIComponent(k)}`, undefined, `get ${key}`);
+    return r.value;
   }
+
+  async function kvSet(key: string, value: string, timeoutMs = STORAGE_TIMEOUT_MS): Promise<void> {
+    const k = nsKey(key);
+    if (!storageAvailable()) { demoStore.set(k, value); return; }
+    await api(`${API}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: k, value }),
+    }, `set ${key}`, timeoutMs);
+  }
+
+  async function kvDelete(key: string): Promise<void> {
+    const k = nsKey(key);
+    if (!storageAvailable()) { demoStore.delete(k); return; }
+    await api(`${API}?key=${encodeURIComponent(k)}`, { method: "DELETE" }, `delete ${key}`);
+  }
+
+  /** Fecha de actualización por clave (solo las de este módulo, sin prefijo). Sirve para recargar solo lo que cambió. */
+  async function kvMeta(): Promise<Record<string, string>> {
+    if (!storageAvailable()) return Object.fromEntries([...demoStore.keys()].map((k) => [k, ""]));
+    const r = await api<{ keys: string[]; updated?: Record<string, string> }>(`${API}?list=1`, undefined, "meta");
+    const out: Record<string, string> = {};
+    Object.entries(r.updated ?? {}).forEach(([k, v]) => {
+      if (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z]+:(adminconfig|tarifario|services:)/.test(k)) out[NS_PREFIX ? k.slice(NS_PREFIX.length) : k] = v;
+    });
+    return out;
+  }
+
+  async function kvList(): Promise<string[]> {
+    // Solo las claves de ESTE módulo, sin su prefijo (Transporte excluye las de otros módulos)
+    const propias = (keys: string[]) => keys
+      .filter((k) => (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z]+:(adminconfig|tarifario|services:)/.test(k)))
+      .map((k) => (NS_PREFIX ? k.slice(NS_PREFIX.length) : k));
+    if (!storageAvailable()) return propias([...demoStore.keys()]);
+    const r = await api<{ keys: string[] }>(`${API}?list=1`, undefined, "list");
+    return propias(r.keys);
+  }
+
+  // ── Meses ──────────────────────────────────────────────────────────
+
+  /** Carga el arreglo de servicios de un mes ('AAAA-MM'); [] si no existe o es inválido. */
+  async function loadMonth(monthKey: string): Promise<Servicio[]> {
+    const raw = await kvGet(monthStorageKey(monthKey));
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? (arr as Servicio[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Guarda el arreglo del mes con verificación de límites de peso:
+   * bloqueo > SAVE_BLOCK_CHARS (~20 MB) y aviso confirmable > SAVE_WARN_CHARS (~8 MB).
+   */
+  async function saveMonth(monthKey: string, items: Servicio[], opts: SaveMonthOptions = {}): Promise<void> {
+    const size = monthSizeInfo(items);
+    if (size.block) {
+      throw new Error(
+        `El mes ${monthKey} supera el límite de ${(SAVE_BLOCK_CHARS / 1048576).toFixed(0)} MB en adjuntos y no se puede guardar. Elimina o reduce archivos adjuntos.`,
+      );
+    }
+    if (size.warn && opts.onWarn) {
+      const ok = opts.onWarn(size.mb.toFixed(1));
+      if (!ok) throw new Error("Guardado cancelado por el usuario (mes demasiado pesado).");
+    }
+    await kvSet(monthStorageKey(monthKey), JSON.stringify(items));
+  }
+
+  // ── adminconfig / tarifario ────────────────────────────────────────
+
+  async function loadAdminRaw(): Promise<AdminConfig | null> {
+    const raw = await kvGet(KEY_ADMIN);
+    if (!raw) return null;
+    try {
+      return normalizeAdmin(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  }
+
+  async function saveAdmin(admin: AdminConfig): Promise<void> {
+    await kvSet(KEY_ADMIN, JSON.stringify(admin));
+  }
+
+  async function loadTarifario(): Promise<Tarifario | null> {
+    const raw = await kvGet(KEY_TARIFARIO);
+    if (!raw) return null;
+    try {
+      const t = JSON.parse(raw) as Tarifario;
+      return t && Array.isArray(t.categorias) ? t : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function saveTarifario(t: Tarifario): Promise<void> {
+    await kvSet(KEY_TARIFARIO, JSON.stringify(t));
+  }
+
+  /** Carga el tarifario y, si no existe, escribe y devuelve el default (como el init original). */
+  async function loadTarifarioOrSeed(): Promise<Tarifario> {
+    const t = await loadTarifario();
+    if (t) return t;
+    await saveTarifario(TARIFARIO_DEFAULT).catch(() => undefined);
+    return TARIFARIO_DEFAULT;
+  }
+
+  // ── Backup / restore (formato del SPEC §2.4) ───────────────────────
+
+  /** Construye el payload de backup: adminconfig + tarifario + todos los services:*. */
+  async function buildBackup(months: MonthInfo[]): Promise<Backup> {
+    const wanted = new Set<string>([KEY_ADMIN, KEY_TARIFARIO, ...months.map((m) => monthStorageKey(m.key))]);
+    const listed = await kvList().catch(() => [] as string[]);
+    listed.forEach((k) => {
+      if (k === KEY_ADMIN || k === KEY_TARIFARIO || k.startsWith("services:")) wanted.add(k);
+    });
+    const keys: Record<string, string> = {};
+    for (const k of wanted) {
+      const v = await kvGet(k);
+      if (v !== null) keys[k] = v;
+    }
+    return { app: "control_contrato_aaa", version: 1, generatedAt: new Date().toISOString(), keys };
+  }
+
+  /** Restaura todas las claves del backup (SOBRESCRIBE; timeout 20 s por clave). */
+  async function restoreBackup(backup: Backup): Promise<void> {
+    for (const [k, v] of Object.entries(backup.keys)) {
+      await kvSet(k, v, RESTORE_TIMEOUT_MS);
+    }
+  }
+
+  return { kvGet, kvSet, kvDelete, kvMeta, kvList, loadMonth, saveMonth, loadAdminRaw, saveAdmin, loadTarifario, saveTarifario, loadTarifarioOrSeed, buildBackup, restoreBackup };
 }
+export type ModuloStorage = ReturnType<typeof storageFor>;
