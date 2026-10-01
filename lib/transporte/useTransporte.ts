@@ -42,6 +42,7 @@ import {
   currentMonthIdx,
   fdate,
   recalcularValores,
+  costoCalculado,
 } from "./logic";
 import { num, type AdminConfig, type Backup, type MonthInfo, type Servicio, type Tarifario } from "./model";
 import {
@@ -66,6 +67,8 @@ export interface UseTransporte {
   // Datos
   admin: AdminConfig | null;
   tarifario: Tarifario | null;
+  /** Transporte AAA — tarifario de costo a contratistas (uso interno; null en otros módulos). */
+  tarifarioCosto: Tarifario | null;
   /** Meses visibles: la vigencia SIN los meses iniciales ya pasados y sin registros (p. ej. julio 2026). */
   months: MonthInfo[];
   /** Todos los meses calendario de la vigencia (para presupuestos/promedios). */
@@ -106,6 +109,9 @@ export interface UseTransporte {
     quitar?: { meses: string[]; si: (s: Servicio) => boolean },
   ) => Promise<void>;
   saveTarifarioCfg: (t: Tarifario) => Promise<void>;
+  saveTarifarioCostoCfg: (t: Tarifario) => Promise<void>;
+  /** Marca / desmarca servicios como pagados al contratista (uso interno). */
+  marcarPagadoContratista: (pairs: Array<{ monthKey: string; id: string }>, pagado: boolean) => Promise<void>;
   resetTarifario: () => Promise<void>;
   /** Actualiza el valor de todos los servicios registrados con las tarifas dadas (los manuales no se tocan). */
   recalcularServicios: (t: Tarifario) => Promise<{ servicios: number; diferencia: number }>;
@@ -125,6 +131,8 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     loadAdminRaw,
     loadMonth,
     loadTarifarioOrSeed,
+    loadTarifarioCostoOrSeed,
+    saveTarifarioCosto,
     restoreBackup,
     saveAdmin,
     saveMonth,
@@ -137,6 +145,7 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const [admin, setAdmin] = useState<AdminConfig | null>(null);
   const [tarifario, setTarifario] = useState<Tarifario | null>(null);
+  const [tarifarioCosto, setTarifarioCosto] = useState<Tarifario | null>(null);
   const [contract, setContract] = useState(() => applyContractDates("2026-07-01", "2027-08-31"));
   // Los meses arrancan con la vigencia por defecto para que las pestañas de
   // Registros existan aunque la carga inicial falle (p. ej. tabla ausente).
@@ -190,8 +199,10 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     (async () => {
       try {
         const t = await loadTarifarioOrSeed();
+        const tc = await loadTarifarioCostoOrSeed().catch(() => null);
         if (!alive) return;
         setTarifario(t);
+        setTarifarioCosto(tc);
 
         let a = await loadAdminRaw();
         const nuevo = !a;
@@ -235,6 +246,28 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
           a.migraciones = [...(a.migraciones ?? []), MIG_VALOR];
           migrado = true;
         }
+        // Transporte AAA (una sola vez): fija el costo a contratistas de los servicios ya
+        // registrados con el tarifario de costo vigente (los nuevos lo fijan al guardarse).
+        const MIG_COSTO = "costo-contratista-v1";
+        if (ns === "transporte" && tc && !(a.migraciones ?? []).includes(MIG_COSTO)) {
+          try {
+            const meses = applyContractDates(a.contractStart || "2026-07-01", a.contractEnd || "").months;
+            for (const m of meses) {
+              const arr = await loadMonth(m.key);
+              let cambia = false;
+              const next = arr.map((sv) => {
+                if (sv.costoContratista !== undefined && String(sv.costoContratista).trim() !== "") return sv;
+                const c = costoCalculado(sv, t, tc);
+                if (c === null) return sv;
+                cambia = true;
+                return { ...sv, costoContratista: String(c) };
+              });
+              if (cambia) await saveMonth(m.key, next);
+            }
+            a.migraciones = [...(a.migraciones ?? []), MIG_COSTO];
+            migrado = true;
+          } catch { /* se reintenta en la próxima carga */ }
+        }
         if (nuevo || seeded || contratoAlq || migrado) await saveAdmin(a).catch(() => undefined);
         if (!alive) return;
         setAdmin(a);
@@ -269,6 +302,10 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
       const meta = await kvMeta();
       const prev = metaRef.current;
       const cambio = (k: string) => (meta[k] ?? "") !== (prev[k] ?? "");
+      if (ns === "transporte" && cambio("tarifario_costo")) {
+        const tc = await loadTarifarioCostoOrSeed().catch(() => null);
+        if (tc) setTarifarioCosto(tc);
+      }
       if (cambio("adminconfig")) {
         const a = await loadAdminRaw();
         if (a) { setAdmin(a); await applyAdminContract(a, false); }
@@ -421,6 +458,35 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     }
   }, [tarifario]);
 
+  const saveTarifarioCostoCfg = useCallback(async (tc: Tarifario) => {
+    const prev = tarifarioCosto;
+    setTarifarioCosto(tc);
+    setSaving(true);
+    try {
+      await saveTarifarioCosto(tc);
+    } catch (e) {
+      setTarifarioCosto(prev);
+      throw e;
+    } finally {
+      setSaving(false);
+    }
+  }, [tarifarioCosto, saveTarifarioCosto]);
+
+  const marcarPagadoContratista = useCallback(
+    async (pairs: Array<{ monthKey: string; id: string }>, pagado: boolean) => {
+      const porMes = new Map<string, Set<string>>();
+      pairs.forEach(({ monthKey, id }) => porMes.set(monthKey, new Set([...(porMes.get(monthKey) ?? []), id])));
+      const d = new Date();
+      const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      for (const [mk, ids] of porMes) {
+        const prev = servicesByMonth[mk] ?? [];
+        const next = prev.map((sv) => (ids.has(sv.id) ? { ...sv, pagadoContratista: pagado, pagadoContratistaAt: pagado ? hoy : undefined } : sv));
+        await persistMonth(mk, next, prev);
+      }
+    },
+    [servicesByMonth, persistMonth],
+  );
+
   const resetTarifario = useCallback(async () => {
     await saveTarifarioCfg(tarifarioDefaultDe(ns));
   }, [saveTarifarioCfg, ns]);
@@ -517,6 +583,7 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     saving,
     admin,
     tarifario,
+    tarifarioCosto,
     months: visibleMonths,
     allMonths: months,
     servicesByMonth,
@@ -535,6 +602,8 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
     deleteService,
     toggleInvoiced,
     markInvoiced,
+    saveTarifarioCostoCfg,
+    marcarPagadoContratista,
     importServices,
     markPrefacturada,
     saveTarifarioCfg,

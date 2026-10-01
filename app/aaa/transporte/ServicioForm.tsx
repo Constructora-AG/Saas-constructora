@@ -18,7 +18,7 @@ import type { UseTransporte } from "@/lib/transporte/useTransporte";
 import type { AdjuntoFile, AdminConfig, MonthInfo, NumLike, Servicio, Tarifario } from "@/lib/transporte/model";
 import { areaAAADe, aprobadorDe, num, nuevoServicioId } from "@/lib/transporte/model";
 import { FICHA_MODULO, type ModuloContrato } from "@/lib/transporte/constants";
-import { autoRecargos, computeValor, fdate, fmtCOP, respHours, sugerenciasCampo } from "@/lib/transporte/logic";
+import { autoRecargos, computeValor, costoCalculado, fdate, fmtCOP, respHours, sugerenciasCampo } from "@/lib/transporte/logic";
 import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
 
@@ -230,6 +230,22 @@ export function ServicioForm({
   const [error, setError] = useState<string | null>(null);
   const [avisos, setAvisos] = useState<string[]>([]);
   const [guardando, setGuardando] = useState(false);
+  // Transporte AAA — costo a contratistas (USO INTERNO, nunca en PDF ni exportaciones).
+  // Vacío = automático (tarifa de costo de la ruta + recargos); con valor = fijado a mano.
+  // Al editar, un costo guardado distinto del calculado hoy se conserva (quedó fijado al registrar).
+  const esTransporte = t.ns === "transporte";
+  const [costoTxt, setCostoTxt] = useState<string>(() => {
+    if (!editing || editing.costoContratista == null || String(editing.costoContratista).trim() === "") return "";
+    const calc = costoCalculado(editing, t.tarifario, t.tarifarioCosto);
+    return calc !== null && calc === num(editing.costoContratista) ? "" : String(editing.costoContratista);
+  });
+  const [pagadoC, setPagadoC] = useState<boolean>(!!editing?.pagadoContratista);
+  const hoyIso = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+  const [fechaPagoC, setFechaPagoC] = useState<string>(editing?.pagadoContratistaAt?.slice(0, 10) || hoyIso);
+  const costoAuto = esTransporte
+    ? costoCalculado({ tarifaCategoria: f.tarifaCategoria || null, tarifaRuta: f.tarifaRuta || null, value: f.value, recargoNocturno: f.recNocturno, recargoDominical: f.recDominical } as Servicio, t.tarifario, t.tarifarioCosto)
+    : null;
+  const costoFinal = costoTxt.trim() !== "" ? num(costoTxt) : costoAuto;
   // Flags touched: nuevos/duplicados arrancan false; edición arranca true (SPEC §4.2).
   const touchedRef = useRef({ noct: !!editing, dom: !!editing });
 
@@ -456,6 +472,11 @@ export function ServicioForm({
       approvalFile: approvalSubido,
       tarifaCategoria: manual ? null : f.tarifaCategoria,
       tarifaRuta: manual ? null : f.tarifaRuta || null,
+      ...(esTransporte ? {
+        costoContratista: costoFinal !== null ? String(costoFinal) : undefined,
+        pagadoContratista: pagadoC,
+        pagadoContratistaAt: pagadoC ? (fechaPagoC || hoyIso) : undefined,
+      } : {}),
       ...r.stamp, // approvedBy / approvedByKey / approvedAt (siempre se re-aprueba)
     };
 
@@ -723,6 +744,40 @@ export function ServicioForm({
                 </label>
               )}
             </div>
+
+            {esTransporte && (
+              <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: "10px 12px", display: "grid", gap: 8, background: "var(--surface-2)" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>Pago al contratista <span className="muted" style={{ fontWeight: 400 }}>· uso interno, no sale en PDF ni exportaciones</span></div>
+                <div style={gridAuto}>
+                  <label className="field">Costo contratista (neto, COP)
+                    <input className="input num" type="number" step="1" min="0" value={costoTxt}
+                      placeholder={costoAuto !== null ? String(costoAuto) : "Digita el costo (tarifa manual)"}
+                      onChange={(e) => setCostoTxt(e.target.value)} />
+                  </label>
+                  <label className="field">Margen del servicio
+                    <input className="input num" readOnly style={{ background: "var(--surface)", color: "var(--text-2)" }}
+                      value={costoFinal !== null ? `${fmtCOP(num(f.value) - costoFinal)}${num(f.value) > 0 ? ` (${(((num(f.value) - costoFinal) / num(f.value)) * 100).toFixed(1)}%)` : ""}` : "—"} />
+                  </label>
+                </div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {costoTxt.trim() !== ""
+                    ? "Costo fijado a mano. Bórralo para usar la tarifa de costo de la ruta."
+                    : costoAuto !== null ? `Automático: tarifa de costo de la ruta${f.recNocturno || f.recDominical ? " + recargos" : ""} = ${fmtCOP(costoAuto)}.` : "Tarifa manual: digita el costo que se le paga al contratista."}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13 }}>
+                    <input type="checkbox" checked={pagadoC} onChange={(e) => setPagadoC(e.target.checked)} />
+                    Pagado al contratista
+                  </label>
+                  {pagadoC && (
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13 }}>
+                      Fecha de pago
+                      <input className="input" type="date" value={fechaPagoC} onChange={(e) => setFechaPagoC(e.target.value)} style={{ width: 160 }} />
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
 
             {seccion("Evidencia fotográfica y soportes")}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px" }}>

@@ -513,3 +513,55 @@ export function sugerenciasCampo(
     .sort((a, b) => b.usos - a.usos || a.label.localeCompare(b.label, "es"))
     .map((x) => x.label);
 }
+
+// ── Costo a contratistas (Transporte AAA, uso interno) ──────────────
+
+/**
+ * Costo neto del servicio según el tarifario de costo: costo de la ruta + costo
+ * de los recargos cobrados (deducidos del tarifario de venta). null si la
+ * tarifa es manual o la ruta no tiene costo.
+ */
+export function costoCalculado(s: Servicio, venta: Tarifario | null, costo: Tarifario | null): number | null {
+  if (!costo) return null;
+  const ruta = findRuta(findCategoria(costo, s.tarifaCategoria), s.tarifaRuta);
+  if (!ruta || !(num(ruta.unitario) > 0)) return null;
+  const rec = venta ? recargosCobrados(s, venta) : { nocturno: !!s.recargoNocturno, dominical: !!s.recargoDominical };
+  return num(ruta.unitario) + (rec.nocturno ? num(costo.recargos.nocturno) : 0) + (rec.dominical ? num(costo.recargos.dominicalFestivo) : 0);
+}
+
+/** Costo del servicio: el fijado en el registro o, si no tiene, el calculado. null = sin costo definido. */
+export function costoServicio(s: Servicio, venta: Tarifario | null, costo: Tarifario | null): number | null {
+  if (s.costoContratista !== undefined && s.costoContratista !== null && String(s.costoContratista).trim() !== "") return num(s.costoContratista);
+  return costoCalculado(s, venta, costo);
+}
+
+export interface TotalesContratista {
+  servicios: number;
+  ingreso: number;
+  costo: number;
+  margen: number;
+  pagado: number;
+  porPagar: number;
+  sinCosto: number;
+}
+
+/**
+ * Totales internos de contratistas para un conjunto de servicios. Con `hasta`
+ * ('AAAA-MM-DD') es un corte a esa fecha: solo cuenta servicios ejecutados hasta
+ * ese día y como pagados los que tienen fecha de pago hasta ese día.
+ */
+export function totalesContratista(items: Servicio[], venta: Tarifario | null, costo: Tarifario | null, hasta?: string): TotalesContratista {
+  const t: TotalesContratista = { servicios: 0, ingreso: 0, costo: 0, margen: 0, pagado: 0, porPagar: 0, sinCosto: 0 };
+  for (const s of items) {
+    if (hasta && s.date > hasta) continue;
+    t.servicios += 1;
+    t.ingreso += num(s.value);
+    const c = costoServicio(s, venta, costo);
+    if (c === null) { t.sinCosto += 1; continue; }
+    t.costo += c;
+    const pagadoAlCorte = !!s.pagadoContratista && (!hasta || !s.pagadoContratistaAt || s.pagadoContratistaAt.slice(0, 10) <= hasta);
+    if (pagadoAlCorte) t.pagado += c; else t.porPagar += c;
+  }
+  t.margen = t.ingreso - t.costo;
+  return t;
+}

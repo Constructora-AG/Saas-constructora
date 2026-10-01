@@ -14,6 +14,7 @@ import {
   SAVE_WARN_CHARS,
   STORAGE_TIMEOUT_MS,
   tarifarioDefaultDe,
+  TARIFARIO_COSTO_DEFAULT,
   type ModuloContrato,
 } from "./constants";
 import type { AdminConfig, Backup, MonthInfo, Servicio, Tarifario } from "./model";
@@ -57,6 +58,8 @@ async function api<T>(path: string, init?: RequestInit, etiqueta = "storage", ms
 
 export const KEY_ADMIN = "adminconfig";
 export const KEY_TARIFARIO = "tarifario";
+/** Transporte AAA — tarifario de costo a contratistas (uso interno). */
+export const KEY_TARIFARIO_COSTO = "tarifario_costo";
 export const monthStorageKey = (monthKey: string) => `services:${monthKey}`;
 
 /** Peso de un mes en caracteres de JSON y MB, con banderas de aviso/bloqueo. */
@@ -221,6 +224,23 @@ export function storageFor(ns: ModuloNs) {
     await kvSet(KEY_TARIFARIO, JSON.stringify(t));
   }
 
+  /** Tarifario de costo a contratistas (solo Transporte AAA); si no existe se siembra el del Formato 2. */
+  async function loadTarifarioCostoOrSeed(): Promise<Tarifario | null> {
+    if (ns !== "transporte") return null;
+    const raw = await kvGet(KEY_TARIFARIO_COSTO);
+    try {
+      const t = raw ? (JSON.parse(raw) as Tarifario) : null;
+      if (t && Array.isArray(t.categorias)) return t;
+    } catch { /* se siembra de nuevo */ }
+    const d = JSON.parse(JSON.stringify(TARIFARIO_COSTO_DEFAULT)) as Tarifario;
+    await kvSet(KEY_TARIFARIO_COSTO, JSON.stringify(d)).catch(() => undefined);
+    return d;
+  }
+
+  async function saveTarifarioCosto(t: Tarifario): Promise<void> {
+    await kvSet(KEY_TARIFARIO_COSTO, JSON.stringify(t));
+  }
+
   /**
    * Carga el tarifario y, si no existe, escribe y devuelve el del módulo.
    * Alquiler / Emergencia: si quedó sembrado con el de Transporte AAA (versiones
@@ -242,7 +262,7 @@ export function storageFor(ns: ModuloNs) {
 
   /** Construye el payload de backup: adminconfig + tarifario + todos los services:*. */
   async function buildBackup(months: MonthInfo[]): Promise<Backup> {
-    const wanted = new Set<string>([KEY_ADMIN, KEY_TARIFARIO, ...months.map((m) => monthStorageKey(m.key))]);
+    const wanted = new Set<string>([KEY_ADMIN, KEY_TARIFARIO, ...(ns === "transporte" ? [KEY_TARIFARIO_COSTO] : []), ...months.map((m) => monthStorageKey(m.key))]);
     const listed = await kvList().catch(() => [] as string[]);
     listed.forEach((k) => {
       if (k === KEY_ADMIN || k === KEY_TARIFARIO || k.startsWith("services:")) wanted.add(k);
@@ -262,6 +282,6 @@ export function storageFor(ns: ModuloNs) {
     }
   }
 
-  return { kvGet, kvSet, kvDelete, kvMeta, kvList, loadMonth, saveMonth, loadAdminRaw, saveAdmin, loadTarifario, saveTarifario, loadTarifarioOrSeed, buildBackup, restoreBackup };
+  return { kvGet, kvSet, kvDelete, kvMeta, kvList, loadMonth, saveMonth, loadAdminRaw, saveAdmin, loadTarifario, saveTarifario, loadTarifarioOrSeed, loadTarifarioCostoOrSeed, saveTarifarioCosto, buildBackup, restoreBackup };
 }
 export type ModuloStorage = ReturnType<typeof storageFor>;

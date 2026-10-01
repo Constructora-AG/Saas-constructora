@@ -18,7 +18,7 @@ import { IconDownload } from "../../icons";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { Servicio, Tarifario } from "@/lib/transporte/model";
 import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
-import { fdate, findCategoria, findRuta, fmtCOP, recargosCobrados, totales } from "@/lib/transporte/logic";
+import { costoServicio, fdate, findCategoria, findRuta, fmtCOP, recargosCobrados, totales, totalesContratista } from "@/lib/transporte/logic";
 import { agruparItems, zonaDeTarifa } from "@/lib/aaa/catalogo";
 import { adjuntoSrc, openAttachment } from "@/lib/transporte/media";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
@@ -39,7 +39,7 @@ const COLS_KEY = "transporte.registros.columnas.v1";
 
 type ColId =
   | "fecha" | "tipo" | "area" | "placa" | "cap" | "conductor" | "operario" | "equipo" | "destino"
-  | "valor" | "peajes" | "soportes" | "vobo" | "factura" | "aprobo" | "acciones";
+  | "valor" | "peajes" | "soportes" | "vobo" | "factura" | "costo" | "margen" | "pagoC" | "aprobo" | "acciones";
 interface Columna { id: ColId; label: string; fija?: boolean; w: number; num?: boolean }
 
 /** Fecha compacta para la tabla: "01 sep 2026". */
@@ -69,10 +69,16 @@ const COLUMNAS: ReadonlyArray<Columna> = [
   { id: "soportes", label: "Soportes", w: 11 },
   { id: "vobo", label: "V°B°", w: 4 },
   { id: "factura", label: "Factura", w: 7 },
+  // Transporte AAA — uso interno (no salen en PDF ni exportaciones)
+  { id: "costo", label: "Costo contratista", w: 9, num: true },
+  { id: "margen", label: "Margen", w: 8, num: true },
+  { id: "pagoC", label: "Pago contratista", w: 8 },
   { id: "aprobo", label: "Aprobó", w: 7 },
   { id: "acciones", label: "", fija: true, w: 4 },
 ];
 const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "operario", "peajes", "aprobo"];
+/** Columnas internas de costo a contratistas: solo Transporte AAA. */
+const SOLO_TRANSPORTE = new Set<ColId>(["costo", "margen", "pagoC"]);
 
 /** Descripción de un servicio como ítem de prefactura. */
 const descripcionServicio = (s: Servicio) =>
@@ -139,6 +145,10 @@ export function RegistrosView({ t }: ViewProps) {
   const conIva = FICHA_MODULO[t.ns].registros;
   const valorDe = (s: Servicio) => num(s.value) + (conIva ? num(s.valorIva) : 0);
   const valorMes = conIva ? items.reduce((a, s) => a + valorDe(s), 0) : tot.valor;
+  // Transporte AAA — costo a contratistas del mes (uso interno)
+  const esTransporte = t.ns === "transporte";
+  const costoDe = (s: Servicio) => costoServicio(s, t.tarifario, t.tarifarioCosto);
+  const totC = useMemo(() => totalesContratista(items, t.tarifario, t.tarifarioCosto), [items, t.tarifario, t.tarifarioCosto]);
   const diasMes = mes ? new Date(mes.year, mes.month + 1, 0).getDate() : 0;
 
   // Paginación (10 por página); vuelve a la página 1 al cambiar de mes
@@ -147,7 +157,8 @@ export function RegistrosView({ t }: ViewProps) {
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = useMemo(() => items.slice((paginaActual - 1) * PAGE_SIZE, paginaActual * PAGE_SIZE), [items, paginaActual]);
 
-  const columnas = useMemo(() => COLUMNAS.filter((c) => !ocultas.has(c.id)), [ocultas]);
+  const colsModulo = useMemo(() => COLUMNAS.filter((c) => t.ns === "transporte" || !SOLO_TRANSPORTE.has(c.id)), [t.ns]);
+  const columnas = useMemo(() => colsModulo.filter((c) => !ocultas.has(c.id)), [colsModulo, ocultas]);
   const anchoTotal = columnas.reduce((a, c) => a + c.w, 0);
   const ver = (id: ColId) => !ocultas.has(id);
   const toggleCol = (id: ColId) => {
@@ -258,6 +269,16 @@ export function RegistrosView({ t }: ViewProps) {
     }
   };
 
+  const pagoContratista = async (s: Servicio) => {
+    if (!mes) return;
+    setRowError(null);
+    try {
+      await t.marcarPagadoContratista([{ monthKey: mes.key, id: s.id }], !s.pagadoContratista);
+    } catch (e) {
+      setRowError(e instanceof Error ? e.message : "No se pudo cambiar el pago al contratista.");
+    }
+  };
+
   const ordenPdf = async (s: Servicio) => {
     setRowError(null);
     setMenuId(null);
@@ -352,7 +373,7 @@ export function RegistrosView({ t }: ViewProps) {
         <span>{FICHA_MODULO[t.ns].registros ? "Registros" : "Servicios"} de {mes.label}</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
         <span className="muted" style={{ fontSize: 12.5, textTransform: "none", letterSpacing: 0 }}>
-          Servicios: {tot.servicios} · Valor del mes{conIva ? " (con IVA)" : ""}: {fmtCOP(valorMes)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
+          Servicios: {tot.servicios}{esTransporte ? ` · Costo contratistas: ${fmtCOP(totC.costo)} (por pagar ${fmtCOP(totC.porPagar)}) · Margen: ${fmtCOP(totC.margen)}` : ""} · Valor del mes{conIva ? " (con IVA)" : ""}: {fmtCOP(valorMes)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
         </span>
         <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>{FICHA_MODULO[t.ns].registros ? "+ Nuevo registro" : "+ Agregar servicio"}</button>
       </div>
@@ -374,12 +395,12 @@ export function RegistrosView({ t }: ViewProps) {
         </button>
         <div className="colpick" ref={colPickRef}>
           <button className={`btn btn-ghost btn-sm${colPickOpen ? " active" : ""}`} onClick={() => setColPickOpen((v) => !v)} title="Mostrar u ocultar columnas">
-            ☷ Columnas{ocultas.size > 0 && <span className="seg-count">{COLUMNAS.length - ocultas.size}/{COLUMNAS.length}</span>}
+            ☷ Columnas{columnas.length < colsModulo.length && <span className="seg-count">{columnas.length}/{colsModulo.length}</span>}
           </button>
           {colPickOpen && (
             <div className="colpick-menu">
               <div className="colpick-title">Columnas visibles</div>
-              {COLUMNAS.filter((c) => c.label).map((c) => (
+              {colsModulo.filter((c) => c.label).map((c) => (
                 <label key={c.id} className={`colpick-item${c.fija ? " fija" : ""}`}>
                   <input type="checkbox" checked={ver(c.id)} disabled={!!c.fija} onChange={() => toggleCol(c.id)} />
                   {c.label}
@@ -546,6 +567,30 @@ export function RegistrosView({ t }: ViewProps) {
                       >
                         {s.invoiced ? "Facturado" : "Pendiente"}
                       </button>
+                    </td>
+                  )}
+                  {esTransporte && ver("costo") && (
+                    <td className="num" style={{ textAlign: "right" }}>
+                      {costoDe(s) !== null ? <span className="nowrap">{fmtCOP(costoDe(s))}</span> : <span className="muted" title="Tarifa manual: edita el servicio para digitar el costo">Sin costo</span>}
+                    </td>
+                  )}
+                  {esTransporte && ver("margen") && (() => {
+                    const c = costoDe(s);
+                    const m = c !== null ? num(s.value) - c : null;
+                    return <td className="num" style={{ textAlign: "right", color: m !== null && m < 0 ? "var(--high)" : undefined }}>{m !== null ? <span className="nowrap">{fmtCOP(m)}</span> : "—"}</td>;
+                  })()}
+                  {esTransporte && ver("pagoC") && (
+                    <td>
+                      {costoDe(s) !== null ? (
+                        <button
+                          className={`badge ${s.pagadoContratista ? "ok" : "warn"}`}
+                          style={chipBtn}
+                          onClick={() => void pagoContratista(s)}
+                          title={s.pagadoContratista ? `Pagado el ${s.pagadoContratistaAt ? fdate(s.pagadoContratistaAt.slice(0, 10)) : "—"} · clic para marcar como por pagar` : "Clic para marcar como pagado hoy (la fecha se corrige en Editar)"}
+                        >
+                          {s.pagadoContratista ? "Pagado" : "Por pagar"}
+                        </button>
+                      ) : <span className="muted">—</span>}
                     </td>
                   )}
                   {ver("aprobo") && <td><span className="clamp">{aprobadorDe(s) || "—"}</span></td>}

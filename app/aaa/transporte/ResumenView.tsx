@@ -26,6 +26,8 @@ import {
   fmtMes,
   fmtShort,
   totales,
+  totalesContratista,
+  fdate,
 } from "@/lib/transporte/logic";
 import { num, type Servicio } from "@/lib/transporte/model";
 import { exportServicios, type ExportFormat } from "@/lib/transporte/export";
@@ -135,6 +137,19 @@ export function ResumenView({ t }: ViewProps) {
   }, [allItems, valorEjecutado]);
 
   const ejecucionMensual = esAlquiler ? alq.meses : ejecucionTransporte;
+
+  // Transporte AAA — pago a contratistas (uso interno) con corte a una fecha:
+  // ejecutado y costo de los servicios hasta ese día; pagado según la fecha de pago.
+  const [corte, setCorte] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
+  const contr = useMemo(() => totalesContratista(allItems, t.tarifario, t.tarifarioCosto, corte || undefined), [allItems, t.tarifario, t.tarifarioCosto, corte]);
+  const contrMeses = useMemo(
+    () =>
+      t.ns !== "transporte" ? [] :
+      t.months
+        .map((m) => ({ key: m.key, label: m.label, tot: totalesContratista(t.servicesByMonth[m.key] ?? [], t.tarifario, t.tarifarioCosto, corte || undefined) }))
+        .filter((m) => m.tot.servicios > 0),
+    [t.ns, t.months, t.servicesByMonth, t.tarifario, t.tarifarioCosto, corte],
+  );
   const referenciaMes = esAlquiler ? alq.promedioMes : presupuestoMes;
   const maxMes = Math.max(1, referenciaMes, ...ejecucionMensual.map((m) => m.real));
 
@@ -370,6 +385,83 @@ export function ResumenView({ t }: ViewProps) {
         </div>
       </div>
 
+        </>
+      )}
+
+      {/* Transporte AAA — pago a contratistas (USO INTERNO: no va en PDF ni exportaciones) */}
+      {t.ns === "transporte" && (
+        <>
+          <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span>Pago a contratistas <span className="muted" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>· uso interno</span></span>
+            <span style={{ flex: 1 }} />
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, textTransform: "none", letterSpacing: 0, fontWeight: 400, fontSize: 13 }}>
+              Corte al
+              <input className="input" type="date" value={corte} onChange={(e) => setCorte(e.target.value)} style={{ width: 160 }} />
+            </label>
+          </div>
+          <div className="kpis">
+            <div className="kpi">
+              <div className="kpi-head"><span className="kpi-ico s-ok"><IconChart /></span><span className="kpi-label">Valor ejecutado al corte</span></div>
+              <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(contr.ingreso)}</div>
+              <div className="kpi-foot">{contr.servicios.toLocaleString("es-CO")} servicio(s) hasta el {fdate(corte)}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-head"><span className="kpi-ico s-brand"><IconCoins /></span><span className="kpi-label">Saldo del contrato al corte</span></div>
+              <div className="kpi-value" style={{ fontSize: 19 }}>{hayValor ? COP.format(valorContrato - contr.ingreso) : "—"}</div>
+              <div className="kpi-foot">{hayValor ? `Valor del contrato ${COP.format(valorContrato)} − ejecutado` : "Valor del contrato sin definir"}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-head"><span className="kpi-ico s-brand"><IconWallet /></span><span className="kpi-label">Costo de lo ejecutado</span></div>
+              <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(contr.costo)}</div>
+              <div className="kpi-foot">Neto a contratistas · {(contr.servicios - contr.sinCosto).toLocaleString("es-CO")} servicio(s) con costo{contr.sinCosto > 0 ? ` · ${contr.sinCosto} sin costo` : ""}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-head"><span className="kpi-ico s-ok"><IconCheck /></span><span className="kpi-label">Pagado a contratistas al corte</span></div>
+              <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(contr.pagado)}</div>
+              <div className="kpi-foot">{contr.costo > 0 ? `${((contr.pagado / contr.costo) * 100).toFixed(1)}% del costo` : "—"}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-head"><span className={`kpi-ico ${contr.porPagar > 0 ? "s-warn" : "s-ok"}`}><IconCoins /></span><span className="kpi-label">Por pagar a contratistas</span></div>
+              <div className="kpi-value" style={{ fontSize: 19, color: contr.porPagar > 0 ? "var(--warn)" : undefined }}>{COP.format(contr.porPagar)}</div>
+              <div className="kpi-foot">Se le debe al contratista por lo ejecutado</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-head"><span className="kpi-ico s-ok"><IconChart /></span><span className="kpi-label">Margen bruto</span></div>
+              <div className="kpi-value" style={{ fontSize: 19, color: contr.margen < 0 ? "var(--high)" : undefined }}>{COP.format(contr.margen)}</div>
+              <div className="kpi-foot">{contr.ingreso > 0 ? `${((contr.margen / contr.ingreso) * 100).toFixed(1)}% del valor ejecutado` : "—"}</div>
+            </div>
+          </div>
+          <div className="table-wrap" style={{ marginTop: 10 }}>
+            <table className="clean" style={{ width: "100%" }}>
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th style={{ textAlign: "right" }}>Servicios</th>
+                  <th style={{ textAlign: "right" }}>Valor ejecutado</th>
+                  <th style={{ textAlign: "right" }}>Costo contratistas</th>
+                  <th style={{ textAlign: "right" }}>Margen</th>
+                  <th style={{ textAlign: "right" }}>Pagado</th>
+                  <th style={{ textAlign: "right" }}>Por pagar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contrMeses.map((m) => (
+                  <tr key={m.key}>
+                    <td><b>{m.label}</b></td>
+                    <td className="num" style={{ textAlign: "right" }}>{m.tot.servicios.toLocaleString("es-CO")}</td>
+                    <td className="num" style={{ textAlign: "right" }}>{COP.format(m.tot.ingreso)}</td>
+                    <td className="num" style={{ textAlign: "right" }}>{COP.format(m.tot.costo)}</td>
+                    <td className="num" style={{ textAlign: "right", color: m.tot.margen < 0 ? "var(--high)" : undefined }}>
+                      {COP.format(m.tot.margen)}{m.tot.ingreso > 0 ? <span className="muted"> · {((m.tot.margen / m.tot.ingreso) * 100).toFixed(1)}%</span> : null}
+                    </td>
+                    <td className="num" style={{ textAlign: "right" }}>{COP.format(m.tot.pagado)}</td>
+                    <td className="num" style={{ textAlign: "right", color: m.tot.porPagar > 0 ? "var(--warn)" : undefined }}>{COP.format(m.tot.porPagar)}</td>
+                  </tr>
+                ))}
+                {contrMeses.length === 0 && <tr><td colSpan={7} className="muted">Aún no hay servicios registrados.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 

@@ -201,6 +201,40 @@ export const TARIFARIO_DEFAULT: Tarifario = {
   ],
 };
 
+// ── Costo a contratistas (Transporte AAA) — USO INTERNO ────────────
+// «Formato 2 IS-04-2026 — Tarifas pago contratista»: valor NETO por viaje que
+// AG paga al contratista, con las mismas categorías y rutas del tarifario de
+// venta. Recargo nocturno y dominical/festivo: $50.000 c/u en todas las zonas.
+// Nunca va en PDF ni exportaciones: es información interna para gerencia.
+
+/** Costo neto por viaje según categoría/ruta (ids iguales a TARIFARIO_DEFAULT). */
+const COSTO_RUTA: Record<string, number> = {
+  "1.1": 300000,
+  "1.2": 450000,
+  "1.3": 450000,
+  "1.4": 450000,
+  "2.1": 450000,
+  "2.2": 550000,
+  "2.3": 550000,
+  "2.4": 550000,
+  "3.1": 850000,
+  "3.2": 1100000,
+  "3.3": 1250000,
+  "3.4": 1250000,
+  "4.1": 1100000,
+  "4.2": 1100000,
+  "4.3": 1250000,
+  "4.4": 1250000,
+};
+export const TARIFARIO_COSTO_DEFAULT: Tarifario = {
+  recargos: { nocturno: 50000, dominicalFestivo: 50000 },
+  categorias: TARIFARIO_DEFAULT.categorias.map((c) => ({
+    ...c,
+    rutas: c.rutas.map((r) => ({ ...r, unitario: COSTO_RUTA[r.id] ?? 0 })),
+  })),
+};
+
+
 // ── Festivos Ley Emiliani (21 fechas, no editables — §1.4) ─────────
 
 export const FESTIVOS_DEFAULT: FestivoCustom[] = [

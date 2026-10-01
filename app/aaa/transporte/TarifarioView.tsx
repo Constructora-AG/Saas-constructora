@@ -36,10 +36,15 @@ export function TarifarioView({ t }: ViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
+  // Transporte AAA — costo a contratistas por ruta (uso interno), editable junto a la venta.
+  const [draftCosto, setDraftCosto] = useState<Draft | null>(null);
+  const conCosto = t.ns === "transporte" && !!t.tarifarioCosto;
+
   // Sincroniza el borrador con el tarifario vivo mientras no haya edición local.
   useEffect(() => {
     if (t.tarifario && !dirty) setDraft(draftFrom(t.tarifario));
-  }, [t.tarifario, dirty]);
+    if (t.tarifarioCosto && !dirty) setDraftCosto(draftFrom(t.tarifarioCosto));
+  }, [t.tarifario, t.tarifarioCosto, dirty]);
 
   // Servicios registrados cuyo valor no coincide con el tarifario vigente (solo Transporte:
   // en Contrato de Alquiler el valor sale de horas máquina, no de la ruta).
@@ -62,6 +67,16 @@ export function TarifarioView({ t }: ViewProps) {
     setOk(null);
     setDraft((d) => (d ? { ...d, valores: { ...d.valores, [key]: v } } : d));
   };
+  const setCosto = (key: string, v: string) => {
+    setDirty(true);
+    setOk(null);
+    setDraftCosto((d) => (d ? { ...d, valores: { ...d.valores, [key]: v } } : d));
+  };
+  const setRecargoCosto = (campo: "recNocturno" | "recDominical", v: string) => {
+    setDirty(true);
+    setOk(null);
+    setDraftCosto((d) => (d ? { ...d, [campo]: v } : d));
+  };
   const setRecargo = (campo: "recNocturno" | "recDominical", v: string) => {
     setDirty(true);
     setOk(null);
@@ -80,6 +95,16 @@ export function TarifarioView({ t }: ViewProps) {
     };
     try {
       await t.saveTarifarioCfg(nuevo);
+      if (conCosto && draftCosto && t.tarifarioCosto) {
+        const tc = t.tarifarioCosto;
+        await t.saveTarifarioCostoCfg({
+          recargos: { nocturno: num(draftCosto.recNocturno), dominicalFestivo: num(draftCosto.recDominical) },
+          categorias: tc.categorias.map((c) => ({
+            ...c,
+            rutas: c.rutas.map((r) => ({ ...r, unitario: num(draftCosto.valores[`${c.id}|${r.id}`] ?? r.unitario) })),
+          })),
+        });
+      }
       setDirty(false);
       setOk("Tarifario guardado. Los nuevos servicios usarán estos valores.");
       if (t.ns === "transporte" && recalcularValores(t.servicesByMonth, nuevo).servicios > 0) {
@@ -128,6 +153,7 @@ export function TarifarioView({ t }: ViewProps) {
       <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>
         Tarifas del pliego para el cálculo automático del valor de cada servicio. Edítalas si hay un
         otrosí u OFAC. Los cambios se guardan para todo el equipo.
+        {conCosto && " La columna «Costo contratista» es el valor neto que AG paga por viaje (uso interno: no sale en PDF ni exportaciones); un cambio aplica a los servicios nuevos, los ya registrados conservan su costo."}
       </p>
 
       {tarifario.categorias.length === 0 && (
@@ -158,13 +184,22 @@ export function TarifarioView({ t }: ViewProps) {
             <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
               {num(cat.capacidad) > 0 ? `Capacidad mínima sugerida: ${num(cat.capacidad)} Ton` : "Valores unitarios sin IVA (HR = hora máquina)"}
             </div>
+            {conCosto && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px", gap: 10, fontSize: 11.5, marginBottom: 6 }} className="muted">
+                <span />
+                <span style={{ textAlign: "right" }}>Venta (pliego)</span>
+                <span style={{ textAlign: "right" }}>Costo contratista</span>
+              </div>
+            )}
             <div style={{ display: "grid", gap: 10 }}>
               {cat.rutas.map((ruta) => {
                 const key = `${cat.id}|${ruta.id}`;
+                const venta = num(draft.valores[key]);
+                const costo = conCosto && draftCosto ? num(draftCosto.valores[key]) : 0;
                 return (
                   <div
                     key={ruta.id}
-                    style={{ display: "grid", gridTemplateColumns: "1fr 150px", gap: 10, alignItems: "center" }}
+                    style={{ display: "grid", gridTemplateColumns: conCosto ? "1fr 110px 110px" : "1fr 150px", gap: 10, alignItems: "center" }}
                   >
                     <span style={{ fontSize: 13, color: "var(--text-2)" }}>
                       <b>{ruta.id}</b> · {ruta.label}
@@ -179,6 +214,19 @@ export function TarifarioView({ t }: ViewProps) {
                       style={{ textAlign: "right" }}
                       aria-label={`Valor unitario ruta ${ruta.id}`}
                     />
+                    {conCosto && draftCosto && (
+                      <input
+                        className="input num"
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={draftCosto.valores[key] ?? ""}
+                        onChange={(e) => setCosto(key, e.target.value)}
+                        style={{ textAlign: "right", background: "var(--surface-2)" }}
+                        aria-label={`Costo contratista ruta ${ruta.id}`}
+                        title={costo > 0 ? `Margen ${fmtCOP(venta - costo)}${venta > 0 ? ` (${(((venta - costo) / venta) * 100).toFixed(1)}%)` : ""}` : "Sin costo"}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -217,6 +265,19 @@ export function TarifarioView({ t }: ViewProps) {
             <div className="muted" style={{ fontSize: 12 }}>
               Vigentes: nocturno {fmtCOP(draft.recNocturno)} · dominical/festivo {fmtCOP(draft.recDominical)}
             </div>
+            {conCosto && draftCosto && (
+              <>
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 6 }}>Costo de recargos al contratista <span className="muted" style={{ fontWeight: 400 }}>· uso interno</span></div>
+                <label className="field">Costo recargo nocturno (COP)
+                  <input className="input num" type="number" min={0} step={1} value={draftCosto.recNocturno}
+                    onChange={(e) => setRecargoCosto("recNocturno", e.target.value)} style={{ textAlign: "right", background: "var(--surface-2)" }} />
+                </label>
+                <label className="field">Costo recargo dominical y festivo (COP)
+                  <input className="input num" type="number" min={0} step={1} value={draftCosto.recDominical}
+                    onChange={(e) => setRecargoCosto("recDominical", e.target.value)} style={{ textAlign: "right", background: "var(--surface-2)" }} />
+                </label>
+              </>
+            )}
           </div>
         </div>
       </div>

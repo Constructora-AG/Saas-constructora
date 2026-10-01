@@ -169,6 +169,14 @@ export interface Servicio {
   facturaAGF?: string;
   /** Otro Sí / Emergencia: clave de la fila de la conciliación de volquetas (fecha|placa|grupo|zona|n). */
   conciliacion?: string;
+  /**
+   * Transporte AAA — USO INTERNO (nunca en PDF ni exportaciones): costo NETO que AG
+   * paga al contratista por el servicio (se fija al registrar: tarifa de costo de
+   * la ruta + recargos, o digitado si la tarifa es manual) y si ya se le pagó.
+   */
+  costoContratista?: NumLike;
+  pagadoContratista?: boolean;
+  pagadoContratistaAt?: string; // fecha del pago 'AAAA-MM-DD' (o ISO en datos viejos)
   /** N° de la prefactura (PF0001…) en la que quedó incluido el servicio; null/undefined = sin prefacturar. */
   prefactura?: string | null;
   /** Recargos aplicados (SPEC §3.3): se persisten para precargar los checkboxes al editar. */
