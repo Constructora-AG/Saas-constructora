@@ -16,6 +16,8 @@ interface NavItem {
   modulo: string;
   /** Sub-módulos (se muestran anidados bajo el ítem). */
   children?: NavItem[];
+  /** Botón «+» al lado del ítem (p. ej. crear un contrato nuevo en Proyecto Triple A). */
+  accion?: { href: string; title: string; modulo: string };
 }
 
 const NAV: { section: string; items: NavItem[] }[] = [
@@ -40,6 +42,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       {
         href: "/aaa", label: "Proyecto Triple A", icon: <IconBuilding />, modulo: "aaa",
+        accion: { href: "/aaa/contratos", title: "Crear un contrato nuevo", modulo: "contratos" },
         children: [
           { href: "/aaa/consolidado", label: "Consolidado", icon: null, modulo: "aaa" },
           { href: "/aaa/alquiler", label: "Contrato Alquiler (Old)", icon: null, modulo: "aaa" },
@@ -48,7 +51,6 @@ const NAV: { section: string; items: NavItem[] }[] = [
           { href: "/aaa/otro-si-emergencia", label: "Otro Sí / Emergencia", icon: <IconBuilding />, modulo: "emergencia" },
           { href: "/aaa/prefacturas", label: "Prefacturas", icon: null, modulo: "aaa" },
           { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte" },
-          { href: "/aaa/contratos", label: "Contratos (crear nuevo)", icon: null, modulo: "contratos" },
         ],
       },
     ],
@@ -146,14 +148,27 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="nav-group-title">{group.section}</div>
               {group.items.map((item) => (
                 <div key={item.href}>
-                  <a
-                    href={item.children ? item.children[0].href : item.href}
-                    onClick={() => setOpen(false)}
-                    className={`nav-item${(item.children ? path.startsWith(item.href) : activeHref(item.href)) ? " active" : ""}`}
-                  >
-                    <span className="nav-item-icon">{item.icon}</span>
-                    {item.label}
-                  </a>
+                  <div className="nav-item-row">
+                    <a
+                      href={item.children ? item.children[0].href : item.href}
+                      onClick={() => setOpen(false)}
+                      className={`nav-item${(item.children ? path.startsWith(item.href) && !(item.accion && activeHref(item.accion.href)) : activeHref(item.href)) ? " active" : ""}`}
+                    >
+                      <span className="nav-item-icon">{item.icon}</span>
+                      {item.label}
+                    </a>
+                    {item.accion && puedeVer(usuario, item.accion.modulo) && (
+                      <a
+                        href={item.accion.href}
+                        onClick={() => setOpen(false)}
+                        className={`nav-item-add${path === item.accion.href ? " active" : ""}`}
+                        title={item.accion.title}
+                        aria-label={item.accion.title}
+                      >
+                        +
+                      </a>
+                    )}
+                  </div>
                   {item.children && (
                     <div className="nav-sub">
                       {item.children.map((c) => (

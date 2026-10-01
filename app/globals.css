@@ -539,6 +539,15 @@ table.tbl-fit td.row-actions { padding-right: 6px; display: table-cell; }
 /* Submenú anidado (Proyecto Triple A) */
 .nav-sub { display: flex; flex-direction: column; margin: 2px 0 4px; padding-left: 14px; border-left: 1px solid rgba(255,255,255,.08); margin-left: 19px; }
 .nav-item.nav-sub-item { padding: 6px 10px; font-size: 12.5px; opacity: .85; }
+.nav-item-row { display: flex; align-items: center; gap: 4px; }
+.nav-item-row > .nav-item { flex: 1; min-width: 0; }
+.nav-item-add {
+  flex: none; width: 26px; height: 26px; margin-bottom: 2px; display: grid; place-items: center;
+  border-radius: var(--radius-sm); border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--sidebar-text); font-size: 17px; font-weight: 600; line-height: 1;
+  transition: background .13s ease, color .13s ease;
+}
+.nav-item-add:hover, .nav-item-add.active { background: var(--sidebar-active-bg); color: #fff; border-color: var(--brand-500); }
 .nav-item.nav-sub-item.active { opacity: 1; box-shadow: none; }
 
 /* ── Asistente de gerencia ─────────────────────────────────────────── */
