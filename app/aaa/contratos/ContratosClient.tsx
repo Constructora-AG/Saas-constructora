@@ -9,13 +9,25 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ContratoDinamico } from "@/lib/transporte/constants";
+import { CONTRACT_END_DEFAULT, CONTRACT_START_DEFAULT, CONTRACT_VALUE, FICHA_MODULO, type ContratoDinamico, type ModuloContrato } from "@/lib/transporte/constants";
 import { cargarContratos, guardarContratos, idContrato, prefijoSugerido } from "@/lib/transporte/contratos";
+import { storageFor } from "@/lib/transporte/storage";
+import { num } from "@/lib/transporte/model";
 import { parseValor } from "../FacturasRegistro";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 const fFecha = (iso: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); return m ? `${m[3]}/${m[2]}/${m[1]}` : iso || "—"; };
 const FORM0 = { nombre: "", numero: "", objeto: "", valor: "", ivaIncluido: true, inicio: "", fin: "", prefijo: "" };
+
+/** Contratos base del sistema (con su módulo propio); se editan en su Administración. */
+const BASE: Array<{ ns: ModuloContrato; href: string }> = [
+  { ns: "transporte", href: "/aaa/transporte" },
+  { ns: "alquiler", href: "/aaa/contrato-alquiler" },
+  { ns: "emergencia", href: "/aaa/otro-si-emergencia" },
+];
+
+/** Vigencia y valor vigentes de un módulo (los de su Administración; si aún no tiene, los de la ficha). */
+interface Vigente { inicio: string; fin: string; valor: number }
 
 /** Avisa al menú lateral que la lista de contratos cambió. */
 export const EVENTO_CONTRATOS = "ag:contratos-cambiaron";
@@ -33,6 +45,25 @@ export function ContratosClient() {
   useEffect(() => {
     cargarContratos().then(setLista).catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
+
+  // Valor y vigencia actuales de cada contrato, leídos de la Administración de su módulo.
+  const [vigentes, setVigentes] = useState<Record<string, Vigente>>({});
+  useEffect(() => {
+    if (!lista) return;
+    let vivo = true;
+    const nss = [...BASE.map((x) => x.ns as string), ...lista.map((c) => c.id)];
+    Promise.all(nss.map(async (ns) => [ns, await storageFor(ns).loadAdminRaw().catch(() => null)] as const)).then((pares) => {
+      if (!vivo) return;
+      const out: Record<string, Vigente> = {};
+      for (const [ns, a] of pares) {
+        if (!a) continue;
+        const valor = num(a.contractValue) > 0 ? num(a.contractValue) : ns === "transporte" ? CONTRACT_VALUE : 0;
+        out[ns] = { inicio: a.contractStart || (ns === "transporte" ? CONTRACT_START_DEFAULT : ""), fin: a.contractEnd || (ns === "transporte" ? CONTRACT_END_DEFAULT : ""), valor };
+      }
+      setVigentes(out);
+    });
+    return () => { vivo = false; };
+  }, [lista]);
 
   const prefijoAuto = useMemo(
     () => prefijoSugerido(form.nombre, (lista ?? []).filter((c) => c.id !== editando?.id).map((c) => c.prefijoOrden)),
@@ -97,7 +128,7 @@ export function ContratosClient() {
       <div className="page-head">
         <h1 className="page-title">Contratos</h1>
         <p className="page-sub">
-          Crea un contrato nuevo y se genera su módulo con la misma estructura de Contrato de Alquiler: registros (horas ×
+          Todos los contratos de Proyecto Triple A. Crea uno nuevo y se genera su módulo con la misma estructura de Contrato de Alquiler: registros (horas ×
           valor hora de la zona y transporte del equipo), tarifario, reportes, flota, personal y administración. Cada
           contrato tiene sus propios datos y arranca vacío.
         </p>
@@ -123,14 +154,30 @@ export function ContratosClient() {
             </tr>
           </thead>
           <tbody>
-            {lista === null && <tr><td colSpan={6} className="muted">Cargando…</td></tr>}
-            {lista?.length === 0 && <tr><td colSpan={6} className="muted">Aún no hay contratos creados en la app. Usa «+ Nuevo contrato».</td></tr>}
+            {BASE.map(({ ns, href }) => {
+              const f = FICHA_MODULO[ns];
+              const v = vigentes[ns] ?? (f.contrato ? { inicio: f.contrato.inicio, fin: f.contrato.fin, valor: f.contrato.valor } : { inicio: CONTRACT_START_DEFAULT, fin: CONTRACT_END_DEFAULT, valor: CONTRACT_VALUE });
+              return (
+                <tr key={ns}>
+                  <td><Link href={href}><b>{f.nombre}</b></Link><span className="cc-dias">{f.objeto}</span></td>
+                  <td>{f.numero.replace(/^N° /, "")}</td>
+                  <td className="muted" style={{ whiteSpace: "nowrap" }}>{fFecha(v.inicio)} — {fFecha(v.fin)}</td>
+                  <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{v.valor ? COP.format(v.valor) : "—"}{v.valor ? <span className="cc-dias">{f.ivaIncluido ? "IVA incluido" : "IVA excluido"}</span> : null}</td>
+                  <td>{f.prefijoOrden}0001…</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <Link className="btn btn-ghost btn-sm" href={href}>Abrir</Link>
+                    <span className="cc-dias">Datos en su Administración</span>
+                  </td>
+                </tr>
+              );
+            })}
+            {lista === null && <tr><td colSpan={6} className="muted">Cargando contratos creados en la app…</td></tr>}
             {lista?.map((c) => (
               <tr key={c.id}>
                 <td><Link href={`/aaa/contratos/${c.id}`}><b>{c.nombre}</b></Link>{c.objeto && <span className="cc-dias">{c.objeto}</span>}</td>
                 <td>{c.numero || "—"}</td>
-                <td className="muted" style={{ whiteSpace: "nowrap" }}>{fFecha(c.inicio)} — {fFecha(c.fin)}</td>
-                <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{c.valor ? COP.format(c.valor) : "—"}{c.valor ? <span className="cc-dias">{c.ivaIncluido ? "IVA incluido" : "IVA excluido"}</span> : null}</td>
+                <td className="muted" style={{ whiteSpace: "nowrap" }}>{fFecha(vigentes[c.id]?.inicio || c.inicio)} — {fFecha(vigentes[c.id]?.fin || c.fin)}</td>
+                <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{(vigentes[c.id]?.valor ?? c.valor) ? COP.format(vigentes[c.id]?.valor ?? c.valor) : "—"}{(vigentes[c.id]?.valor ?? c.valor) ? <span className="cc-dias">{c.ivaIncluido ? "IVA incluido" : "IVA excluido"}</span> : null}</td>
                 <td>{c.prefijoOrden}0001…</td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <Link className="btn btn-ghost btn-sm" href={`/aaa/contratos/${c.id}`}>Abrir</Link>{" "}
