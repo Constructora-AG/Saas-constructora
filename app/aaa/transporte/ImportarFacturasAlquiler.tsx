@@ -10,7 +10,7 @@
 import { useMemo, useState } from "react";
 import { nuevoServicioId, type Servicio } from "@/lib/transporte/model";
 import type { UseTransporte } from "@/lib/transporte/useTransporte";
-import { useRegistrosContrato, type FacturaRow } from "../FacturasRegistro";
+import { parseValor, useRegistrosContrato, type FacturaRow } from "../FacturasRegistro";
 import { siguienteOrden } from "./ServicioForm";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -71,28 +71,34 @@ export function ImportarFacturasAlquiler({ t }: { t: UseTransporte }) {
   );
   const total = pendientes.reduce((s, f) => s + Number(f.valor_total), 0);
 
-  if (msg) {
-    return <div className="info-bar" style={{ marginBottom: 14, color: msg.ok ? "var(--ok)" : "var(--high)" }}>{msg.texto}</div>;
-  }
-  if (facturas.cargando || pendientes.length === 0) return null;
-
-  async function migrar() {
-    if (!window.confirm(`Se crearán ${pendientes.length} registro(s) por ${COP.format(total)} a partir de las facturas AGF (marcados como facturados). La información faltante queda en blanco para completarla después. ¿Continuar?`)) return;
+  /** Crea un registro por factura (sin duplicar las ya registradas), con AL#### consecutivo en orden cronológico. */
+  async function crearRegistros(lista: FacturaRow[], origen: string) {
+    const nuevas = lista
+      .filter((f) => !yaMigradas.has(f.numero.toUpperCase()))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.numero.localeCompare(b.numero, "es", { numeric: true }));
+    const repetidas = lista.length - nuevas.length;
+    if (nuevas.length === 0) {
+      setMsg({ ok: false, texto: `No hay registros nuevos: las ${repetidas} factura(s) (${origen}) ya estaban registradas.` });
+      return;
+    }
+    const totalNuevas = nuevas.reduce((s, f) => s + Number(f.valor_total), 0);
+    const aviso = repetidas > 0 ? ` (${repetidas} ya estaban registradas y se omiten)` : "";
+    if (!window.confirm(`Se crearán ${nuevas.length} registro(s) por ${COP.format(totalNuevas)} desde ${origen}${aviso}, marcados como facturados. La información faltante queda en blanco para completarla después. ¿Continuar?`)) return;
     setTrabajando(true);
+    setMsg(null);
     try {
       // La vigencia debe cubrir la fecha de la primera factura para que el mes exista en Registros.
-      const primera = pendientes[0].fecha;
+      const primera = nuevas[0].fecha;
       if (!t.admin?.contractStart || primera < t.admin.contractStart) {
         await t.saveAdminCfg((a) => { a.contractStart = `${primera.slice(0, 7)}-01`; });
       }
-      // Órdenes consecutivas AL#### en orden cronológico, después de las ya existentes.
       const base = parseInt(siguienteOrden(t.servicesByMonth, "alquiler").replace(/\D/g, ""), 10);
-      const items = pendientes.map((f, i) => ({
+      const items = nuevas.map((f, i) => ({
         monthKey: f.fecha.slice(0, 7),
         item: registroDe(f, `AL${String(base + i).padStart(4, "0")}`),
       }));
       await t.importServices(items);
-      setMsg({ ok: true, texto: `Listo: ${items.length} registro(s) creados a partir de las facturas AGF. Complétalos con «Editar» en cada mes.` });
+      setMsg({ ok: true, texto: `Listo: ${items.length} registro(s) creados desde ${origen}${aviso}. Complétalos con «Editar» en cada mes.` });
     } catch (e) {
       setMsg({ ok: false, texto: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -100,14 +106,77 @@ export function ImportarFacturasAlquiler({ t }: { t: UseTransporte }) {
     }
   }
 
+  async function importarExcel(file: File) {
+    try {
+      const lista = await leerFacturasExcel(file);
+      if (lista.length === 0) {
+        setMsg({ ok: false, texto: "No se encontraron facturas en el archivo (se esperan columnas «N° Factura», «Fecha», «Concepto» y «Valor Total»)." });
+        return;
+      }
+      await crearRegistros(lista, `el archivo ${file.name}`);
+    } catch (e) {
+      setMsg({ ok: false, texto: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   return (
-    <div className="info-bar" style={{ marginBottom: 14, alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-      <div style={{ flex: 1, minWidth: 240 }}>
-        Hay <b>{pendientes.length}</b> factura(s) AGF ({COP.format(total)}) cargadas como tabla aparte que aún no son registros del contrato.
+    <div style={{ marginBottom: 14, display: "grid", gap: 10 }}>
+      {!facturas.cargando && pendientes.length > 0 && (
+        <div className="info-bar" style={{ marginBottom: 0, alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            Hay <b>{pendientes.length}</b> factura(s) AGF ({COP.format(total)}) cargadas como tabla aparte que aún no son registros del contrato.
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => void crearRegistros(pendientes, "las facturas AGF")} disabled={trabajando}>
+            {trabajando ? "Creando registros…" : "Pasar a Registros"}
+          </button>
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <label className="btn btn-ghost btn-sm" style={{ cursor: trabajando ? "default" : "pointer" }}>
+          {trabajando ? "Creando registros…" : "Importar facturas (Excel)"}
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            hidden
+            disabled={trabajando}
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importarExcel(f); }}
+          />
+        </label>
+        <span className="muted" style={{ fontSize: 12.5 }}>Cada factura AGF del archivo crea un registro; las ya registradas no se duplican.</span>
       </div>
-      <button className="btn btn-primary btn-sm" onClick={() => void migrar()} disabled={trabajando}>
-        {trabajando ? "Creando registros…" : "Pasar a Registros"}
-      </button>
+      {msg && <div className="info-bar" style={{ marginBottom: 0, color: msg.ok ? "var(--ok)" : "var(--high)" }}>{msg.texto}</div>}
     </div>
   );
+}
+
+/** Lee un Excel de facturas (N° Factura, Fecha, Concepto, Valor Total) buscando la fila de encabezados. */
+async function leerFacturasExcel(file: File): Promise<FacturaRow[]> {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
+  const norm = (v: unknown) => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const iso = (v: unknown): string => {
+    if (v instanceof Date) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+    const s = String(v ?? "").trim();
+    const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+    return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : "";
+  };
+  const out: FacturaRow[] = [];
+  for (const nombre of wb.SheetNames) {
+    const filas = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nombre], { header: 1, raw: true });
+    const h = filas.findIndex((r) => r.some((c) => norm(c).includes("factura")) && r.some((c) => norm(c).includes("valor")));
+    if (h < 0) continue;
+    const enc = filas[h].map(norm);
+    const col = (pred: (x: string) => boolean) => enc.findIndex(pred);
+    const cNum = col((x) => x.includes("factura")), cFecha = col((x) => x.startsWith("fecha")),
+      cConc = col((x) => x.startsWith("concepto")), cValor = col((x) => x.includes("valor"));
+    for (const r of filas.slice(h + 1)) {
+      const numero = String(r[cNum] ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+      const valor = typeof r[cValor] === "number" ? (r[cValor] as number) : parseValor(String(r[cValor] ?? ""));
+      const fecha = iso(r[cFecha]);
+      if (!/^AGF\s*\d+/.test(numero) || !fecha || !(valor > 0)) continue;
+      out.push({ id: numero, contrato: "alquiler", numero, fecha, concepto: String(r[cConc] ?? "").trim(), valor_total: valor, nota: null });
+    }
+  }
+  return out;
 }
