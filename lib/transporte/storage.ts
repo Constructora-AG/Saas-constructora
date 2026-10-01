@@ -28,7 +28,8 @@ const API = "/api/aaa/transporte";
 // transporte_kv: "" para Transporte (claves históricas sin prefijo) y
 // "alquiler:" para Contrato de Alquiler. useTransporte(ns) lo fija al
 // renderizar; los módulos nunca están montados a la vez.
-export type ModuloNs = ModuloContrato;
+/** Espacio de datos: "transporte" | "alquiler" | "emergencia" | id de un contrato creado en la app. */
+export type ModuloNs = ModuloContrato | (string & {});
 const prefijoDe = (ns: ModuloNs) => (ns === "transporte" ? "" : `${ns}:`);
 
 /** true cuando hay backend real (Supabase); false = modo demo en memoria. */
@@ -146,7 +147,7 @@ export function storageFor(ns: ModuloNs) {
     const r = await api<{ keys: string[]; updated?: Record<string, string> }>(`${API}?list=1`, undefined, "meta");
     const out: Record<string, string> = {};
     Object.entries(r.updated ?? {}).forEach(([k, v]) => {
-      if (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z]+:(adminconfig|tarifario|services:)/.test(k)) out[NS_PREFIX ? k.slice(NS_PREFIX.length) : k] = v;
+      if (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z0-9-]+:(adminconfig|tarifario|services:)/.test(k)) out[NS_PREFIX ? k.slice(NS_PREFIX.length) : k] = v;
     });
     return out;
   }
@@ -154,7 +155,7 @@ export function storageFor(ns: ModuloNs) {
   async function kvList(): Promise<string[]> {
     // Solo las claves de ESTE módulo, sin su prefijo (Transporte excluye las de otros módulos)
     const propias = (keys: string[]) => keys
-      .filter((k) => (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z]+:(adminconfig|tarifario|services:)/.test(k)))
+      .filter((k) => (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z0-9-]+:(adminconfig|tarifario|services:)/.test(k)))
       .map((k) => (NS_PREFIX ? k.slice(NS_PREFIX.length) : k));
     if (!storageAvailable()) return propias([...demoStore.keys()]);
     const r = await api<{ keys: string[] }>(`${API}?list=1`, undefined, "list");
@@ -251,7 +252,9 @@ export function storageFor(ns: ModuloNs) {
     // Tarifario de Transporte AAA sembrado por error en otro módulo → se reemplaza por el propio.
     const ajeno = !!t && (ns === "alquiler"
       ? !t.categorias.some((c) => /alquiler/i.test(c.label))
-      : ns === "emergencia" && (t.categorias.length === 0 || t.categorias.some((c) => /^cat\d+$/.test(c.id))));
+      : ns === "emergencia" ? (t.categorias.length === 0 || t.categorias.some((c) => /^cat\d+$/.test(c.id)))
+      // Contrato creado en la app: nunca hereda el tarifario de Transporte AAA.
+      : ns !== "transporte" && t.categorias.some((c) => /^cat\d+$/.test(c.id)));
     if (t && !ajeno) return t;
     const d = tarifarioDefaultDe(ns);
     await saveTarifario(d).catch(() => undefined);

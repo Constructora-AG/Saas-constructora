@@ -44,6 +44,7 @@ import { IconInfo } from "../../icons";
 import { useTransporte, syncLabel, type UseTransporte } from "@/lib/transporte/useTransporte";
 import { TransporteSessionProvider, useTransporteSession } from "@/lib/transporte/session";
 import type { ModuloNs } from "@/lib/transporte/storage";
+import type { ContratoDinamico } from "@/lib/transporte/constants";
 import { ImportarFacturasContrato } from "./ImportarFacturasContrato";
 import { ImportarConciliacionEmergencia } from "./ImportarConciliacionEmergencia";
 import { AdminView } from "./AdminView";
@@ -72,10 +73,12 @@ export interface TransporteClientProps {
   ns?: ModuloNs;
   titulo?: string;
   subtitulo?: string;
+  /** Contrato creado desde la app (Proyecto Triple A → Contratos). */
+  contrato?: ContratoDinamico;
 }
 
-export function TransporteClient({ ns = "transporte", titulo, subtitulo }: TransporteClientProps) {
-  const t = useTransporte(ns);
+export function TransporteClient({ ns = "transporte", titulo, subtitulo, contrato }: TransporteClientProps) {
+  const t = useTransporte(ns, contrato);
   return (
     <TransporteSessionProvider admin={t.admin}>
       <TransporteShell t={t} titulo={titulo} subtitulo={subtitulo} />

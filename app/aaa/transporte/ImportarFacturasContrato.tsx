@@ -95,7 +95,7 @@ export function ImportarFacturasContrato({ t, contrato }: { t: UseTransporte; co
       if (!t.admin?.contractStart || primera < t.admin.contractStart) {
         await t.saveAdminCfg((a) => { a.contractStart = `${primera.slice(0, 7)}-01`; });
       }
-      const sig = siguienteOrden(t.servicesByMonth, contrato);
+      const sig = siguienteOrden(t.servicesByMonth, t.ficha.prefijoOrden);
       const prefijo = sig.replace(/\d+$/, "");
       const base = parseInt(sig.replace(/\D/g, ""), 10);
       const items = nuevas.map((f, i) => ({

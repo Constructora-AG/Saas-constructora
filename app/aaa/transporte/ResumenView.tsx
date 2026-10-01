@@ -17,7 +17,7 @@ import {
   IconTruck,
   IconWallet,
 } from "../../icons";
-import { CONTRATANTE, CONTRATISTA, CONTRATO_EMERGENCIA, FICHA_MODULO } from "@/lib/transporte/constants";
+import { CONTRATANTE, CONTRATISTA, CONTRATO_EMERGENCIA } from "@/lib/transporte/constants";
 import {
   ALERTAS_MAX,
   ALERTAS_VACIO,
@@ -71,13 +71,13 @@ export function ResumenView({ t }: ViewProps) {
 
   // Contrato de Alquiler: la ejecución es el día a día de la pestaña Registros.
   // Alquiler / Emergencia: módulos de registros (cada uno con sus propios datos).
-  const ficha = FICHA_MODULO[t.ns];
+  const ficha = t.ficha;
   const esAlquiler = ficha.registros;
 
   // KPIs (fórmulas SPEC §5.1)
   // Alquiler / Emergencia: el contrato es con IVA → ejecutado = base + IVA de cada registro
   // (los creados desde facturas AGF ya traen el total con IVA en value y sin valorIva).
-  const valorConIva = (s: Servicio) => num(s.value) + (esAlquiler ? num(s.valorIva) : 0);
+  const valorConIva = (s: Servicio) => num(s.value) + (esAlquiler && ficha.ivaIncluido ? num(s.valorIva) : 0);
   const valorEjecutado = esAlquiler ? allItems.reduce((acc, s) => acc + valorConIva(s), 0) : tot.valor;
   const valorContrato = t.contractValue;                      // propio del módulo (0 = sin definir)
   const hayValor = valorContrato > 0;
@@ -214,6 +214,7 @@ export function ResumenView({ t }: ViewProps) {
       totalGlobalValue: valorEjecutado,
       valorContrato,
       ns: t.ns,
+      ficha: t.ficha,
       tarifario: t.ns === "transporte" ? t.tarifario : null,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,7 +305,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-label">Valor del contrato</span>
           </div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{hayValor ? COP.format(valorContrato) : "Sin definir"}</div>
-          <div className="kpi-foot">{hayValor ? (t.ns === "alquiler" ? "IVA incluido (Cláusula Tercera)" : "IVA incluido") : "Defínelo en Administración"}</div>
+          <div className="kpi-foot">{hayValor ? (t.ns === "alquiler" ? "IVA incluido (Cláusula Tercera)" : ficha.ivaIncluido ? "IVA incluido" : "IVA excluido") : "Defínelo en Administración"}</div>
         </div>
         <div className="kpi">
           <div className="kpi-head">

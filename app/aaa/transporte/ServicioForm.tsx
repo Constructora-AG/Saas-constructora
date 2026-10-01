@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { UseTransporte } from "@/lib/transporte/useTransporte";
 import type { AdjuntoFile, AdminConfig, MonthInfo, NumLike, Servicio, Tarifario } from "@/lib/transporte/model";
 import { areaAAADe, aprobadorDe, num, nuevoServicioId } from "@/lib/transporte/model";
-import { FICHA_MODULO, type ModuloContrato } from "@/lib/transporte/constants";
+import { esModuloBase, FICHA_MODULO, zonaDeRuta } from "@/lib/transporte/constants";
 import { autoRecargos, computeValor, costoCalculado, fdate, fmtCOP, respHours, sugerenciasCampo } from "@/lib/transporte/logic";
 import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
@@ -187,11 +187,12 @@ function buildInit(args: {
 
 /** Prefijo de las órdenes: TP (Transporte AAA) o AL (Contrato de Alquiler); las prefacturas usan PF. */
 export const PREFIJO_ORDEN = "TP";
-export const prefijoOrdenDe = (ns: string) => FICHA_MODULO[ns as ModuloContrato]?.prefijoOrden ?? PREFIJO_ORDEN;
+/** Prefijo de órdenes de un módulo base (los contratos creados en la app traen el suyo en t.ficha). */
+export const prefijoOrdenDe = (ns: string) => (esModuloBase(ns) ? FICHA_MODULO[ns].prefijoOrden : PREFIJO_ORDEN);
 
 /** Siguiente N° de orden consecutivo (TP0001, TP0002, …) considerando todos los meses cargados. */
-export function siguienteOrden(servicesByMonth: Record<string, Servicio[]>, ns = "transporte"): string {
-  return prefijoOrdenDe(ns) + siguienteNumero(servicesByMonth);
+export function siguienteOrden(servicesByMonth: Record<string, Servicio[]>, prefijo = PREFIJO_ORDEN): string {
+  return prefijo + siguienteNumero(servicesByMonth);
 }
 function siguienteNumero(servicesByMonth: Record<string, Servicio[]>): string {
   let max = 0;
@@ -224,7 +225,7 @@ export function ServicioForm({
   const [init] = useState(() => buildInit({ editing, dup: dupFrom, month, admin, tarifario }));
   // N° de orden automático y consecutivo (0001, 0002, …) sobre TODOS los meses;
   // al editar se conserva el existente.
-  const [f, setF] = useState<Campos>(() => (editing ? init.campos : { ...init.campos, orderNo: siguienteOrden(t.servicesByMonth, t.ns) }));
+  const [f, setF] = useState<Campos>(() => (editing ? init.campos : { ...init.campos, orderNo: siguienteOrden(t.servicesByMonth, t.ficha.prefijoOrden) }));
   const [autoNota, setAutoNota] = useState<string | null>(init.nota);
   const [tarifaHint, setTarifaHint] = useState<string | null>(init.hint);
   const [error, setError] = useState<string | null>(null);
@@ -283,13 +284,15 @@ export function ServicioForm({
   /** Aplica computeValor sobre un estado candidato y actualiza el hint. */
   // Alquiler y Otro Sí / Emergencia se cobran por hora (horas × valor hora de la zona).
   const esEmergencia = t.ns === "emergencia";
-  const esAlquiler = t.ns === "alquiler" || esEmergencia;
+  // Contratos creados en la app: misma estructura que Contrato de Alquiler.
+  const esAlquiler = t.ns === "alquiler" || esEmergencia || !!t.ficha.dinamico;
   const etiquetaZona = (label: string) => (esEmergencia ? label.replace(/\s*\(HR\)\s*$/i, "") : zonaDe(label));
+  const esApp = !!t.ficha.dinamico;
   /** Alquiler: unitario de la tarifa elegida (valor hora máquina o valor del viaje de transporte). */
   const tarifaSel = (c: Campos) => tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas.find((r) => r.id === c.tarifaRuta) ?? null;
   const esPorHora = (c: Campos) => { const r = tarifaSel(c); return !!r && /\(HR\)|hora/i.test(r.label); };
   /** Alquiler: la "ruta" guardada es la tarifa POR HORA de la zona; la de transporte se deriva por zona. */
-  const zonaDe = (label: string) => (/municipio/i.test(label) ? "Municipios" : "Barranquilla y área metropolitana");
+  const zonaDe = (label: string) => (esApp ? zonaDeRuta(label, t.ns) : /municipio/i.test(label) ? "Municipios" : "Barranquilla y área metropolitana");
   const rutasHora = (c: Campos) => (tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas ?? []).filter((r) => /\(HR\)|hora/i.test(r.label));
   const tarifaTransporte = (c: Campos) => { const h = tarifaSel(c); if (!h) return null; const z = zonaDe(h.label); return (tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas ?? []).find((r) => /transporte/i.test(r.label) && zonaDe(r.label) === z) ?? null; };
   /** Alquiler: bases e IVA por ítem (19% activable en alquiler y en transporte). */
@@ -434,7 +437,7 @@ export function ServicioForm({
     const item: Servicio = {
       id: idServicio,
       date: f.date,
-      orderNo: editing ? f.orderNo.trim() : siguienteOrden(t.servicesByMonth, t.ns),
+      orderNo: editing ? f.orderNo.trim() : siguienteOrden(t.servicesByMonth, t.ficha.prefijoOrden),
       serviceType: f.serviceType,
       interventor: resolver(f.interventorSel, f.interventorOtro),
       areaAAA: resolver(f.areaAAASel, f.areaAAAOtro),

@@ -43,7 +43,7 @@ export function ImportarConciliacionEmergencia({ t }: { t: UseTransporte }) {
       }
       const nuevas = filas.filter((f) => !existentes.keys.has(f.key)).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.placa.localeCompare(b.placa));
       const tarifario = t.tarifario ?? TARIFARIO_EMERGENCIA_DEFAULT;
-      const sig = siguienteOrden(t.servicesByMonth, "emergencia");
+      const sig = siguienteOrden(t.servicesByMonth, t.ficha.prefijoOrden);
       const prefijo = sig.replace(/\d+$/, "");
       const base = parseInt(sig.replace(/\D/g, ""), 10);
       const sinTarifa = new Set<string>();

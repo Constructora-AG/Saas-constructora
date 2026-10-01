@@ -509,26 +509,84 @@ export const ZONAS_EMERGENCIA = ["B2B", "B2G"];
 /** Módulos del motor de registros (cada uno con su espacio de datos en transporte_kv). */
 export type ModuloContrato = "transporte" | "alquiler" | "emergencia";
 
-/** Ficha de cada módulo: nombre, contrato y prefijo de órdenes. */
-export const FICHA_MODULO: Record<ModuloContrato, {
+/** Ficha de un módulo: nombre, contrato y prefijo de órdenes. */
+export interface FichaModulo {
   nombre: string;
   numero: string;
   objeto: string;
   prefijoOrden: string;
-  /** Módulo de registros (Alquiler / Emergencia): el ejecutado es la suma de los registros. */
+  /** Módulo de registros (Alquiler / Emergencia / creados en la app): el ejecutado es la suma de los registros. */
   registros: boolean;
   /** El valor del contrato incluye IVA. */
   ivaIncluido: boolean;
-  /** Datos del contrato firmado que se aplican al admin si aún no tiene valor (Transporte usa los suyos). */
+  /** Datos del contrato que se aplican al admin si aún no tiene valor (Transporte usa los suyos). */
   contrato: { valor: number; inicio: string; fin: string } | null;
-}> = {
+  /** Contrato creado desde la app (Proyecto Triple A → Contratos). */
+  dinamico?: boolean;
+}
+
+export const FICHA_MODULO: Record<ModuloContrato, FichaModulo> = {
   transporte: { nombre: "Transporte AAA", numero: "IS No. 04-2026", objeto: "Transporte de equipos y maquinaria propia", prefijoOrden: "TP", registros: false, ivaIncluido: false, contrato: null },
   alquiler: { nombre: "Contrato de Alquiler", numero: `N° ${CONTRATO_ALQUILER.numero}`, objeto: CONTRATO_ALQUILER.objeto, prefijoOrden: "AL", registros: true, ivaIncluido: true, contrato: CONTRATO_ALQUILER },
   emergencia: { nombre: "Otro Sí / Emergencia", numero: `N° ${CONTRATO_EMERGENCIA.numero}`, objeto: CONTRATO_EMERGENCIA.objeto, prefijoOrden: "EM", registros: true, ivaIncluido: true, contrato: CONTRATO_EMERGENCIA },
 };
 
-/** Tarifario inicial de cada módulo (cada uno con el suyo). */
-export function tarifarioDefaultDe(ns: ModuloContrato): Tarifario {
-  const t = ns === "alquiler" ? TARIFARIO_ALQUILER_DEFAULT : ns === "emergencia" ? TARIFARIO_EMERGENCIA_DEFAULT : TARIFARIO_DEFAULT;
+export function esModuloBase(ns: string): ns is ModuloContrato {
+  return ns === "transporte" || ns === "alquiler" || ns === "emergencia";
+}
+
+// ── Contratos creados desde la app ─────────────────────────────────
+// Mismo motor y estructura que Contrato de Alquiler (registros por horas ×
+// valor hora de la zona + transporte del equipo), con su propio espacio de
+// datos "<id>:" en transporte_kv. La lista vive en la clave global "contratos".
+
+export interface ContratoDinamico {
+  id: string;           // slug: espacio de datos y ruta /aaa/contratos/<id>
+  nombre: string;       // p. ej. "Contrato de Recolección"
+  numero: string;
+  objeto: string;
+  valor: number;        // COP (0 = sin definir)
+  ivaIncluido: boolean;
+  inicio: string;       // 'AAAA-MM-DD'
+  fin: string;          // 'AAAA-MM-DD'
+  prefijoOrden: string; // p. ej. "RC" → RC0001
+  creadoEn: string;     // ISO
+}
+
+/** Clave global (sin prefijo de módulo) con la lista de contratos creados en la app. */
+export const KEY_CONTRATOS = "contratos";
+
+/** Espacios de datos y prefijos de orden que no puede usar un contrato nuevo. */
+export const NS_RESERVADOS = ["transporte", "alquiler", "emergencia", "contratos", "services", "tarifario", "adminconfig"];
+export const PREFIJOS_RESERVADOS = ["TP", "AL", "EM", "PF"];
+
+export function fichaDinamica(c: ContratoDinamico): FichaModulo {
+  return {
+    nombre: c.nombre,
+    numero: c.numero ? `N° ${c.numero}` : "Sin número",
+    objeto: c.objeto,
+    prefijoOrden: c.prefijoOrden,
+    registros: true,
+    ivaIncluido: c.ivaIncluido,
+    contrato: c.valor > 0 || c.inicio ? { valor: c.valor, inicio: c.inicio, fin: c.fin } : null,
+    dinamico: true,
+  };
+}
+
+/** Tarifario inicial de cada módulo (cada uno con el suyo; los creados en la app arrancan vacíos). */
+export function tarifarioDefaultDe(ns: string): Tarifario {
+  const t = ns === "alquiler" ? TARIFARIO_ALQUILER_DEFAULT : ns === "emergencia" ? TARIFARIO_EMERGENCIA_DEFAULT
+    : ns === "transporte" ? TARIFARIO_DEFAULT : { recargos: { nocturno: 0, dominicalFestivo: 0 }, categorias: [] };
   return JSON.parse(JSON.stringify(t)) as Tarifario;
+}
+
+/**
+ * Zona de una tarifa por hora / de transporte del equipo. Contrato de Alquiler:
+ * «Barranquilla y su área metropolitana» o «Municipios»; los demás módulos usan
+ * el nombre de la zona tal como está en la etiqueta («<zona> (HR)» o
+ * «Transporte del equipo · <zona>»).
+ */
+export function zonaDeRuta(label: string, ns: string): string {
+  if (ns === "alquiler") return /municipio/i.test(label) ? "Municipios" : "Barranquilla y su área metropolitana";
+  return label.replace(/^Transporte del equipo\s*·\s*/i, "").replace(/\s*\(HR\)\s*$/i, "").trim();
 }

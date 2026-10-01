@@ -16,7 +16,7 @@ import {
   CONTRATO_ALQUILER,
   CONTRATO_EMERGENCIA,
   FICHA_MODULO,
-  type ModuloContrato,
+  type FichaModulo,
   CONTRATANTE,
   CONTRATISTA,
   CONTRATISTA_NIT,
@@ -43,7 +43,9 @@ export interface ExportContexto {
   /** Valor del contrato del módulo (por defecto el de Transporte AAA; 0 = sin definir). */
   valorContrato?: number;
   /** Módulo del reporte (encabezado del PDF); por defecto Transporte AAA. */
-  ns?: ModuloContrato;
+  ns?: string;
+  /** Ficha del contrato del módulo (encabezado del PDF). */
+  ficha?: FichaModulo;
   /** Tarifario para discriminar el valor en servicio + recargos (solo Transporte; null = sin desglose). */
   tarifario?: Tarifario | null;
 }
@@ -372,11 +374,15 @@ export async function buildReportPdf(
     let y = y0 - 10;
     const { width } = page.getSize();
     const ns = ctx.ns ?? "transporte";
-    const alq = FICHA_MODULO[ns].ivaIncluido;
-    const titulo = ns === "alquiler" ? "CUADRO DE CONTROL DE SERVICIOS DE ALQUILER" : ns === "emergencia" ? "CUADRO DE CONTROL - OTRO SÍ / EMERGENCIA" : "CUADRO DE CONTROL DE SERVICIOS DE TRANSPORTE";
+    const ficha = ctx.ficha ?? (ns === "alquiler" || ns === "emergencia" ? FICHA_MODULO[ns] : FICHA_MODULO.transporte);
+    const alq = ficha.ivaIncluido;
+    const titulo = ns === "alquiler" ? "CUADRO DE CONTROL DE SERVICIOS DE ALQUILER" : ns === "emergencia" ? "CUADRO DE CONTROL - OTRO SÍ / EMERGENCIA"
+      : ns === "transporte" ? "CUADRO DE CONTROL DE SERVICIOS DE TRANSPORTE" : `CUADRO DE CONTROL - ${ficha.nombre.toUpperCase()}`;
     const sub = ns === "alquiler"
       ? `Contrato No. ${CONTRATO_ALQUILER.numero} - Alquiler de Equipos y/o Maquinaria Pesada a Todo Costo (Grupo 1)`
-      : ns === "emergencia" ? `Contrato No. ${CONTRATO_EMERGENCIA.numero} - Transporte de Residuos Especiales No Peligrosos (Emergencia)` : "Contrato IS No. 04-2026 - Transporte de Equipos y Maquinaria Propia";
+      : ns === "emergencia" ? `Contrato No. ${CONTRATO_EMERGENCIA.numero} - Transporte de Residuos Especiales No Peligrosos (Emergencia)`
+      : ns === "transporte" ? "Contrato IS No. 04-2026 - Transporte de Equipos y Maquinaria Propia"
+      : `Contrato ${ficha.numero.replace(/^N° /, "No. ")}${ficha.objeto ? ` - ${ficha.objeto}` : ""}`;
     safeDrawText(page, titulo, { x: MARGIN, y, size: 16, font: bold, color: GRAYDARK });
     y -= 22;
     safeDrawText(page, sub, { x: MARGIN, y, size: 10.5, font, color: MUTED });

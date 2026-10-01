@@ -48,6 +48,7 @@ export const MODULOS: Modulo[] = [
   { id: "transporte", label: "Transporte AAA", href: "/aaa/transporte", seccion: "Finanzas" },
   { id: "alquiler", label: "Contrato de Alquiler", href: "/aaa/contrato-alquiler", seccion: "Finanzas" },
   { id: "emergencia", label: "Otro Sí / Emergencia", href: "/aaa/otro-si-emergencia", seccion: "Finanzas" },
+  { id: "contratos", label: "Contratos creados en la app", href: "/aaa/contratos", seccion: "Finanzas" },
   { id: "asistente", label: "Asistente IA", href: "/asistente", seccion: "Administración" },
   { id: "configuracion_ia", label: "Configuración IA", href: "/configuracion-ia", seccion: "Administración", soloSuperadmin: true },
   { id: "usuarios", label: "Usuarios y roles", href: "/usuarios", seccion: "Administración", soloSuperadmin: true },
@@ -58,7 +59,7 @@ export const ROL_MODULOS: Record<RolPlataforma, string[]> = {
   superadmin: MODULOS.map((m) => m.id),
   operacion: ["resumen", "cartera", "bitacora", "recaudo", "vendedores", "asistente"],
   comercial: ["marketing", "asistente"],
-  finanzas: ["aaa", "transporte", "alquiler", "emergencia", "asistente"],
+  finanzas: ["aaa", "transporte", "alquiler", "emergencia", "contratos", "asistente"],
 };
 
 /** Módulos otorgables como extra (todos menos los exclusivos de superadmin). */

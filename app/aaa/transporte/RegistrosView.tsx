@@ -19,12 +19,12 @@ import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { Servicio, Tarifario } from "@/lib/transporte/model";
 import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
 import { costoServicio, fdate, findCategoria, findRuta, fmtCOP, recargosCobrados, totales, totalesContratista } from "@/lib/transporte/logic";
-import { agruparItems, zonaDeTarifa } from "@/lib/aaa/catalogo";
+import { agruparItems } from "@/lib/aaa/catalogo";
 import { adjuntoSrc, openAttachment } from "@/lib/transporte/media";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 import { ServicioForm } from "./ServicioForm";
 import { buildOrderPdf } from "./ordenPdf";
-import { FICHA_MODULO } from "@/lib/transporte/constants";
+import { zonaDeRuta } from "@/lib/transporte/constants";
 
 const TIPO_BADGE: Record<string, { label: string; cls: string }> = {
   Programado: { label: "Programado", cls: "ok" },
@@ -141,7 +141,7 @@ export function RegistrosView({ t }: ViewProps) {
   );
   const tot = useMemo(() => totales(items), [items]);
   // Alquiler / Emergencia: contratos con IVA → la tabla muestra base + IVA de cada registro.
-  const conIva = FICHA_MODULO[t.ns].registros;
+  const conIva = t.ficha.registros && t.ficha.ivaIncluido;
   const valorDe = (s: Servicio) => num(s.value) + (conIva ? num(s.valorIva) : 0);
   const valorMes = conIva ? items.reduce((a, s) => a + valorDe(s), 0) : tot.valor;
   // Transporte AAA — costo a contratistas del mes (uso interno)
@@ -185,7 +185,7 @@ export function RegistrosView({ t }: ViewProps) {
     const grupos = [...porArea.entries()].sort((x, y) => x[0].localeCompare(y[0], "es"));
     const total = lista.reduce((a, s) => a + num(s.value), 0);
     const detalle = grupos.map(([area, g]) => `• ${area}: ${g.length} servicio(s) por ${fmtCOP(g.reduce((a, s) => a + num(s.value), 0))}`).join("\n");
-    if (!window.confirm(`Se creará${grupos.length > 1 ? `n ${grupos.length} prefacturas` : " una prefactura"} de ${FICHA_MODULO[t.ns].nombre}, una por centro de costo, con ${lista.length} servicio(s) por ${fmtCOP(total)} (sin peajes):\n\n${detalle}\n\n¿Continuar?`)) return;
+    if (!window.confirm(`Se creará${grupos.length > 1 ? `n ${grupos.length} prefacturas` : " una prefactura"} de ${t.ficha.nombre}, una por centro de costo, con ${lista.length} servicio(s) por ${fmtCOP(total)} (sin peajes):\n\n${detalle}\n\n¿Continuar?`)) return;
     setPrefacturando(true); setPrefMsg(null);
     const creadas: string[] = [];
     try {
@@ -201,16 +201,16 @@ export function RegistrosView({ t }: ViewProps) {
           area_aaa: area === SIN_AREA ? null : area,
           interventor: moda(grupo.map((s) => s.interventor || "")) || null,
           lugar: moda(grupo.map((s) => s.area || "")) || null,
-          nota: `Generada desde Registros de ${FICHA_MODULO[t.ns].nombre} (${mes.label})`,
+          nota: `Generada desde Registros de ${t.ficha.nombre} (${mes.label})`,
           items: agruparItems(t.ns !== "transporte"
             ? grupo.flatMap((s) => {
                 const out: Array<{ item: string; maquina: string; unidad: string; cantidad: number; vr_unit: number; iva_pct: number }> = [];
                 const horas = num(s.horasMaquina), vh = num(s.valorHora), viajes = num(s.viajesEquipo), vv = num(s.valorTransporte);
-                // Alquiler: la zona sale de la tarifa elegida (Barranquilla y su área metropolitana / Municipios).
+                // Alquiler y contratos creados en la app: la zona sale de la tarifa elegida.
                 const ruta = t.tarifario ? findRuta(findCategoria(t.tarifario, s.tarifaCategoria), s.tarifaRuta) : null;
-                const zona = ruta ? ` - ${zonaDeTarifa(ruta.label)}` : "";
-                if (horas > 0 && vh > 0) out.push({ item: t.ns === "emergencia" ? `Servicio de ${(s.equipment || "volqueta").toLowerCase()} · ${s.area || "zona sin definir"}` : `Alquiler ${s.equipment || "equipo"}${zona}`, maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
-                if (viajes > 0 && vv > 0) out.push({ item: `Transporte del equipo ${s.equipment || ""}`.trim() + (t.ns === "alquiler" ? zona : ""), maquina: s.equipment || "", unidad: "VJ", cantidad: viajes, vr_unit: vv, iva_pct: s.ivaTransporte === false ? 0 : 0.19 });
+                const zona = ruta ? ` - ${zonaDeRuta(ruta.label, t.ns)}` : "";
+                if (horas > 0 && vh > 0) out.push({ item: t.ns === "emergencia" ? `Servicio de ${(s.equipment || "volqueta").toLowerCase()} · ${s.area || "zona sin definir"}` : `${t.ns === "alquiler" ? "Alquiler" : "Servicio de"} ${s.equipment || "equipo"}${zona}`, maquina: s.equipment || "", unidad: "HR", cantidad: horas, vr_unit: vh, iva_pct: s.ivaAlquiler === false ? 0 : 0.19 });
+                if (viajes > 0 && vv > 0) out.push({ item: `Transporte del equipo ${s.equipment || ""}`.trim() + (t.ns !== "emergencia" ? zona : ""), maquina: s.equipment || "", unidad: "VJ", cantidad: viajes, vr_unit: vv, iva_pct: s.ivaTransporte === false ? 0 : 0.19 });
                 if (!out.length) out.push({ item: descripcionServicio(s), maquina: s.equipment || "", unidad: "VJ", cantidad: 1, vr_unit: num(s.value), iva_pct: 0.19 });
                 return out;
               })
@@ -305,6 +305,7 @@ export function RegistrosView({ t }: ViewProps) {
         totalGlobalValue,
         valorContrato: t.contractValue,
         ns: t.ns,
+        ficha: t.ficha,
         tarifario: t.ns === "transporte" ? t.tarifario : null,
       });
       // askInvoice: ¿marcar los pendientes exportados como facturados?
@@ -359,12 +360,12 @@ export function RegistrosView({ t }: ViewProps) {
 
       {/* Toolbar del mes + botón de registro */}
       <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span>{FICHA_MODULO[t.ns].registros ? "Registros" : "Servicios"} de {mes.label}</span>
+        <span>{t.ficha.registros ? "Registros" : "Servicios"} de {mes.label}</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
         <span className="muted" style={{ fontSize: 12.5, textTransform: "none", letterSpacing: 0 }}>
           Servicios: {tot.servicios}{esTransporte ? ` · En contratistas: ${fmtCOP(totC.costo)} · Margen: ${fmtCOP(totC.margen)}` : ""} · Valor del mes{conIva ? " (con IVA)" : ""}: {fmtCOP(valorMes)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
         </span>
-        <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>{FICHA_MODULO[t.ns].registros ? "+ Nuevo registro" : "+ Agregar servicio"}</button>
+        <button className="btn btn-primary btn-sm" onClick={() => abrir(null, null)}>{t.ficha.registros ? "+ Nuevo registro" : "+ Agregar servicio"}</button>
       </div>
 
       {/* Exportación mensual (SPEC §5.2) + selector de columnas */}

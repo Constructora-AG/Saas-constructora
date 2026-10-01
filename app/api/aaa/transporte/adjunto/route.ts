@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   const bytes = Buffer.from(m[2], "base64");
   if (bytes.length > MAX_BYTES) return NextResponse.json({ error: "El adjunto supera 12 MB" }, { status: 400 });
   const type = String(b.type || m[1] || "application/octet-stream");
-  const ns = /^[a-z]+$/.test(String(b.ns ?? "")) ? String(b.ns) : "transporte";
+  const ns = /^[a-z0-9-]+$/.test(String(b.ns ?? "")) ? String(b.ns) : "transporte";
   const monthKey = /^\d{4}-\d{2}$/.test(String(b.monthKey ?? "")) ? String(b.monthKey) : "sin-mes";
   const serviceId = String(b.serviceId ?? "s").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60) || "s";
   const safeName = String(b.name ?? "adjunto").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);

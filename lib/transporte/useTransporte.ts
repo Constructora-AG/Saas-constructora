@@ -31,6 +31,10 @@ import {
   CONTRATO_EMERGENCIA,
   ZONAS_EMERGENCIA,
   FICHA_MODULO,
+  esModuloBase,
+  fichaDinamica,
+  type ContratoDinamico,
+  type FichaModulo,
   tarifarioDefaultDe,
   applySeed,
   normalizeAdmin,
@@ -56,6 +60,8 @@ import {
 export interface UseTransporte {
   /** Módulo (espacio de datos): "transporte" = Transporte AAA, "alquiler" = Contrato de Alquiler, "emergencia" = Otro Sí / Emergencia. */
   ns: ModuloNs;
+  /** Ficha del contrato del módulo (nombre, número, prefijo de órdenes, IVA…). */
+  ficha: FichaModulo;
   // Estado de carga y sincronización
   loading: boolean;
   error: string | null;
@@ -120,7 +126,12 @@ export interface UseTransporte {
   restoreFromBackup: (payload: unknown) => Promise<number>;
 }
 
-export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
+export function useTransporte(ns: ModuloNs = "transporte", contratoApp?: ContratoDinamico): UseTransporte {
+  // Ficha del módulo: los base (Transporte / Alquiler / Emergencia) o un contrato creado en la app.
+  const ficha: FichaModulo = esModuloBase(ns)
+    ? FICHA_MODULO[ns]
+    : contratoApp ? fichaDinamica(contratoApp)
+    : { nombre: ns, numero: "", objeto: "", prefijoOrden: "RG", registros: true, ivaIncluido: true, contrato: null, dinamico: true };
   // Storage fijo de ESTE módulo: Transporte AAA y Contrato de Alquiler nunca comparten datos.
   const [st] = useState(() => storageFor(ns));
   const {
@@ -208,11 +219,13 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
         const seeded = applySeed(a);
         // Alquiler / Emergencia: vigencia y valor del contrato firmado si aún no se han definido.
         let contratoAlq = false;
-        const ficha = FICHA_MODULO[ns].contrato;
-        if (ficha && !(num(a.contractValue) > 0)) {
-          a.contractStart = ficha.inicio;
-          a.contractEnd = ficha.fin;
-          a.contractValue = ficha.valor;
+        const datos = ficha.contrato;
+        if (datos && !(num(a.contractValue) > 0) && !(a.migraciones ?? []).includes("contrato-inicial")) {
+          if (datos.inicio) a.contractStart = datos.inicio;
+          if (datos.fin) a.contractEnd = datos.fin;
+          a.contractValue = datos.valor;
+          // Contrato creado en la app: se aplica una sola vez (aunque su valor sea 0); luego se edita en Administración.
+          if (ficha.dinamico) a.migraciones = [...(a.migraciones ?? []), "contrato-inicial"];
           contratoAlq = true;
         }
         // Otro Sí / Emergencia (una sola vez): los registros creados desde facturas AGF
@@ -559,6 +572,7 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
 
   return {
     ns,
+    ficha,
     loading,
     error,
     demo,

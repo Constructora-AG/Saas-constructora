@@ -1,6 +1,8 @@
 "use client";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { ContratoDinamico } from "@/lib/transporte/constants";
+import { cargarContratos } from "@/lib/transporte/contratos";
 import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout, IconMegaphone, IconSettings } from "./icons";
 import { Burbuja } from "./asistente/Burbuja";
 import { useUsuario, ROL_LABELS } from "@/lib/auth/useUsuario";
@@ -46,6 +48,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
           { href: "/aaa/otro-si-emergencia", label: "Otro Sí / Emergencia", icon: <IconBuilding />, modulo: "emergencia" },
           { href: "/aaa/prefacturas", label: "Prefacturas", icon: null, modulo: "aaa" },
           { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte" },
+          { href: "/aaa/contratos", label: "Contratos (crear nuevo)", icon: null, modulo: "contratos" },
         ],
       },
     ],
@@ -74,6 +77,7 @@ const TITLES: Record<string, string> = {
   "/aaa/emergencia": "Proyecto Triple A — Otro Sí / Emergencia (Old)",
   "/aaa/otro-si-emergencia": "Proyecto Triple A — Otro Sí / Emergencia (Contrato N° 2026-060)",
   "/aaa/prefacturas": "Proyecto Triple A — Prefacturas",
+  "/aaa/contratos": "Proyecto Triple A — Contratos",
   "/aaa": "Proyecto Triple A",
   "/usuarios": "Usuarios y roles de la plataforma",
   "/asistente": "Asistente IA",
@@ -84,6 +88,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const { usuario, cargando, cerrarSesion } = useUsuario();
+  // Contratos creados desde la app: cada uno aparece en el menú de Proyecto Triple A.
+  const [contratosApp, setContratosApp] = useState<ContratoDinamico[]>([]);
+  useEffect(() => {
+    if (path === "/login") return;
+    const cargar = () => { cargarContratos().then(setContratosApp).catch(() => undefined); };
+    cargar();
+    window.addEventListener("ag:contratos-cambiaron", cargar);
+    return () => window.removeEventListener("ag:contratos-cambiaron", cargar);
+  }, [path]);
 
   // /login se pinta a pantalla completa, sin barra lateral ni topbar.
   if (path === "/login") return <>{children}</>;
@@ -117,6 +130,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav className="sidebar-nav">
           {NAV.map((group) => ({
+            ...group,
+            items: group.items.map((i) => (i.href === "/aaa" && i.children
+              ? { ...i, children: [...i.children, ...contratosApp.map((c) => ({ href: `/aaa/contratos/${c.id}`, label: c.nombre, icon: null, modulo: "contratos" }))] }
+              : i)),
+          })).map((group) => ({
             ...group,
             items: group.items
               .map((i) => (i.children ? { ...i, children: i.children.filter((c) => puedeVer(usuario, c.modulo)) } : i))

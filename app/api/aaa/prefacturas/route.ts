@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { catalogoDe } from "@/lib/aaa/catalogo";
 
+/** Contrato de la prefactura: los módulos base o un contrato creado en la app (id en minúsculas con guiones). */
+function contratoValido(c: unknown): c is string {
+  return typeof c === "string" && (c === "alquiler" || c === "emergencia" || c === "transporte" || /^[a-z0-9][a-z0-9-]{1,40}$/.test(c));
+}
+
 // Flujo: pendiente_acta_migo → por_facturar (automático con acta + migo) → pendiente_pago (automático al adjuntar factura) → pagada | rechazada
 const ESTADOS = new Set(["pendiente_acta_migo", "por_facturar", "pendiente_pago", "pagada", "rechazada"]);
 
@@ -43,7 +48,8 @@ function periodoTexto(desde: unknown, hasta: unknown, fallback: unknown): string
 /** Valida los ítems contra el catálogo del contrato; devuelve los ítems normalizados o un error legible. */
 function validarItems(contrato: string, rawItems: ItemBody[], libres = false): { items: Array<Record<string, unknown>>; valorBase: number } | { error: string } {
   if (rawItems.length === 0) return { error: "La prefactura necesita al menos un ítem" };
-  if (contrato === "transporte" || libres) {
+  // Ítems libres: Transporte AAA, prefacturas generadas desde un módulo y contratos creados en la app (sin catálogo Herpro).
+  if (contrato === "transporte" || libres || (contrato !== "alquiler" && contrato !== "emergencia")) {
     // Transporte AAA: ítems libres (un servicio registrado por ítem)
     const items: Array<Record<string, unknown>> = [];
     for (const it of rawItems as Array<ItemBody & { maquina?: unknown; unidad?: unknown }>) {
@@ -102,7 +108,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  if (b.contrato !== "alquiler" && b.contrato !== "emergencia" && b.contrato !== "transporte")
+  if (!contratoValido(b.contrato))
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
   if (!b.fecha_generacion) return NextResponse.json({ error: "Falta la fecha de generación" }, { status: 400 });
   // Vencimiento: SIEMPRE 30 días calendario después de la generación (regla AG)
@@ -184,7 +190,7 @@ export async function PATCH(req: NextRequest) {
   }
   if (!b.id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
   if (b.estado && !ESTADOS.has(String(b.estado))) return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
-  if (b.contrato !== undefined && b.contrato !== "alquiler" && b.contrato !== "emergencia" && b.contrato !== "transporte")
+  if (b.contrato !== undefined && !contratoValido(b.contrato))
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
 
   const supa = supabaseAdmin();
@@ -266,7 +272,7 @@ export async function DELETE(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   // Prefactura de Transporte AAA, Contrato de Alquiler u Otro Sí / Emergencia: liberar los servicios que tenía
   // incluidos, cada uno en el espacio de datos de SU módulo (nunca se cruzan).
-  const prefijo = row?.contrato === "alquiler" ? "alquiler:" : row?.contrato === "emergencia" ? "emergencia:" : row?.contrato === "transporte" ? "" : null;
+  const prefijo = !row?.contrato || !contratoValido(row.contrato) ? null : row.contrato === "transporte" ? "" : `${row.contrato}:`;
   if (prefijo === null) return NextResponse.json({ ok: true, liberados: 0 });
   const servicios = Array.isArray(row?.servicios) ? (row!.servicios as Array<{ monthKey: string; id: string }>) : [];
   const porMes = new Map<string, Set<string>>();

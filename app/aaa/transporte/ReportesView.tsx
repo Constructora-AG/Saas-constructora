@@ -141,6 +141,7 @@ export function ReportesView({ t }: ViewProps) {
       totalGlobalValue: allPairs.reduce((s, p) => s + num(p.item.value), 0),
       valorContrato: t.contractValue,
       ns: t.ns,
+      ficha: t.ficha,
       tarifario: t.ns === "transporte" ? t.tarifario : null,
     };
   }, [t.contractStart, t.contractEndExclusive, allPairs, t.ns, t.tarifario, t.contractValue]);
