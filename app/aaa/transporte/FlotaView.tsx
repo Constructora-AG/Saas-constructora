@@ -19,12 +19,13 @@ interface FormFlota {
   tipo: string;
   capacity: string;
   driver: string;
+  contratista: string;
   activo: "si" | "no";
   venceSoat: string;
   venceTecno: string;
 }
 
-const FORM_VACIO: FormFlota = { plate: "", tipo: "", capacity: "", driver: "", activo: "si", venceSoat: "", venceTecno: "" };
+const FORM_VACIO: FormFlota = { plate: "", tipo: "", capacity: "", driver: "", contratista: "", activo: "si", venceSoat: "", venceTecno: "" };
 
 export function FlotaView({ t }: ViewProps) {
   const ses = useTransporteSession();
@@ -36,6 +37,9 @@ export function FlotaView({ t }: ViewProps) {
   const conductores = (t.admin?.personal ?? []).filter((p) => p.activo !== false);
   // Aislamiento por rol: sin permiso «vehiculos» la vista es de solo lectura.
   const canEdit = ses.canEditFleet();
+  // Transporte AAA: contratista (propietario) de cada placa, para el detalle de dinero en contratistas.
+  const conContratista = t.ns === "transporte";
+  const contratistasConocidos = [...new Set(vehiculos.map((v) => (v.contratista ?? "").trim()).filter(Boolean))].sort();
 
   const setF = (k: keyof FormFlota) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -54,6 +58,7 @@ export function FlotaView({ t }: ViewProps) {
           if (form.driver.trim()) v.driver = form.driver.trim();
           if (form.venceSoat) v.venceSoat = form.venceSoat;
           if (form.venceTecno) v.venceTecno = form.venceTecno;
+          if (conContratista) v.contratista = form.contratista.trim() || undefined;
           v.activo = activo;
         } else {
           a.vehiculos.push({
@@ -61,6 +66,7 @@ export function FlotaView({ t }: ViewProps) {
             tipo: form.tipo.trim() || undefined,
             capacity: form.capacity.trim(),
             driver: form.driver.trim(),
+            contratista: conContratista ? form.contratista.trim() || undefined : undefined,
             activo,
             venceSoat: form.venceSoat || null,
             venceTecno: form.venceTecno || null,
@@ -91,6 +97,7 @@ export function FlotaView({ t }: ViewProps) {
       tipo: v.tipo || v.marca || "",
       capacity: v.capacity === null || v.capacity === undefined ? "" : String(v.capacity),
       driver: v.driver || "",
+      contratista: v.contratista || "",
       activo: v.activo !== false ? "si" : "no",
       venceSoat: v.venceSoat || "",
       venceTecno: v.venceTecno || "",
@@ -152,6 +159,12 @@ export function FlotaView({ t }: ViewProps) {
               {conductores.map((p) => <option key={p.nombre} value={p.nombre} />)}
             </datalist>
           </label>
+          {conContratista && (
+            <label className="field">Contratista (propietario)
+              <input className="input" list="tx-contratistas-flota" value={form.contratista} onChange={setF("contratista")} placeholder="A quién se le paga por esta placa" />
+              <datalist id="tx-contratistas-flota">{contratistasConocidos.map((c) => <option key={c} value={c} />)}</datalist>
+            </label>
+          )}
           <label className="field">Estado
             <select value={form.activo} onChange={setF("activo")}>
               <option value="si">Activo</option>
@@ -183,6 +196,7 @@ export function FlotaView({ t }: ViewProps) {
               <th>Modelo</th>
               <th style={{ textAlign: "right" }}>Cap. (Ton)</th>
               <th>Conductor</th>
+              {conContratista && <th>Contratista</th>}
               <th>SOAT</th>
               <th>Tecnomecánica</th>
               <th>Estado</th>
@@ -191,7 +205,7 @@ export function FlotaView({ t }: ViewProps) {
           </thead>
           <tbody>
             {vehiculos.length === 0 && (
-              <tr><td colSpan={9} className="muted" style={{ padding: 18 }}>Sin vehículos en el catálogo.</td></tr>
+              <tr><td colSpan={conContratista ? 10 : 9} className="muted" style={{ padding: 18 }}>Sin vehículos en el catálogo.</td></tr>
             )}
             {vehiculos.map((v) => {
               const inactivo = v.activo === false;
@@ -204,6 +218,7 @@ export function FlotaView({ t }: ViewProps) {
                     {num(v.capacity).toLocaleString("es-CO", { maximumFractionDigits: 1 })}
                   </td>
                   <td>{v.driver || "—"}</td>
+                  {conContratista && <td>{v.contratista || <span className="muted">Sin asignar</span>}</td>}
                   <td><VencBadge fecha={v.venceSoat} /></td>
                   <td><VencBadge fecha={v.venceTecno} /></td>
                   <td><span className={`badge ${inactivo ? "high" : "ok"}`}>{inactivo ? "Inactivo" : "Activo"}</span></td>

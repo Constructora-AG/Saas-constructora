@@ -45,6 +45,8 @@ export interface Vehiculo {
   modelo?: string | number | null;
   capacity: NumLike;
   driver: string;
+  /** Transporte AAA — contratista (propietario) al que se le paga por esta placa (uso interno). */
+  contratista?: string;
   /** `activo !== false` se considera activo. */
   activo?: boolean;
   venceSoat?: string | null;  // 'AAAA-MM-DD'

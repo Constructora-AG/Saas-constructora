@@ -7,7 +7,7 @@
 // (módulo compartido con Registros y Reportes).
 // ════════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   IconAlert,
   IconChart,
@@ -142,6 +142,33 @@ export function ResumenView({ t }: ViewProps) {
   // valor ejecutado y costo neto de los servicios hechos hasta ese día.
   const [corte, setCorte] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
   const contr = useMemo(() => totalesContratista(allItems, t.tarifario, t.tarifarioCosto, corte || undefined), [allItems, t.tarifario, t.tarifarioCosto, corte]);
+  // Detalle por contratista (propietario de la placa en Flota), desplegable por placa.
+  const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
+  const porContratista = useMemo(() => {
+    if (t.ns !== "transporte") return [];
+    const normPlaca = (p: string) => p.trim().toUpperCase().replace(/[\s-]/g, "");
+    const contratistaDe = new Map((t.admin?.vehiculos ?? []).filter((v) => v.contratista?.trim()).map((v) => [normPlaca(v.plate), v.contratista!.trim()]));
+    const grupos = new Map<string, { asignado: boolean; placas: Map<string, Servicio[]> }>();
+    for (const sv of allItems) {
+      if (corte && sv.date > corte) continue;
+      const placa = normPlaca(sv.plate || "") || "SIN PLACA";
+      const c = contratistaDe.get(placa);
+      const nombre = c ?? "__sin__";
+      const g = grupos.get(nombre) ?? { asignado: !!c, placas: new Map<string, Servicio[]>() };
+      g.placas.set(placa, [...(g.placas.get(placa) ?? []), sv]);
+      grupos.set(nombre, g);
+    }
+    return [...grupos.entries()]
+      .map(([nombre, g]) => {
+        const placas = [...g.placas.entries()]
+          .map(([placa, items]) => ({ placa, tot: totalesContratista(items, t.tarifario, t.tarifarioCosto) }))
+          .sort((a, b) => b.tot.costo - a.tot.costo);
+        const tot = totalesContratista([...g.placas.values()].flat(), t.tarifario, t.tarifarioCosto);
+        return { nombre, asignado: g.asignado, placas, tot };
+      })
+      .sort((a, b) => Number(b.asignado) - Number(a.asignado) || b.tot.costo - a.tot.costo);
+  }, [t.ns, t.admin, allItems, corte, t.tarifario, t.tarifarioCosto]);
+
   const contrMeses = useMemo(
     () =>
       t.ns !== "transporte" ? [] :
@@ -406,23 +433,27 @@ export function ResumenView({ t }: ViewProps) {
               <div className="kpi-head"><span className="kpi-ico s-ok"><IconChart /></span><span className="kpi-label">Valor ejecutado al corte</span></div>
               <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(contr.ingreso)}</div>
               <div className="kpi-foot">{contr.servicios.toLocaleString("es-CO")} servicio(s) hasta el {fdate(corte)}</div>
+              <div className="kpi-foot" style={{ marginTop: 6, fontStyle: "italic" }}>Qué es: lo que se le cobra a Triple A por los servicios hechos hasta la fecha de corte (tarifas del pliego).</div>
             </div>
             <div className="kpi">
               <div className="kpi-head"><span className="kpi-ico s-brand"><IconCoins /></span><span className="kpi-label">Saldo del contrato al corte</span></div>
               <div className="kpi-value" style={{ fontSize: 19 }}>{hayValor ? COP.format(valorContrato - contr.ingreso) : "—"}</div>
               <div className="kpi-foot">{hayValor ? `Valor del contrato ${COP.format(valorContrato)} − ejecutado` : "Valor del contrato sin definir"}</div>
+              <div className="kpi-foot" style={{ marginTop: 6, fontStyle: "italic" }}>Qué es: cuánto queda del contrato por ejecutar a la fecha de corte.</div>
             </div>
             <div className="kpi">
               <div className="kpi-head"><span className="kpi-ico s-brand"><IconWallet /></span><span className="kpi-label">Dinero en contratistas al corte</span></div>
               <div className="kpi-value" style={{ fontSize: 19 }}>{COP.format(contr.costo)}</div>
               <div className="kpi-foot">
-                Costo neto de lo ejecutado{contr.ingreso > 0 ? ` · ${((contr.costo / contr.ingreso) * 100).toFixed(1)}% del ejecutado` : ""}{contr.sinCosto > 0 ? ` · ${contr.sinCosto} servicio(s) sin costo` : ""}
+                {contr.ingreso > 0 ? `${((contr.costo / contr.ingreso) * 100).toFixed(1)}% del valor ejecutado` : "—"}{contr.sinCosto > 0 ? ` · ${contr.sinCosto} servicio(s) sin costo` : ""}
               </div>
+              <div className="kpi-foot" style={{ marginTop: 6, fontStyle: "italic" }}>Qué es: el dinero neto que AG le paga a sus contratistas por esos mismos servicios (tarifa de costo de cada ruta + recargos).</div>
             </div>
             <div className="kpi">
               <div className="kpi-head"><span className="kpi-ico s-ok"><IconChart /></span><span className="kpi-label">Margen bruto</span></div>
               <div className="kpi-value" style={{ fontSize: 19, color: contr.margen < 0 ? "var(--high)" : undefined }}>{COP.format(contr.margen)}</div>
               <div className="kpi-foot">{contr.ingreso > 0 ? `${((contr.margen / contr.ingreso) * 100).toFixed(1)}% del valor ejecutado` : "—"}</div>
+              <div className="kpi-foot" style={{ marginTop: 6, fontStyle: "italic" }}>Qué es: lo que le queda a AG por el transporte antes de sus otros gastos (peajes, administración, impuestos): valor ejecutado − dinero en contratistas.</div>
             </div>
           </div>
           <div className="table-wrap" style={{ marginTop: 10 }}>
@@ -453,6 +484,62 @@ export function ResumenView({ t }: ViewProps) {
                 {contrMeses.length === 0 && <tr><td colSpan={6} className="muted">Aún no hay servicios registrados.</td></tr>}
               </tbody>
             </table>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Por mes, hasta la fecha de corte: <b>En contratistas</b> = dinero neto a contratistas de los servicios del mes ·{" "}
+            <b>Acumulado</b> = suma desde el inicio del contrato · <b>Margen</b> = valor ejecutado − en contratistas.
+          </div>
+
+          <div className="section-title">Detalle por contratista <span className="muted" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>· al {fdate(corte)}</span></div>
+          <div className="table-wrap table-scroll">
+            <table className="clean" style={{ width: "100%" }}>
+              <thead>
+                <tr>
+                  <th>Contratista</th>
+                  <th>Placas</th>
+                  <th style={{ textAlign: "right" }}>Servicios</th>
+                  <th style={{ textAlign: "right" }}>Valor ejecutado</th>
+                  <th style={{ textAlign: "right" }}>En contratista</th>
+                  <th style={{ textAlign: "right" }}>% del dinero en contratistas</th>
+                  <th style={{ textAlign: "right" }}>Margen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porContratista.map((g) => (
+                  <Fragment key={g.nombre}>
+                    <tr style={{ cursor: "pointer" }} onClick={() => setAbiertos((p) => { const n = new Set(p); if (n.has(g.nombre)) n.delete(g.nombre); else n.add(g.nombre); return n; })}>
+                      <td>
+                        <span className="muted" style={{ display: "inline-block", width: 14 }}>{abiertos.has(g.nombre) ? "▾" : "▸"}</span>
+                        <b>{g.asignado ? g.nombre : "Sin contratista asignado"}</b>
+                        {!g.asignado && <span className="cc-dias"> · asígnalo a la placa en Flota</span>}
+                      </td>
+                      <td>{g.placas.map((p) => p.placa).join(", ")}</td>
+                      <td className="num" style={{ textAlign: "right" }}>{g.tot.servicios.toLocaleString("es-CO")}</td>
+                      <td className="num" style={{ textAlign: "right" }}>{COP.format(g.tot.ingreso)}</td>
+                      <td className="num" style={{ textAlign: "right" }}><b>{COP.format(g.tot.costo)}</b></td>
+                      <td className="num" style={{ textAlign: "right" }}>{contr.costo > 0 ? `${((g.tot.costo / contr.costo) * 100).toFixed(1)}%` : "—"}</td>
+                      <td className="num" style={{ textAlign: "right", color: g.tot.margen < 0 ? "var(--high)" : undefined }}>{COP.format(g.tot.margen)}</td>
+                    </tr>
+                    {abiertos.has(g.nombre) && g.placas.map((p) => (
+                      <tr key={`${g.nombre}|${p.placa}`} style={{ background: "var(--surface-2)" }}>
+                        <td style={{ paddingLeft: 30 }} className="muted">Placa</td>
+                        <td>{p.placa}</td>
+                        <td className="num" style={{ textAlign: "right" }}>{p.tot.servicios.toLocaleString("es-CO")}</td>
+                        <td className="num" style={{ textAlign: "right" }}>{COP.format(p.tot.ingreso)}</td>
+                        <td className="num" style={{ textAlign: "right" }}>{COP.format(p.tot.costo)}</td>
+                        <td className="num" style={{ textAlign: "right" }}>{contr.costo > 0 ? `${((p.tot.costo / contr.costo) * 100).toFixed(1)}%` : "—"}</td>
+                        <td className="num" style={{ textAlign: "right" }}>{COP.format(p.tot.margen)}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+                {porContratista.length === 0 && <tr><td colSpan={7} className="muted">Aún no hay servicios hasta esta fecha.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Haz clic en un contratista para ver sus placas. El contratista de cada placa se asigna en <b>Flota</b>.{" "}
+            <b>% del dinero en contratistas</b> = parte del total que va a ese contratista.
           </div>
         </>
       )}
