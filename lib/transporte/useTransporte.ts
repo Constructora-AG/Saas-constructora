@@ -198,7 +198,23 @@ export function useTransporte(ns: ModuloNs = "transporte"): UseTransporte {
           a.contractValue = ficha.valor;
           contratoAlq = true;
         }
-        if (nuevo || seeded || contratoAlq) await saveAdmin(a).catch(() => undefined);
+        // Otro Sí / Emergencia (una sola vez): los registros creados desde facturas AGF
+        // quedaron con tipo «Emergencia» asumido; se deja en blanco para completarlo al editar.
+        let migrado = false;
+        const MIG_TIPO = "tipo-servicio-facturas-agf";
+        if (ns === "emergencia" && !(a.migraciones ?? []).includes(MIG_TIPO)) {
+          try {
+            const meses = applyContractDates(a.contractStart || "2026-07-01", a.contractEnd || "").months;
+            for (const m of meses) {
+              const arr = await loadMonth(m.key);
+              if (!arr.some((s) => s.facturaAGF && s.serviceType === "Emergencia")) continue;
+              await saveMonth(m.key, arr.map((s) => (s.facturaAGF && s.serviceType === "Emergencia" ? { ...s, serviceType: "" } : s)));
+            }
+            a.migraciones = [...(a.migraciones ?? []), MIG_TIPO];
+            migrado = true;
+          } catch { /* si falla, se reintenta en la próxima carga; el panel carga igual */ }
+        }
+        if (nuevo || seeded || contratoAlq || migrado) await saveAdmin(a).catch(() => undefined);
         if (!alive) return;
         setAdmin(a);
         await applyAdminContract(a, true);

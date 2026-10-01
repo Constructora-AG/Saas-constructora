@@ -88,6 +88,8 @@ export interface AdminConfig {
   contractEnd: string;   // 'AAAA-MM-DD' (inclusiva) o ''
   /** Valor del contrato en COP propio del módulo (0/ausente = Transporte usa CONTRACT_VALUE; Alquiler, sin definir). */
   contractValue?: number;
+  /** Ajustes de datos de una sola vez ya aplicados en este módulo (ids). */
+  migraciones?: string[];
   backupLastAt: string | null; // ISO
   seedVersion: number;
 }
