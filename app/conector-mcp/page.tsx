@@ -3,7 +3,8 @@ import { ConectorMcpClient } from "./ConectorMcpClient";
 
 export const dynamic = "force-dynamic";
 
-// Guía para conectar Claude al servidor MCP de solo lectura (/api/mcp). Solo Gerencia.
+// Guía para conectar Claude al servidor MCP de solo lectura (/api/mcp). Super admin y
+// usuarios con el módulo extra «Conector Claude».
 // El token nunca se muestra: la página solo informa si MCP_TOKEN está configurado.
 export default async function ConectorMcpPage() {
   const h = await headers();
@@ -13,7 +14,7 @@ export default async function ConectorMcpPage() {
     <>
       <div className="page-head">
         <h1 className="page-title">Conector Claude (MCP)</h1>
-        <p className="page-sub">Cómo conectar Claude (claude.ai, Claude Desktop o Claude Code) para que consulte en vivo los datos de la plataforma. Solo lectura: no puede crear, cambiar ni borrar nada. Solo Gerencia.</p>
+        <p className="page-sub">Cómo conectar Claude (claude.ai, Claude Desktop o Claude Code) para que consulte en vivo los datos de la plataforma. Solo lectura: no puede crear, cambiar ni borrar nada.</p>
       </div>
       <ConectorMcpClient endpoint={`${proto}://${host}/api/mcp`} activo={Boolean(process.env.MCP_TOKEN)} />
     </>

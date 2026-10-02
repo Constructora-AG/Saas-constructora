@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════════
 // Módulos de la plataforma y roles por sección.
-//   · superadmin → todo (incluye Usuarios y roles, Configuración IA y Conector Claude).
+//   · superadmin → todo (incluye Usuarios y roles y Configuración IA).
+//   · Conector Claude: Super admin y a quien se le otorgue como módulo extra.
 //   · El Asistente IA lo ven todos; su alcance de datos lo fija el rol
 //     (lib/asistente/alcance.ts).
 //   · operacion  → Resumen, Cartera, Bitácora, Recaudo, Vendedores.
@@ -52,7 +53,8 @@ export const MODULOS: Modulo[] = [
   { id: "asistente", label: "Asistente IA", href: "/asistente", seccion: "Administración" },
   { id: "configuracion_ia", label: "Configuración IA", href: "/configuracion-ia", seccion: "Administración", soloSuperadmin: true },
   { id: "usuarios", label: "Usuarios y roles", href: "/usuarios", seccion: "Administración", soloSuperadmin: true },
-  { id: "conector_mcp", label: "Conector Claude (MCP)", href: "/conector-mcp", seccion: "Administración", soloSuperadmin: true },
+  // Otorgable: la página no muestra el token (el acceso a los datos lo da el token, que entrega Gerencia).
+  { id: "conector_mcp", label: "Conector Claude (MCP)", href: "/conector-mcp", seccion: "Administración" },
 ];
 
 /** Módulos que cada rol ve por defecto. */
