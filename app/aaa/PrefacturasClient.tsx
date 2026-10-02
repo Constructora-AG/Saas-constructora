@@ -13,6 +13,7 @@ import { DIAS_HABILES_PAGO, diasHasta, sumarDiasHabiles } from "@/lib/aaa/pago";
 import { descargarPrefacturaPdf } from "@/lib/aaa/prefacturaPdf";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
 import { ResponsiveTables } from "./ResponsiveTables";
+import { PrefacturasReporte } from "./PrefacturasReporte";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
@@ -95,6 +96,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
   const [subiendo, setSubiendo] = useState<string | null>(null);
   const [soporteForm, setSoporteForm] = useState<AdjuntoPrefactura | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [verReportes, setVerReportes] = useState(false);
   useEffect(() => {
     const cerrar = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.(".rowmenu")) setMenuId(null); };
     document.addEventListener("mousedown", cerrar);
@@ -310,8 +312,13 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
       <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span>Registro de prefacturas</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
+        <button className={`btn btn-sm ${verReportes ? "btn-primary" : "btn-ghost"}`} onClick={() => setVerReportes((v) => !v)}>
+          <IconChart width={15} height={15} /> Reportes
+        </button>
         <button className="btn btn-primary btn-sm" onClick={abrirNuevo}>+ Registrar prefactura</button>
       </div>
+
+      {verReportes && <PrefacturasReporte rows={rows} estados={ESTADOS} conIvaDe={conIvaDe} areas={areasAAA} interventores={interventores} />}
 
       {ok && (
         <div className="info-bar" style={{ marginBottom: 12 }}>
