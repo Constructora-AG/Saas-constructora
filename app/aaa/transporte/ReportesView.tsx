@@ -326,6 +326,65 @@ export function ReportesView({ t }: ViewProps) {
     }
   };
 
+  // ── Reporte separado por interventor (sobre el resultado filtrado) ──
+  const [porInterventor, setPorInterventor] = useState(false);
+  const [intExportando, setIntExportando] = useState<string | null>(null); // "<interventor>|<fmt>" o "*|<fmt>"
+  const [intMsg, setIntMsg] = useState<string | null>(null);
+  const SIN_INTERVENTOR = "(sin interventor)";
+  const gruposInterventor = useMemo(() => {
+    const m = new Map<string, ExportPair[]>();
+    ordenados.forEach((p) => {
+      const k = (p.item.interventor || "").trim() || SIN_INTERVENTOR;
+      m.set(k, [...(m.get(k) ?? []), p]);
+    });
+    return [...m.entries()]
+      .map(([nombre, lista]) => ({ nombre, lista, valor: lista.reduce((s, p) => s + num(p.item.value), 0) }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [ordenados]);
+
+  /** Rango y área del filtro, para el título y el nombre del archivo. */
+  const alcanceFiltro = () => {
+    const rango = filtros.desde || filtros.hasta ? `${filtros.desde ? fdate(filtros.desde) : "inicio"} a ${filtros.hasta ? fdate(filtros.hasta) : "hoy"}` : "toda la vigencia";
+    const area = filtros.areaAAA.trim();
+    return { rango, area };
+  };
+
+  const exportarInterventor = async (nombre: string, lista: ExportPair[], fmt: ExportFormat) => {
+    const { rango, area } = alcanceFiltro();
+    const scope = `Reporte por interventor - ${nombre}${area ? ` - Área AAA ${area}` : ""} - ${rango}`;
+    const archivo = `reporte_interventor_${slugify(nombre)}${area ? `_${slugify(area)}` : ""}_${filtros.desde || "inicio"}_a_${filtros.hasta || "hoy"}`;
+    await exportServicios(lista, fmt, archivo, scope, exportCtx);
+  };
+
+  const exportarUnInterventor = async (nombre: string, lista: ExportPair[], fmt: ExportFormat) => {
+    setIntExportando(`${nombre}|${fmt}`);
+    setIntMsg(null);
+    try {
+      await exportarInterventor(nombre, lista, fmt);
+    } catch (e) {
+      setIntMsg(e instanceof Error ? e.message : "No se pudo exportar el reporte.");
+    } finally {
+      setIntExportando(null);
+    }
+  };
+
+  /** Un archivo por interventor, uno tras otro (el navegador puede pedir permiso para varias descargas). */
+  const exportarTodosInterventores = async (fmt: ExportFormat) => {
+    setIntExportando(`*|${fmt}`);
+    setIntMsg(null);
+    try {
+      for (const g of gruposInterventor) {
+        await exportarInterventor(g.nombre, g.lista, fmt);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      setIntMsg(`Se generaron ${gruposInterventor.length} reporte(s), uno por interventor.`);
+    } catch (e) {
+      setIntMsg(e instanceof Error ? e.message : "No se pudo exportar el reporte.");
+    } finally {
+      setIntExportando(null);
+    }
+  };
+
   // ── Reporte por escenario (SPEC §5.8) ────────────────────────────
   const placasEscenario = useMemo(() => {
     const set = new Set<string>();
@@ -543,7 +602,61 @@ export function ReportesView({ t }: ViewProps) {
               <IconDownload width={15} height={15} /> {exportando === "pdf" ? "Generando…" : "PDF con soportes"}
             </button>
             {msg && <span style={{ color: "var(--high)", fontSize: 13 }}>{msg}</span>}
+            <span style={{ flex: 1 }} />
+            <button className={`btn btn-sm ${porInterventor ? "btn-primary" : "btn-ghost"}`} onClick={() => setPorInterventor((v) => !v)}>
+              Separar por interventor
+            </button>
           </div>
+
+          {/* ── Reporte separado por interventor ── */}
+          {porInterventor && (
+            <div className="table-wrap" style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "14px 18px" }}>
+                <div>
+                  <b>Reporte por interventor</b>
+                  <div className="muted" style={{ fontSize: 12.5 }}>
+                    {alcanceFiltro().rango}{alcanceFiltro().area ? ` · Área AAA: ${alcanceFiltro().area}` : ""} · {gruposInterventor.length} interventor(es)
+                  </div>
+                </div>
+                <span style={{ flex: 1 }} />
+                <span className="muted" style={{ fontSize: 13 }}>Descargar uno por interventor:</span>
+                {(["xlsx", "pdf", "csv"] as const).map((fmt) => (
+                  <button key={fmt} className="btn btn-ghost btn-sm" disabled={intExportando !== null || !gruposInterventor.length} onClick={() => void exportarTodosInterventores(fmt)}>
+                    <IconDownload width={15} height={15} /> {intExportando === `*|${fmt}` ? "Generando…" : fmt === "xlsx" ? "Excel" : fmt === "pdf" ? "PDF" : "CSV"}
+                  </button>
+                ))}
+              </div>
+              {intMsg && <div style={{ padding: "0 18px 12px", fontSize: 13, color: intMsg.startsWith("Se generaron") ? "var(--ok)" : "var(--high)" }}>{intMsg}</div>}
+              <table className="clean">
+                <thead>
+                  <tr>
+                    <th>Interventor</th>
+                    <th className="num">Servicios</th>
+                    <th className="num">Valor</th>
+                    <th className="num">Descargar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gruposInterventor.map((g) => (
+                    <tr key={g.nombre}>
+                      <td>{g.nombre}</td>
+                      <td className="num">{g.lista.length}</td>
+                      <td className="num">{fmtCOP(g.valor)}</td>
+                      <td className="num">
+                        <div className="row-actions">
+                          {(["xlsx", "pdf", "csv"] as const).map((fmt) => (
+                            <button key={fmt} className="btn btn-ghost btn-sm" disabled={intExportando !== null} onClick={() => void exportarUnInterventor(g.nombre, g.lista, fmt)}>
+                              {intExportando === `${g.nombre}|${fmt}` ? "Generando…" : fmt === "xlsx" ? "Excel" : fmt === "pdf" ? "PDF" : "CSV"}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* ── Tabla de resultados ── */}
           <div className="table-wrap table-scroll" style={{ marginBottom: 18 }}>
