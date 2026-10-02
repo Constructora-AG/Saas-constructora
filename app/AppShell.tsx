@@ -3,7 +3,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import type { ContratoDinamico } from "@/lib/transporte/constants";
 import { cargarContratos } from "@/lib/transporte/contratos";
-import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout, IconMegaphone, IconSettings } from "./icons";
+import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout, IconMegaphone, IconSettings, IconKey } from "./icons";
 import { Burbuja } from "./asistente/Burbuja";
 import { useUsuario, ROL_LABELS } from "@/lib/auth/useUsuario";
 import { moduloDeRuta, puedeVer, rutaInicial } from "@/lib/auth/modulos";
@@ -59,6 +59,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/asistente", label: "Asistente IA", icon: <IconMessage />, modulo: "asistente" },
       { href: "/configuracion-ia", label: "Configuración IA", icon: <IconSettings />, modulo: "configuracion_ia" },
       { href: "/usuarios", label: "Usuarios y roles", icon: <IconActivity />, modulo: "usuarios" },
+      { href: "/conector-mcp", label: "Conector Claude", icon: <IconKey />, modulo: "conector_mcp" },
     ],
   },
 ];
@@ -82,6 +83,7 @@ const TITLES: Record<string, string> = {
   "/usuarios": "Usuarios y roles de la plataforma",
   "/asistente": "Asistente IA",
   "/configuracion-ia": "Configuración del Asistente IA",
+  "/conector-mcp": "Conector Claude (MCP)",
 };
 
 export function AppShell({ children }: { children: ReactNode }) {

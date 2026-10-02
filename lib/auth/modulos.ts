@@ -1,6 +1,6 @@
 // ════════════════════════════════════════════════════════════════════
 // Módulos de la plataforma y roles por sección.
-//   · superadmin → todo (incluye Usuarios y roles y Configuración IA).
+//   · superadmin → todo (incluye Usuarios y roles, Configuración IA y Conector Claude).
 //   · El Asistente IA lo ven todos; su alcance de datos lo fija el rol
 //     (lib/asistente/alcance.ts).
 //   · operacion  → Resumen, Cartera, Bitácora, Recaudo, Vendedores.
@@ -52,6 +52,7 @@ export const MODULOS: Modulo[] = [
   { id: "asistente", label: "Asistente IA", href: "/asistente", seccion: "Administración" },
   { id: "configuracion_ia", label: "Configuración IA", href: "/configuracion-ia", seccion: "Administración", soloSuperadmin: true },
   { id: "usuarios", label: "Usuarios y roles", href: "/usuarios", seccion: "Administración", soloSuperadmin: true },
+  { id: "conector_mcp", label: "Conector Claude (MCP)", href: "/conector-mcp", seccion: "Administración", soloSuperadmin: true },
 ];
 
 /** Módulos que cada rol ve por defecto. */
