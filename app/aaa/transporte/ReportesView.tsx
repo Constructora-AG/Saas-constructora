@@ -18,6 +18,7 @@ import { fdate, fmtCOP, fmtMes, respHours, slugify } from "@/lib/transporte/logi
 import type { MonthInfo, Servicio } from "@/lib/transporte/model";
 import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
 import { ServicioForm } from "./ServicioForm";
+import { ReporteItemsView } from "./ReporteItemsView";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 
 // ── Utilidades locales ─────────────────────────────────────────────
@@ -430,6 +431,8 @@ export function ReportesView({ t }: ViewProps) {
 
   return (
     <>
+      <ReporteItemsView t={t} />
+
       {/* ── Filtros del reporte analítico ── */}
       <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span>Reporte analítico</span>
