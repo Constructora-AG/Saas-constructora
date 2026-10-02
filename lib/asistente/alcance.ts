@@ -3,7 +3,7 @@
 // ver (rol + módulos extra). Cada área declara sus tablas; el servidor
 // (1) solo describe al modelo las áreas permitidas y (2) rechaza toda
 // consulta SQL que mencione una tabla fuera del alcance. Gerencia
-// (superadmin) ve todo. La tabla `usuarios` nunca se expone.
+// (superadmin) ve todo. Las tablas `usuarios` y `app_config` (claves de la IA) nunca se exponen.
 // ════════════════════════════════════════════════════════════════════
 import { MODULOS, puedeVer, type RolPlataforma } from "@/lib/auth/modulos";
 
@@ -22,7 +22,7 @@ export const AREA_TABLAS: Record<Area, string[]> = {
   cartera: ["cartera", "cartera_gestion", "gestion_log", "cobradores", "sh_cuotas", "sh_abonos", "sh_eventos", "v_actividad_cobrador"],
   vendedores: ["sh_prospectos", "sh_contactos"],
   marketing: ["mk_leads", "mk_inversion", "sh_prospectos", "sh_contactos", "cartera"],
-  aaa: ["aaa_prefacturas", "transporte_kv"],
+  aaa: ["aaa_prefacturas", "aaa_facturas", "transporte_kv"],
 };
 
 /** Módulo de la plataforma → área de datos. */
@@ -35,7 +35,7 @@ const MODULO_AREA: Record<string, Area | undefined> = {
 
 /** Todas las tablas conocidas (para detectar referencias en el SQL). */
 export const TODAS_LAS_TABLAS = [...new Set(Object.values(AREA_TABLAS).flat())];
-const PROHIBIDAS = ["usuarios", "usuarios_rol", "asistente_conversaciones", "mk_sync_estado"];
+const PROHIBIDAS = ["usuarios", "usuarios_rol", "asistente_conversaciones", "mk_sync_estado", "app_config"];
 
 export function areasDe(u: UsuarioAlcance): Area[] {
   if (u.rol === "superadmin") return ["cartera", "vendedores", "marketing", "aaa"];

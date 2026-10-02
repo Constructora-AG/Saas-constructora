@@ -4,7 +4,8 @@
 // estáticos (excluidos en `config.matcher`). Sin sesión:
 //   · páginas → redirect a /login (con ?next= para volver tras entrar)
 //   · /api    → 401 JSON (los sync con secret/cron de Vercel sí pasan;
-//               cada ruta valida su CARTERA_SYNC_SECRET por su cuenta)
+//               cada ruta valida su CARTERA_SYNC_SECRET por su cuenta;
+//               /api/mcp valida su propio MCP_TOKEN)
 // Si Supabase NO está configurado (patrón supabaseConfigured de lib/demo),
 // deja pasar todo: modo demo para no romper el desarrollo local.
 // ════════════════════════════════════════════════════════════════════
@@ -62,6 +63,8 @@ export async function middleware(req: NextRequest) {
   if (!user && !esLogin) {
     if (pathname.startsWith("/api/")) {
       if (esSyncAutorizado(req)) return res;
+      // Servidor MCP de solo lectura: valida su propio token (MCP_TOKEN) en la ruta.
+      if (pathname === "/api/mcp") return res;
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
     const url = req.nextUrl.clone();
