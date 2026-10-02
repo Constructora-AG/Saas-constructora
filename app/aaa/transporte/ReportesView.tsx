@@ -10,7 +10,7 @@
 // marcar facturado (askInvoice:false en el original).
 // ════════════════════════════════════════════════════════════════════
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconDownload } from "../../icons";
 import type { CSSProperties, ReactNode } from "react";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
@@ -43,11 +43,14 @@ interface Filtros {
   conductor: string;
   area: string;
   areaAAA: string;
-  interventor: string;
+  /** Interventores seleccionados (vacío = todos). */
+  interventores: string[];
   aprobador: string;
   valorMin: string;
   valorMax: string;
 }
+
+const SIN_INTERVENTOR = "(sin interventor)";
 
 const FILTROS_VACIOS: Filtros = {
   desde: "",
@@ -58,7 +61,7 @@ const FILTROS_VACIOS: Filtros = {
   conductor: "",
   area: "",
   areaAAA: "",
-  interventor: "",
+  interventores: [],
   aprobador: "",
   valorMin: "",
   valorMax: "",
@@ -118,7 +121,20 @@ export function ReportesView({ t }: ViewProps) {
   const [repMsg, setRepMsg] = useState<string | null>(null);
   const [repExportando, setRepExportando] = useState<ExportFormat | null>(null);
 
-  const setF = (k: keyof Filtros) => (e: { target: { value: string } }) =>
+  // Selector múltiple de interventores (vacío = todos)
+  const [intPickOpen, setIntPickOpen] = useState(false);
+  const [intBusca, setIntBusca] = useState("");
+  const intPickRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!intPickOpen) return;
+    const cerrar = (e: MouseEvent) => { if (!intPickRef.current?.contains(e.target as Node)) setIntPickOpen(false); };
+    document.addEventListener("mousedown", cerrar);
+    return () => document.removeEventListener("mousedown", cerrar);
+  }, [intPickOpen]);
+  const toggleInterventor = (nombre: string) =>
+    setFiltros((f) => ({ ...f, interventores: f.interventores.includes(nombre) ? f.interventores.filter((x) => x !== nombre) : [...f.interventores, nombre] }));
+
+  const setF = (k: Exclude<keyof Filtros, "interventores">) => (e: { target: { value: string } }) =>
     setFiltros((f) => ({ ...f, [k]: e.target.value }));
 
   // Todos los servicios de la vigencia como pares con etiqueta de mes.
@@ -170,7 +186,7 @@ export function ReportesView({ t }: ViewProps) {
     const conductor = f.conductor.trim().toLowerCase();
     const area = f.area.trim().toLowerCase();
     const areaAAA = f.areaAAA.trim().toLowerCase();
-    const interventor = f.interventor.trim().toLowerCase();
+    const interventores = new Set(f.interventores.map((x) => x.toLowerCase()));
     const res = allPairs.filter(({ item }) => {
       if (f.desde && item.date && item.date < f.desde) return false;
       if (f.hasta && item.date && item.date > f.hasta) return false;
@@ -181,7 +197,7 @@ export function ReportesView({ t }: ViewProps) {
       if (conductor && !(item.driver || "").toLowerCase().includes(conductor)) return false;
       if (area && !(item.area || "").toLowerCase().includes(area)) return false;
       if (areaAAA && !areaAAADe(item).toLowerCase().includes(areaAAA)) return false;
-      if (interventor && (item.interventor || "").trim().toLowerCase() !== interventor) return false;
+      if (interventores.size && !interventores.has(((item.interventor || "").trim() || SIN_INTERVENTOR).toLowerCase())) return false;
       if (f.aprobador && aprobadorDe(item) !== f.aprobador) return false;
       if (f.valorMin && num(item.value) < num(f.valorMin)) return false;
       if (f.valorMax && num(item.value) > num(f.valorMax)) return false;
@@ -330,7 +346,6 @@ export function ReportesView({ t }: ViewProps) {
   const [porInterventor, setPorInterventor] = useState(false);
   const [intExportando, setIntExportando] = useState<string | null>(null); // "<interventor>|<fmt>" o "*|<fmt>"
   const [intMsg, setIntMsg] = useState<string | null>(null);
-  const SIN_INTERVENTOR = "(sin interventor)";
   const gruposInterventor = useMemo(() => {
     const m = new Map<string, ExportPair[]>();
     ordenados.forEach((p) => {
@@ -353,7 +368,7 @@ export function ReportesView({ t }: ViewProps) {
     const { rango, area } = alcanceFiltro();
     const scope = `Reporte por interventor - ${nombre}${area ? ` - Área AAA ${area}` : ""} - ${rango}`;
     const archivo = `reporte_interventor_${slugify(nombre)}${area ? `_${slugify(area)}` : ""}_${filtros.desde || "inicio"}_a_${filtros.hasta || "hoy"}`;
-    await exportServicios(lista, fmt, archivo, scope, exportCtx);
+    await exportServicios(lista, fmt, archivo, scope, { ...exportCtx, interventorPrimero: true });
   };
 
   const exportarUnInterventor = async (nombre: string, lista: ExportPair[], fmt: ExportFormat) => {
@@ -361,6 +376,27 @@ export function ReportesView({ t }: ViewProps) {
     setIntMsg(null);
     try {
       await exportarInterventor(nombre, lista, fmt);
+    } catch (e) {
+      setIntMsg(e instanceof Error ? e.message : "No se pudo exportar el reporte.");
+    } finally {
+      setIntExportando(null);
+    }
+  };
+
+  /** Todos los interventores del resultado en un solo archivo: agrupado por interventor y por fecha. */
+  const exportarInterventoresJuntos = async (fmt: ExportFormat) => {
+    setIntExportando(`junto|${fmt}`);
+    setIntMsg(null);
+    try {
+      const { rango, area } = alcanceFiltro();
+      const lista = gruposInterventor.flatMap((g) => g.lista);
+      const nombres = gruposInterventor.length === 1 ? gruposInterventor[0].nombre : `${gruposInterventor.length} interventores`;
+      await exportServicios(
+        lista, fmt,
+        `reporte_interventores${area ? `_${slugify(area)}` : ""}_${filtros.desde || "inicio"}_a_${filtros.hasta || "hoy"}`,
+        `Reporte por interventor - ${nombres}${area ? ` - Área AAA ${area}` : ""} - ${rango}`,
+        { ...exportCtx, interventorPrimero: true },
+      );
     } catch (e) {
       setIntMsg(e instanceof Error ? e.message : "No se pudo exportar el reporte.");
     } finally {
@@ -535,12 +571,31 @@ export function ReportesView({ t }: ViewProps) {
               {areasAAAConocidas.map((a) => <option key={a} value={a} />)}
             </datalist>
           </label>
-          <label className="field">Interventor
-            <select value={filtros.interventor} onChange={setF("interventor")}>
-              <option value="">Todos</option>
-              {interventoresConocidos.map((i) => <option key={i} value={i}>{i}</option>)}
-            </select>
-          </label>
+          <div className="field">Interventor
+            <div className="colpick" ref={intPickRef}>
+              <button type="button" className="input" onClick={() => setIntPickOpen((v) => !v)}
+                style={{ width: "100%", textAlign: "left", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {filtros.interventores.length === 0 ? "Todos"
+                  : filtros.interventores.length === 1 ? filtros.interventores[0]
+                  : `${filtros.interventores.length} seleccionados`}
+              </button>
+              {intPickOpen && (
+                <div className="colpick-menu" style={{ left: 0, right: "auto", minWidth: 240, maxHeight: 320, overflowY: "auto" }}>
+                  <input className="input" autoFocus placeholder="Buscar interventor…" value={intBusca} onChange={(e) => setIntBusca(e.target.value)} style={{ marginBottom: 6 }} />
+                  <label className="colpick-item">
+                    <input type="checkbox" checked={filtros.interventores.length === 0} onChange={() => setFiltros((f) => ({ ...f, interventores: [] }))} />
+                    <b>Todos</b>
+                  </label>
+                  {[...interventoresConocidos, SIN_INTERVENTOR].filter((i) => !intBusca.trim() || filtros.interventores.includes(i) || i.toLowerCase().includes(intBusca.trim().toLowerCase())).map((i) => (
+                    <label key={i} className="colpick-item">
+                      <input type="checkbox" checked={filtros.interventores.includes(i)} onChange={() => toggleInterventor(i)} />
+                      {i}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
           <label className="field">Aprobado por
             <select value={filtros.aprobador} onChange={setF("aprobador")}>
               <option value="">Todos</option>
@@ -619,7 +674,16 @@ export function ReportesView({ t }: ViewProps) {
                   </div>
                 </div>
                 <span style={{ flex: 1 }} />
-                <span className="muted" style={{ fontSize: 13 }}>Descargar uno por interventor:</span>
+                <span className="muted" style={{ fontSize: 13 }}>Todos en un solo archivo:</span>
+                {(["xlsx", "pdf", "csv"] as const).map((fmt) => (
+                  <button key={fmt} className="btn btn-primary btn-sm" disabled={intExportando !== null || !gruposInterventor.length} onClick={() => void exportarInterventoresJuntos(fmt)}>
+                    <IconDownload width={15} height={15} /> {intExportando === `junto|${fmt}` ? "Generando…" : fmt === "xlsx" ? "Excel" : fmt === "pdf" ? "PDF" : "CSV"}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "0 18px 14px" }}>
+                <span style={{ flex: 1 }} />
+                <span className="muted" style={{ fontSize: 13 }}>Un archivo por interventor:</span>
                 {(["xlsx", "pdf", "csv"] as const).map((fmt) => (
                   <button key={fmt} className="btn btn-ghost btn-sm" disabled={intExportando !== null || !gruposInterventor.length} onClick={() => void exportarTodosInterventores(fmt)}>
                     <IconDownload width={15} height={15} /> {intExportando === `*|${fmt}` ? "Generando…" : fmt === "xlsx" ? "Excel" : fmt === "pdf" ? "PDF" : "CSV"}

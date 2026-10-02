@@ -48,6 +48,8 @@ export interface ExportContexto {
   ficha?: FichaModulo;
   /** Tarifario para discriminar el valor en servicio + recargos (solo Transporte; null = sin desglose). */
   tarifario?: Tarifario | null;
+  /** Reportes por interventor: la primera columna del CSV / Excel es el interventor. */
+  interventorPrimero?: boolean;
 }
 
 /** Columnas de valores en pesos (formato moneda y fila de totales en el Excel). */
@@ -58,6 +60,14 @@ const COLS_MONEDA = [
   "Valor Total (COP)",
   "Peajes (COP)",
 ];
+
+/** Fila de exportación según el contexto (con el interventor como primera columna si se pide). */
+function filaExport(p: ExportPair, ctx: ExportContexto): Record<string, string | number> {
+  const row = toExportRow(p.monthLabel, p.item, ctx.tarifario);
+  if (!ctx.interventorPrimero) return row;
+  const { Interventor, ...resto } = row;
+  return { Interventor: Interventor || "(sin interventor)", ...resto };
+}
 
 export const SIN_REGISTROS_MSG = "No hay servicios para exportar con los filtros seleccionados.";
 
@@ -148,14 +158,14 @@ export async function exportServicios(
 ): Promise<void> {
   if (!pairs.length) throw new Error(SIN_REGISTROS_MSG);
   if (format === "csv") {
-    const rows = pairs.map((p) => toExportRow(p.monthLabel, p.item, ctx.tarifario));
+    const rows = pairs.map((p) => filaExport(p, ctx));
     downloadBlob(rowsToCSV(rows), `${filenameBase}.csv`, "text/csv;charset=utf-8;");
   } else if (format === "xlsx") {
     // Excel con las fotos de soporte INCRUSTADAS en la fila (ExcelJS), como el
     // control manual del equipo: hasta 3 evidencias por servicio en columnas al final.
     const ExcelJSMod = await import("exceljs");
     const ExcelJS = (ExcelJSMod as unknown as { default?: typeof ExcelJSMod }).default ?? ExcelJSMod;
-    const rows = pairs.map((p) => toExportRow(p.monthLabel, p.item, ctx.tarifario));
+    const rows = pairs.map((p) => filaExport(p, ctx));
     const headers = Object.keys(rows[0]);
     const wb = new ExcelJS.Workbook();
     wb.creator = "Control Transporte AAA";
