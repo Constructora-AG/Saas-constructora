@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { DEMO_CARTERA, DEMO_COBRADORES, supabaseConfigured } from "@/lib/demo";
 import { CarteraClient, type CarteraRow, type Cobrador } from "./CarteraClient";
 import { IconInfo } from "../icons";
+import Actualizado from "@/app/Actualizado";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function CarteraPage() {
     <>
       <div className="page-head">
         <h1 className="page-title">Control de cartera</h1>
+        <Actualizado tabla="cartera" />
         <p className="page-sub">Consulta qué clientes están retrasados y quiénes al día. Filtra por proyecto, nivel de mora, vencimiento y busca por nombre.</p>
       </div>
 

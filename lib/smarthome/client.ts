@@ -240,12 +240,28 @@ export const bi = {
   },
 
   // Registros digitales (contactos entrantes: WhatsApp, web, etc.). Owner = cuenta que atendió.
-  async digitalRecords(records = 100000): Promise<Record<string, unknown>[]> {
+  // La API devuelve máximo 10.000 por página, de antiguo a nuevo: los leads más nuevos
+  // están en la última página, así que hay que recorrerlas todas.
+  async digitalRecords(records = 10000): Promise<Record<string, unknown>[]> {
     const key = requireUserKey();
-    const data = await call<{ records?: Record<string, unknown>[] }>(
-      `${BI_BASE}/api/bi/getDigitalRecords/${key}?page=1&records=${records}&createdDate=2015-01-01`,
+    const todos = new Map<string, Record<string, unknown>>();
+    let total = 1;
+    for (let page = 1; page <= total; page++) {
+      const data = await call<{ records?: Record<string, unknown>[]; pages?: number }>(
+        `${BI_BASE}/api/bi/getDigitalRecords/${key}?page=${page}&records=${records}&createdDate=2015-01-01`,
+      );
+      total = data.pages ?? 1;
+      for (const r of data.records ?? []) todos.set(String(r.Id ?? `${r.ProspectId}-${r.CreationDate}`), r);
+    }
+    return [...todos.values()];
+  },
+
+  // Una página de getProspectDetail (ver lib/sync/prospectos.ts).
+  async prospectDetailPage(page: number, createdDate: string, records = 1000) {
+    const key = requireUserKey();
+    return call<PaginatedBI<ProspectDetailRecord>>(
+      `${BI_BASE}/api/bi/getProspectDetail/${key}?page=${page}&records=${records}&createdDate=${createdDate}`,
     );
-    return data.records ?? [];
   },
 
   // Genérico para los demás endpoints BI (getDigitalRecords, getProspectLocationSource,

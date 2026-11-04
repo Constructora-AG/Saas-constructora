@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { syncAutorizado } from "@/lib/sync/auth";
+import { syncProspectos } from "@/lib/sync/prospectos";
 import { bi } from "@/lib/smarthome/client";
 import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
 import { PROJECTS } from "@/lib/smarthome/projects";
-import { mapDigitalRecord, mapProspectDetail } from "@/lib/marketing/smarthome";
+import { mapDigitalRecord } from "@/lib/marketing/smarthome";
 import { cachearMiniaturas } from "@/lib/marketing/miniaturas";
 
 const ALLOWED = new Set(PROJECTS.map((p) => p.name.trim().toLowerCase()));
@@ -15,10 +17,7 @@ export const maxDuration = 300;
 // demografía y estado de seguimiento. Autorizado por: cron de Vercel, secret
 // (CARTERA_SYNC_SECRET) o un usuario con sesión (botón "Actualizar" en la UI).
 async function autorizado(req: NextRequest): Promise<boolean> {
-  if (req.headers.get("x-vercel-cron")) return true;
-  const secret = process.env.CARTERA_SYNC_SECRET;
-  const auth = req.headers.get("authorization")?.replace("Bearer ", "") ?? req.nextUrl.searchParams.get("secret");
-  if (secret && auth === secret) return true;
+  if (syncAutorizado(req)) return true;
   const supa = await supabaseServer();
   if (!supa) return true; // modo demo (sin Supabase) — el middleware ya deja pasar
   const { data } = await supa.auth.getUser();
@@ -76,14 +75,15 @@ async function handler(req: NextRequest) {
   }
   await guardarEstado();
 
-  // ── Prospectos enriquecidos (getProspectDetail, todas las páginas) ─────────
-  // Página a página: el histórico son ~68.000 registros y acumularlos enteros en
-  // memoria antes de subirlos hacía que la función muriera sin escribir nada.
+  // ── Prospectos enriquecidos: lo reciente primero y el histórico por tandas ──
+  // ?completo=1 recorre todo el histórico (carga manual, no cabe en los 300 s de Vercel).
   try {
-    for await (const pagina of bi.prospectDetailPages({ createdDate: "2015-01-01" })) {
-      const rows = (pagina as unknown as Record<string, unknown>[]).filter((r) => permitido(r.Proyecto)).map(mapProspectDetail);
-      prospectos += await subir("sh_prospectos", "prospect_id", rows);
-    }
+    const r = await syncProspectos(supa, {
+      hastaMs: inicio + (maxDuration - 75) * 1000,
+      completo: req.nextUrl.searchParams.get("completo") === "1",
+    });
+    prospectos = r.filas;
+    errores.push(...r.errores);
   } catch (e) {
     errores.push(`prospectDetail: ${String(e)}`);
   }

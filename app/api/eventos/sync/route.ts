@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { syncAutorizado } from "@/lib/sync/auth";
 import { rest } from "@/lib/smarthome/client";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
@@ -25,12 +26,7 @@ function parseRecibo(txt: string): string | null {
 // POST /api/eventos/sync?secret=...  (opcional &project=CODE)
 // Trae la bitácora real (getProspectEvents) de cada cliente de cartera a Supabase.
 async function handler(req: NextRequest) {
-  const secret = process.env.CARTERA_SYNC_SECRET;
-  const isVercelCron = req.headers.get("x-vercel-cron") !== null;
-  const auth = req.headers.get("authorization")?.replace("Bearer ", "") ?? req.nextUrl.searchParams.get("secret");
-  if (secret && !isVercelCron && auth !== secret) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  if (!syncAutorizado(req)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const supa = supabaseAdmin();
 
@@ -72,6 +68,7 @@ async function handler(req: NextRequest) {
             es_pago: esPago,
             monto: esPago ? parseMonto(contenido) : null,
             recibo: esPago ? parseRecibo(contenido) : null,
+            synced_at: new Date().toISOString(),
           };
         });
       } catch (err) {

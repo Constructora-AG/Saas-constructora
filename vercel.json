@@ -2,11 +2,23 @@
   "crons": [
     {
       "path": "/api/cartera/sync",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cuotas/sync",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/eventos/sync",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/vendedores/sync",
       "schedule": "0 11 * * *"
     },
     {
       "path": "/api/marketing/sync",
-      "schedule": "30 11 * * *"
+      "schedule": "0 12 * * *"
     }
   ]
 }

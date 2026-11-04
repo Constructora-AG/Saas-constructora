@@ -12,6 +12,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { syncAutorizado } from "@/lib/sync/auth";
 
 function supabaseConfigured(): boolean {
   return Boolean(
@@ -19,16 +20,6 @@ function supabaseConfigured(): boolean {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
       !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("TU-PROYECTO"),
   );
-}
-
-/** Llamadas máquina-a-máquina permitidas: cron de Vercel o Bearer/?secret= correcto. */
-function esSyncAutorizado(req: NextRequest): boolean {
-  if (req.headers.get("x-vercel-cron")) return true;
-  const secret = process.env.CARTERA_SYNC_SECRET;
-  if (!secret) return false;
-  const auth =
-    req.headers.get("authorization")?.replace("Bearer ", "") ?? req.nextUrl.searchParams.get("secret");
-  return auth === secret;
 }
 
 export async function middleware(req: NextRequest) {
@@ -62,7 +53,7 @@ export async function middleware(req: NextRequest) {
 
   if (!user && !esLogin) {
     if (pathname.startsWith("/api/")) {
-      if (esSyncAutorizado(req)) return res;
+      if (syncAutorizado(req)) return res;
       // Servidor MCP de solo lectura: valida su propio token (MCP_TOKEN) en la ruta.
       if (pathname === "/api/mcp") return res;
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });

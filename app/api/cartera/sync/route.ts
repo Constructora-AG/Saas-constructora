@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rest, bi } from "@/lib/smarthome/client";
+import { syncAutorizado } from "@/lib/sync/auth";
+import { rest } from "@/lib/smarthome/client";
 import { PROJECTS } from "@/lib/smarthome/projects";
 import { computeCartera } from "@/lib/cartera/compute";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -10,27 +11,25 @@ export const maxDuration = 300; // sync puede tardar; Fluid Compute lo permite
 // Refresca el snapshot de cartera desde Smarthome hacia Supabase.
 // Protegido por CARTERA_SYNC_SECRET (header Authorization: Bearer <secret> o ?secret=).
 async function handler(req: NextRequest) {
-  const secret = process.env.CARTERA_SYNC_SECRET;
-  const isVercelCron = req.headers.get("x-vercel-cron") !== null;
-  const auth =
-    req.headers.get("authorization")?.replace("Bearer ", "") ??
-    req.nextUrl.searchParams.get("secret");
-  if (secret && !isVercelCron && auth !== secret) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  if (!syncAutorizado(req)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const only = req.nextUrl.searchParams.get("projectCode");
   const projects = PROJECTS.filter((p) => p.code && (!only || p.code === only));
   const supa = supabaseAdmin();
 
-  // Nombres desde la BI (incluye empresas, que getCustomerDetail deja en blanco).
-  const biNames = new Map<string, string>();
-  try {
-    for (const r of await bi.prospectDetail({ all: true, createdDate: "2015-01-01" })) {
-      const n = (r.Nombre_del_Cliente ?? "").toString().trim();
-      if (r.ProspectId && n) biNames.set(r.ProspectId, n);
+  // Nombres de respaldo (empresas, que getCustomerDetail deja en blanco). Antes se descargaba
+  // todo el histórico de la BI aquí, y eso agotaba los 300 s antes de escribir la cartera.
+  const nombresDe = async (tabla: "sh_prospectos" | "cartera", columna: "nombre" | "cliente", ids: string[]) => {
+    const m = new Map<string, string>();
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data } = await supa.from(tabla).select(`prospect_id, ${columna}`).in("prospect_id", ids.slice(i, i + 200));
+      for (const r of (data ?? []) as unknown as Array<Record<string, string | null>>) {
+        const n = (r[columna] ?? "").trim();
+        if (r.prospect_id && n) m.set(r.prospect_id, n);
+      }
     }
-  } catch { /* si falla la BI, seguimos con los nombres del detalle REST */ }
+    return m;
+  };
 
   let upserted = 0;
   const errors: string[] = [];
@@ -44,6 +43,9 @@ async function handler(req: NextRequest) {
       errors.push(`getSales ${code}: ${String(e)}`);
       continue;
     }
+    const ids = sales.map((v) => v.prospectId);
+    const biNames = await nombresDe("sh_prospectos", "nombre", ids);
+    const nombresPrevios = await nombresDe("cartera", "cliente", ids);
 
     // Procesa en lotes para no saturar la API.
     const BATCH = 5;
@@ -58,7 +60,7 @@ async function handler(req: NextRequest) {
             ]);
             const c = computeCartera(plan);
             const nombreRest = detail ? `${detail.firstName ?? ""} ${detail.lastName ?? ""}`.trim() : "";
-            const cliente = nombreRest || biNames.get(sale.prospectId) || sale.module;
+            const cliente = nombreRest || biNames.get(sale.prospectId) || nombresPrevios.get(sale.prospectId) || sale.module;
             const celular =
               detail?.mobileNumber || detail?.secondPhoneNumber || detail?.phoneNumber || "";
             return {

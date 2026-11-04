@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/demo";
 import { RecaudoClient } from "./RecaudoClient";
 import { IconInfo } from "../icons";
+import Actualizado from "@/app/Actualizado";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function RecaudoPage() {
     <>
       <div className="page-head">
         <h1 className="page-title">Recaudo por proyecto</h1>
+        <Actualizado tabla="sh_abonos" />
         <p className="page-sub">Cuánto se debe recaudar en el período y cómo va el recaudo a la fecha, por proyecto. Datos del plan de pagos de Smarthome.</p>
       </div>
       {!configured ? (

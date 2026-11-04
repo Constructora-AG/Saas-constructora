@@ -2,6 +2,7 @@ import { supabaseConfigured } from "@/lib/demo";
 import { PROJECTS } from "@/lib/smarthome/projects";
 import { MarketingClient } from "./MarketingClient";
 import { IconInfo } from "../icons";
+import Actualizado from "@/app/Actualizado";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export default function MarketingPage() {
     <>
       <div className="page-head">
         <h1 className="page-title">Marketing y gestión de leads</h1>
+        <Actualizado tabla="mk_leads" />
         <p className="page-sub">
           Qué anuncio trae los leads que sí convierten, cómo avanza el embudo y cómo gestiona cada asesor sus leads.
           Espejo de Smarthome (registros digitales y prospectos), actualizable a demanda.

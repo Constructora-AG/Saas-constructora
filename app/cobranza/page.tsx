@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/demo";
 import { BitacoraClient } from "./BitacoraClient";
 import { IconInfo } from "../icons";
+import Actualizado from "@/app/Actualizado";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams: Pro
     <>
       <div className="page-head">
         <h1 className="page-title">Bitácora de cobranza</h1>
+        <Actualizado tabla="sh_eventos" />
         <p className="page-sub">Gestión real de Smarthome: a qué clientes se contactó, envíos de WhatsApp, recaudos y notas de seguimiento. Filtra por gestor, tipo, fecha y texto.</p>
       </div>
       {!configured ? (

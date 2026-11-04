@@ -3,6 +3,7 @@ import { supabaseConfigured } from "@/lib/demo";
 import { mergeVendedores, type VendProspecto, type VendContacto } from "@/lib/vendedores";
 import { VendedoresClient } from "./VendedoresClient";
 import { IconInfo } from "../icons";
+import Actualizado from "@/app/Actualizado";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function VendedoresPage() {
     <>
       <div className="page-head">
         <h1 className="page-title">Vendedores</h1>
+        <Actualizado tabla="sh_prospectos" />
         <p className="page-sub">Consulta cómo va cada vendedor y qué gestión ha hecho — pipeline, ventas y contactos, con datos de Smarthome. Filtra por período.</p>
       </div>
       {!configured ? (

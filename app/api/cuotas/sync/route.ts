@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { syncAutorizado } from "@/lib/sync/auth";
 import { rest } from "@/lib/smarthome/client";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
@@ -8,12 +9,7 @@ export const maxDuration = 300;
 // Guarda el detalle del plan de pagos (cada cuota: fecha, programado, pagado) por proyecto.
 // Base del módulo de recaudo por proyecto.
 async function handler(req: NextRequest) {
-  const secret = process.env.CARTERA_SYNC_SECRET;
-  const isVercelCron = req.headers.get("x-vercel-cron") !== null;
-  const auth = req.headers.get("authorization")?.replace("Bearer ", "") ?? req.nextUrl.searchParams.get("secret");
-  if (secret && !isVercelCron && auth !== secret) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  if (!syncAutorizado(req)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const supa = supabaseAdmin();
   const onlyProject = req.nextUrl.searchParams.get("project");
@@ -40,13 +36,13 @@ async function handler(req: NextRequest) {
           const pagado = (it.payments ?? []).reduce((s: number, p: any) => s + (p.amountValue ?? 0), 0);
           cuotasRows.push({
             payment_id: pid, prospect_id: cl.prospect_id, project_code: cl.project_code, project_name: cl.project_name,
-            fecha: it.date ? String(it.date).slice(0, 10) : null, tipo, programado: it.scheduledPaymentAmountValue ?? 0, pagado,
+            fecha: it.date ? String(it.date).slice(0, 10) : null, tipo, programado: it.scheduledPaymentAmountValue ?? 0, pagado, synced_at: new Date().toISOString(),
           });
           (it.payments ?? []).forEach((p: any, pi: number) => {
             if (!p.date || !(p.amountValue > 0)) return;
             abonosRows.push({
               id: `${pid}-${p.paymentId ?? pi}`, prospect_id: cl.prospect_id, project_code: cl.project_code,
-              project_name: cl.project_name, tipo, fecha: String(p.date).slice(0, 10), monto: p.amountValue ?? 0,
+              project_name: cl.project_name, tipo, fecha: String(p.date).slice(0, 10), monto: p.amountValue ?? 0, synced_at: new Date().toISOString(),
             });
           });
         });
