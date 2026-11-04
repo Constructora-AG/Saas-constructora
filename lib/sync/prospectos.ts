@@ -63,13 +63,12 @@ export async function syncProspectos(supa: SupabaseClient, { hastaMs, completo =
       await subir(res.records ?? []);
       paginasHistorico++;
       const total = res.pages ?? 1;
-      const fin = pagina >= total;
-      pagina = fin ? 1 : pagina + 1;
+      pagina = pagina >= total ? 1 : pagina + 1;
       await supa.from("mk_sync_estado").upsert(
         { clave: CLAVE_CURSOR, ultimo_ok: new Date().toISOString(), detalle: { pagina, total } },
         { onConflict: "clave" },
       );
-      if (completo && fin) break;
+      if (paginasHistorico >= total) break; // una sola vuelta por corrida
     }
   } catch (e) {
     errores.push(`historico: ${String(e)}`);
