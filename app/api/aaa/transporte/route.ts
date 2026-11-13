@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseTransporte } from "@/lib/supabase/server";
 import { transporteConfigured } from "@/lib/demo";
+import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 // API clave-valor del panel de Transporte AAA (tabla transporte_kv).
 // Contrato idéntico al window.storage del panel original:
@@ -30,6 +31,8 @@ function errorLegible(error: { code?: string; message: string }) {
 }
 
 export async function GET(req: NextRequest) {
+  const acceso = await exigirModulo("transporte");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!transporteConfigured()) return sinSupabase();
   const { searchParams } = new URL(req.url);
   const supa = supabaseTransporte();
@@ -50,6 +53,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const acceso = await exigirModulo("transporte");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!transporteConfigured()) return sinSupabase();
   let b: { key?: unknown; value?: unknown };
   try {
@@ -68,6 +73,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const acceso = await exigirModulo("transporte");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!transporteConfigured()) return sinSupabase();
   const { searchParams } = new URL(req.url);
   const key = searchParams.get("key");

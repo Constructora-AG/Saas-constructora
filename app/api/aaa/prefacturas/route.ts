@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { catalogoDe } from "@/lib/aaa/catalogo";
+import { exigirCualquieraDeModulos, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 /** Contrato de la prefactura: los módulos base o un contrato creado en la app (id en minúsculas con guiones). */
 function contratoValido(c: unknown): c is string {
@@ -82,6 +83,8 @@ function validarItems(contrato: string, rawItems: ItemBody[], libres = false): {
 
 // GET /api/aaa/prefacturas — lista completa (el cliente filtra)
 export async function GET() {
+  const acceso = await exigirCualquieraDeModulos(["aaa", "transporte"]);
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   const supa = supabaseAdmin();
   const { data, error } = await supa
     .from("aaa_prefacturas")
@@ -101,6 +104,8 @@ interface ItemBody {
 // Body: { contrato, fecha_generacion, (numero se asigna automático) periodo?, lugar?, nota?, items: [{ item, cantidad, vr_unit }] }
 // Los ítems se validan contra el catálogo Herpro del contrato: nombre no catalogado = rechazo.
 export async function POST(req: NextRequest) {
+  const acceso = await exigirCualquieraDeModulos(["aaa", "transporte"]);
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   let b: Record<string, unknown>;
   try {
     b = await req.json();
@@ -182,6 +187,8 @@ export async function POST(req: NextRequest) {
 //         items?, estado?, numero_factura?, fecha_factura?, acta?, migo? }
 // Al quedar cargados acta Y migo, una prefactura "pendiente_acta_migo" pasa sola a "pendiente_pago".
 export async function PATCH(req: NextRequest) {
+  const acceso = await exigirCualquieraDeModulos(["aaa", "transporte"]);
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   let b: Record<string, unknown>;
   try {
     b = await req.json();
@@ -259,6 +266,8 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/aaa/prefacturas — Body: { id }
 export async function DELETE(req: NextRequest) {
+  const acceso = await exigirCualquieraDeModulos(["aaa", "transporte"]);
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   let b: { id?: string };
   try {
     b = await req.json();

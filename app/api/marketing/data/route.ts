@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/demo";
 import type { MarketingData } from "@/lib/marketing/types";
+import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,8 @@ async function todas<T>(build: (from: number, to: number) => PromiseLike<{ data:
 // GET /api/marketing/data?desde=ISO&hasta=ISO
 // Devuelve leads y prospectos (por fecha de creación) + inversión + estado del sync.
 export async function GET(req: NextRequest) {
+  const acceso = await exigirModulo("marketing");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!supabaseConfigured()) {
     return NextResponse.json({ leads: [], prospectos: [], compradores: [], ventas: [], inversion: [], ultimoSync: null, syncDetalle: null } satisfies MarketingData);
   }

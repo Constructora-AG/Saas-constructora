@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 // POST /api/gestion
 // Registra una gestión en la bitácora (dispara el trigger que actualiza el estado).
 // Body: { prospect_id, canal, tipo, cobrador_id?, cobrador_nombre?, resultado?, nota?,
 //         estado_nuevo?, evidencia_url?, monto_comprometido?, fecha_compromiso? }
 export async function POST(req: NextRequest) {
+  const acceso = await exigirModulo("bitacora");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   let b: Record<string, unknown>;
   try {
     b = await req.json();

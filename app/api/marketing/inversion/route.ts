@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
+import { exigirRol, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 // Inversión publicitaria mensual (captura manual) para calcular CPL / CPA.
 // POST   { mes: 'YYYY-MM', proyecto?: string, canal?: string, monto: number, nota?: string }
@@ -13,6 +14,8 @@ async function usuarioActual(): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest) {
+  const acceso = await exigirRol("superadmin");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   const quien = await usuarioActual();
   if (!quien) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   let body: Record<string, unknown>;
@@ -37,6 +40,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const acceso = await exigirRol("superadmin");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   const quien = await usuarioActual();
   if (!quien) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const id = req.nextUrl.searchParams.get("id");

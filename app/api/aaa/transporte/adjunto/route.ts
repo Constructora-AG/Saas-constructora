@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseTransporte } from "@/lib/supabase/server";
 import { transporteConfigured } from "@/lib/demo";
+import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 // POST /api/aaa/transporte/adjunto
 // Sube un adjunto (foto/PDF en base64) al bucket público «evidencias» de
@@ -14,6 +15,8 @@ const BUCKET = "evidencias";
 const MAX_BYTES = 12 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
+  const acceso = await exigirModulo("transporte");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!transporteConfigured()) return NextResponse.json({ error: "Supabase no está configurado" }, { status: 503 });
   let b: { ns?: string; monthKey?: string; serviceId?: string; name?: string; type?: string; dataUrl?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }

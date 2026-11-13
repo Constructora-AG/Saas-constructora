@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bi, BI_ENDPOINTS, type BiEndpoint, SmarthomeError } from "@/lib/smarthome/client";
+import { exigirRol, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 // GET /api/bi/getProjectSummary
 // GET /api/bi/getProspectDetail?page=1&records=1000&createdDate=2023-01-01
@@ -8,6 +9,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ endpoint: string }> },
 ) {
+  const acceso = await exigirRol("superadmin");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   const { endpoint } = await params;
 
   if (!BI_ENDPOINTS.includes(endpoint as BiEndpoint)) {

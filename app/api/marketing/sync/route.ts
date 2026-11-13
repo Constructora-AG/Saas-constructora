@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncAutorizado } from "@/lib/sync/auth";
 import { syncProspectos } from "@/lib/sync/prospectos";
 import { bi } from "@/lib/smarthome/client";
-import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
 import { PROJECTS } from "@/lib/smarthome/projects";
 import { mapDigitalRecord } from "@/lib/marketing/smarthome";
 import { cachearMiniaturas } from "@/lib/marketing/miniaturas";
+import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 const ALLOWED = new Set(PROJECTS.map((p) => p.name.trim().toLowerCase()));
 const permitido = (proyecto: unknown) => ALLOWED.has((proyecto ?? "").toString().trim().toLowerCase());
@@ -18,10 +19,8 @@ export const maxDuration = 300;
 // (CARTERA_SYNC_SECRET) o un usuario con sesión (botón "Actualizar" en la UI).
 async function autorizado(req: NextRequest): Promise<boolean> {
   if (syncAutorizado(req)) return true;
-  const supa = await supabaseServer();
-  if (!supa) return true; // modo demo (sin Supabase) — el middleware ya deja pasar
-  const { data } = await supa.auth.getUser();
-  return Boolean(data.user);
+  const acceso = await exigirModulo("marketing");
+  return !esRespuestaAutorizacion(acceso);
 }
 
 async function handler(req: NextRequest) {

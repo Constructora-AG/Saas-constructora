@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/demo";
 import iniciales from "@/lib/aaa/facturas-iniciales.json";
+import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 
 // Registro de facturas emitidas a Triple A (tabla aaa_facturas, supabase/aaa_facturas.sql).
 // contrato: "emergencia" (Otro Sí) | "alquiler" (Contrato de Alquiler).
@@ -46,6 +47,8 @@ function limpiar(b: Record<string, unknown>, parcial: boolean): Record<string, u
 
 // GET /api/aaa/facturas?contrato=emergencia|alquiler
 export async function GET(req: NextRequest) {
+  const acceso = await exigirModulo("aaa");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   const contrato = req.nextUrl.searchParams.get("contrato") ?? "";
   if (!CONTRATOS.has(contrato)) return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
   if (!supabaseConfigured()) {
@@ -64,6 +67,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/aaa/facturas — Body: { contrato, numero, fecha, concepto, valor_total, nota? }
 export async function POST(req: NextRequest) {
+  const acceso = await exigirModulo("aaa");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   let b: Record<string, unknown>;
   try {
     b = await req.json();
@@ -80,6 +85,8 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/aaa/facturas — Body: { id, numero?, fecha?, concepto?, valor_total?, nota? }
 export async function PATCH(req: NextRequest) {
+  const acceso = await exigirModulo("aaa");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   let b: Record<string, unknown>;
   try {
     b = await req.json();
@@ -97,6 +104,8 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/aaa/facturas — Body: { id }
 export async function DELETE(req: NextRequest) {
+  const acceso = await exigirModulo("aaa");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   let b: { id?: string };
   try {
     b = await req.json();
