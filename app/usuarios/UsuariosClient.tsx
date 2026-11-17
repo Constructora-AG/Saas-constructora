@@ -2,7 +2,7 @@
 // ════════════════════════════════════════════════════════════════════
 // Usuarios de la plataforma (solo Gerencia)
 // - Lista de cuentas (nombre, email, rol, fecha de alta).
-// - Crear cuenta: nombre, email, rol, contraseña (con generador).
+// - Crear cuenta: nombre, email, rol y módulos adicionales.
 // - Por cuenta: cambiar rol (inline), editar nombre, restablecer
 //   contraseña y eliminar (nunca la propia).
 // Persistencia vía /api/usuarios (service_role en el servidor, que
@@ -32,9 +32,8 @@ export function UsuariosClient() {
   const [yo, setYo] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
-  const [nuevo, setNuevo] = useState({ nombre: "", email: "", rol: "operacion" as RolPlataforma, password: generarPassword(), modulos: [] as string[] });
+  const [nuevo, setNuevo] = useState({ nombre: "", email: "", rol: "operacion" as RolPlataforma, modulos: [] as string[] });
   const [modulosDe, setModulosDe] = useState<{ id: string; modulos: string[] } | null>(null);
-  const [verPass, setVerPass] = useState(true);
   const [editNombre, setEditNombre] = useState<{ id: string; nombre: string } | null>(null);
   const [resetPass, setResetPass] = useState<{ id: string; password: string } | null>(null);
 
@@ -51,14 +50,14 @@ export function UsuariosClient() {
     cargar().catch((e) => setMsg({ error: e instanceof Error ? e.message : "Error cargando cuentas." }));
   }, [esGerencia, cargar]);
 
-  const llamar = async (id: string, init: RequestInit, okMsg: string) => {
+  const llamar = async (id: string, init: RequestInit, okMsg: string | ((data: { password?: string }) => string)) => {
     setMsg(null);
     setOcupado(id);
     try {
       const r = await fetch("/api/usuarios", { headers: { "Content-Type": "application/json" }, ...init });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || "La operación falló.");
-      setMsg({ ok: okMsg });
+      setMsg({ ok: typeof okMsg === "function" ? okMsg(j) : okMsg });
       await cargar();
       return true;
     } catch (e) {
@@ -72,8 +71,8 @@ export function UsuariosClient() {
   const crear = async (e: React.FormEvent) => {
     e.preventDefault();
     const ok = await llamar("nuevo", { method: "POST", body: JSON.stringify(nuevo) },
-      `Cuenta ${nuevo.email} creada con rol ${ROL_LABELS[nuevo.rol]}. Contraseña: ${nuevo.password} — cópiala ahora, no se vuelve a mostrar.`);
-    if (ok) setNuevo({ nombre: "", email: "", rol: "operacion", password: generarPassword(), modulos: [] });
+      (j) => `Cuenta ${nuevo.email} creada. Contraseña temporal: ${j.password ?? "no disponible"} — cópiala ahora, no se volverá a mostrar.`);
+    if (ok) setNuevo({ nombre: "", email: "", rol: "operacion", modulos: [] });
   };
 
   const cambiarRol = (c: Cuenta, rol: string) =>
@@ -135,7 +134,7 @@ export function UsuariosClient() {
       <form className="table-wrap" style={{ padding: 18, marginBottom: 18 }} onSubmit={(e) => void crear(e)}>
         <div style={{ fontWeight: 700, marginBottom: 4 }}>Nueva cuenta</div>
         <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
-          La cuenta queda activa de inmediato (sin correo de confirmación). Entrega la contraseña al usuario por un canal seguro.
+          Se generará una contraseña temporal y se mostrará una sola vez al crear la cuenta.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           <label className="field">Nombre
@@ -149,14 +148,6 @@ export function UsuariosClient() {
               {ROLES.map((r) => <option key={r} value={r}>{ROL_LABELS[r]}</option>)}
             </select>
             <span className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{ROL_DESC[nuevo.rol]}</span>
-          </label>
-          <label className="field">Contraseña (mín. 8)
-            <div style={{ display: "flex", gap: 6 }}>
-              <input className="input" type={verPass ? "text" : "password"} required minLength={8} value={nuevo.password}
-                onChange={(e) => setNuevo((f) => ({ ...f, password: e.target.value }))} style={{ flex: 1 }} />
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setVerPass((v) => !v)} title={verPass ? "Ocultar" : "Mostrar"}>{verPass ? "Ocultar" : "Ver"}</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNuevo((f) => ({ ...f, password: generarPassword() }))} title="Generar contraseña">Generar</button>
-            </div>
           </label>
         </div>
         <div style={{ marginTop: 12 }}>

@@ -90,18 +90,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const { usuario, cargando, cerrarSesion } = useUsuario();
+  const esPantallaAuth = path === "/login" || path === "/auth/establecer-contrasena" || path === "/auth/restablecer-contrasena";
   // Contratos creados desde la app: cada uno aparece en el menú de Proyecto Triple A.
   const [contratosApp, setContratosApp] = useState<ContratoDinamico[]>([]);
   useEffect(() => {
-    if (path === "/login") return;
+    if (esPantallaAuth) return;
     const cargar = () => { cargarContratos().then(setContratosApp).catch(() => undefined); };
     cargar();
     window.addEventListener("ag:contratos-cambiaron", cargar);
     return () => window.removeEventListener("ag:contratos-cambiaron", cargar);
-  }, [path]);
+  }, [esPantallaAuth, path]);
 
-  // /login se pinta a pantalla completa, sin barra lateral ni topbar.
-  if (path === "/login") return <>{children}</>;
+  // Las pantallas de autenticación se pintan a pantalla completa, sin barra lateral ni topbar.
+  if (esPantallaAuth) return <>{children}</>;
 
   const iniciales = usuario
     ? usuario.nombre

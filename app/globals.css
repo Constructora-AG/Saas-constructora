@@ -433,6 +433,42 @@ table.clean td b { color: var(--text); font-weight: 600; }
 .login-btn { width: 100%; padding: 11px 14px; margin-top: 2px; }
 .login-foot { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); text-align: center; }
 
+.login-recovery { display: flex; justify-content: flex-end;margin-top: -8px; margin-bottom: 8px;}
+.login-link { background: none; border: none; padding: 4px 0; color: var(--primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.login-link:hover { text-decoration: underline; }
+.login-back { display: block; width: 100%; margin-top: 16px; padding: 8px; border: none; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; cursor: pointer; }
+.login-back:hover { color: var(--primary);}
+
+.password-input-wrap { position: relative; display: flex; align-items: center; }
+.password-input-wrap .input { padding-right: 76px; }
+.password-toggle {
+  position: absolute; right: 8px; border: 0; background: transparent; color: var(--primary);
+  padding: 5px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.password-toggle:hover { text-decoration: underline; }
+.password-toggle:disabled { cursor: default; opacity: .55; }
+.password-strength { margin-top: -5px; }
+.password-strength-head { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11.5px; }
+.password-strength-head strong { font-weight: 700; }
+.password-meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
+.password-meter span { height: 4px; border-radius: 99px; background: var(--border); }
+.password-meter span.password-strength-weak { background: #d64545; }
+.password-meter span.password-strength-fair { background: #d88b20; }
+.password-meter span.password-strength-good { background: #579b43; }
+.password-meter span.password-strength-strong { background: #237a43; }
+.password-strength-empty { color: var(--muted); }
+.password-strength-weak, .password-match-error { color: var(--high); }
+.password-strength-fair { color: #a66513; }
+.password-strength-good { color: #4c8b3b; }
+.password-strength-strong, .password-match-ok { color: #237a43; }
+.password-requirements { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; margin: -3px 0 2px; padding: 0; list-style: none; color: var(--muted); font-size: 11.5px; }
+.password-requirements li { display: flex; align-items: center; gap: 5px; }
+.password-requirements li span { width: 13px; color: var(--muted); font-weight: 700; }
+.password-requirements .password-requirement-ok { color: #237a43; }
+.password-requirements .password-requirement-ok span { color: #237a43; }
+.password-match-ok, .password-match-error { display: block; margin-top: 4px; font-size: 11.5px; }
+@media (max-width: 420px) { .password-requirements { grid-template-columns: 1fr; } }
+
 /* ── Sesión en la barra lateral (usuario logueado) ────── */
 .sidebar-foot-session { display: flex; align-items: center; gap: 11px; min-width: 0; flex: 1; }
 .sidebar-logout {

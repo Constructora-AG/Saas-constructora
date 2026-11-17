@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════════
 // Middleware de autenticación de la plataforma (Supabase Auth, @supabase/ssr).
-// Protege TODAS las rutas (páginas y /api) salvo /login y los assets
-// estáticos (excluidos en `config.matcher`). Sin sesión:
+// Protege TODAS las rutas (páginas y /api) salvo /login, el callback de Auth
+// y los assets estáticos (excluidos en `config.matcher`). Sin sesión:
 //   · páginas → redirect a /login (con ?next= para volver tras entrar)
 //   · /api    → 401 JSON (los sync con secret/cron de Vercel sí pasan;
 //               cada ruta valida su CARTERA_SYNC_SECRET por su cuenta;
@@ -24,6 +24,14 @@ function supabaseConfigured(): boolean {
 
 export async function middleware(req: NextRequest) {
   if (!supabaseConfigured()) return NextResponse.next(); // modo demo
+
+  // Supabase Auth consulta este template HTML sin una sesión de usuario.
+  if (req.nextUrl.pathname === "/auth-emails/invite.html" || req.nextUrl.pathname === "/auth-emails/recovery.html") {
+    return NextResponse.next();
+  }
+
+  // Supabase debe alcanzar esta ruta antes de que el código de invitación pueda establecer una sesión.
+  if (req.nextUrl.pathname === "/auth/callback") return NextResponse.next();
 
   let res = NextResponse.next({ request: req });
   const supabase = createServerClient(
@@ -50,8 +58,10 @@ export async function middleware(req: NextRequest) {
 
   const { pathname } = req.nextUrl;
   const esLogin = pathname === "/login" || pathname.startsWith("/login/");
+  const esCallback = pathname === "/auth/callback";
+  const esRecuperacion = pathname === "/api/usuarios/password-recovery";
 
-  if (!user && !esLogin) {
+  if (!user && !esLogin && !esCallback && !esRecuperacion) {
     if (pathname.startsWith("/api/")) {
       if (syncAutorizado(req)) return res;
       // Servidor MCP de solo lectura: valida su propio token (MCP_TOKEN) en la ruta.
