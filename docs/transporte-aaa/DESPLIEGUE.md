@@ -1,8 +1,9 @@
 # Despliegue — pasos manuales pendientes
 
-Todo el código de autenticación y del panel de Transporte AAA ya está en el repo
-y compila. Falta SOLO lo siguiente, en este orden, para dejar la plataforma
-operando con login real y datos reales:
+Todo el código de autenticación y del panel de Transporte AAA ya está en el repo y compila.
+
+Falta SOLO lo siguiente, en este orden, para dejar la plataforma operando con
+login real y datos reales:
 
 ## 1. Crear las tablas en Supabase (SQL Editor)
 

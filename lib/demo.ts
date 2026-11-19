@@ -13,11 +13,12 @@ export function supabaseConfigured(): boolean {
 // el servidor. Configurado si hay credenciales propias TRANSPORTE_* o, en su
 // defecto, las del Supabase principal.
 export function transporteConfigured(): boolean {
+  // Debe coincidir con supabaseTransporte(): la clave pública no habilita el
+  // backend persistente porque no concede los permisos administrativos requeridos.
   const url = process.env.TRANSPORTE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key =
     process.env.TRANSPORTE_SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
   return Boolean(url && key && !url.includes("TU-PROYECTO"));
 }
 
