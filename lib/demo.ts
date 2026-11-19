@@ -13,14 +13,25 @@ export function supabaseConfigured(): boolean {
 // el servidor. Configurado si hay credenciales propias TRANSPORTE_* o, en su
 // defecto, las del Supabase principal.
 export function transporteConfigured(): boolean {
-  // TODO(seguridad): esta comprobación deberá exigir una service_role cuando
-  // se active el fail-closed de las rutas administrativas.
+  // Debe coincidir con supabaseTransporte(): la clave pública no habilita el
+  // backend persistente porque no concede los permisos administrativos requeridos.
   const url = process.env.TRANSPORTE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key =
     process.env.TRANSPORTE_SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return Boolean(url && key && !url.includes("TU-PROYECTO"));
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return false;
+
+  // No basta con que exista una cadena: durante el despliegue es frecuente
+  // dejar el host de ejemplo de Coolify (p. ej. `supabasekong-XXXX.sslip.io`).
+  // En ese caso el cliente de Supabase lanza una excepción de red y Next
+  // convierte la petición en un 500 poco útil.
+  try {
+    const parsed = new URL(url);
+    if (!/^https?:$/.test(parsed.protocol) || !parsed.hostname) return false;
+  } catch {
+    return false;
+  }
+  return !/TU-PROYECTO|XXXX/i.test(url);
 }
 
 export const DEMO_COBRADORES = [

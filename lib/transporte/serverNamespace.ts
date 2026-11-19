@@ -39,5 +39,11 @@ export function authorizeNamespaceValue(value: unknown): { ns: string; prefix: s
 
 /** Comprueba que una clave solo pueda ser usada dentro del namespace autorizado. */
 export function keyBelongsToNamespace(key: string, access: Pick<TransporteNamespaceAccess, "prefix">): boolean {
-  return access.prefix ? key.startsWith(access.prefix) && key.length > access.prefix.length : !key.includes(":");
+  if (access.prefix) return key.startsWith(access.prefix) && key.length > access.prefix.length;
+
+  // Transporte conserva sus claves históricas globales (`adminconfig`,
+  // `tarifario`, etc.), pero sus registros mensuales usan el formato
+  // `services:AAAA-MM`. No se debe rechazar ese único prefijo válido ni abrir
+  // acceso a claves pertenecientes a otros namespaces.
+  return !key.includes(":") || /^services:\d{4}-\d{2}$/.test(key);
 }
