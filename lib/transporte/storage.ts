@@ -115,16 +115,13 @@ export function validateBackup(
 export function storageFor(ns: ModuloNs) {
   const NS_PREFIX = prefijoDe(ns);
   const nsKey = (key: string) => `${NS_PREFIX}${key}`;
-  // Se envía en cada petición para que el servidor aplique autorización y
-  // filtrado; no basta con filtrar las claves únicamente en el navegador.
-  const nsQuery = `ns=${encodeURIComponent(ns)}`;
 
   // ── Contrato get/set/delete/list (valores string JSON) ─────────────
 
   async function kvGet(key: string): Promise<string | null> {
     const k = nsKey(key);
     if (!storageAvailable()) return demoStore.get(k) ?? null;
-    const r = await api<{ key: string; value: string | null }>(`${API}?${nsQuery}&key=${encodeURIComponent(k)}`, undefined, `get ${key}`);
+    const r = await api<{ key: string; value: string | null }>(`${API}?key=${encodeURIComponent(k)}`, undefined, `get ${key}`);
     return r.value;
   }
 
@@ -134,20 +131,20 @@ export function storageFor(ns: ModuloNs) {
     await api(`${API}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ns, key: k, value }),
+      body: JSON.stringify({ key: k, value }),
     }, `set ${key}`, timeoutMs);
   }
 
   async function kvDelete(key: string): Promise<void> {
     const k = nsKey(key);
     if (!storageAvailable()) { demoStore.delete(k); return; }
-    await api(`${API}?${nsQuery}&key=${encodeURIComponent(k)}`, { method: "DELETE" }, `delete ${key}`);
+    await api(`${API}?key=${encodeURIComponent(k)}`, { method: "DELETE" }, `delete ${key}`);
   }
 
   /** Fecha de actualización por clave (solo las de este módulo, sin prefijo). Sirve para recargar solo lo que cambió. */
   async function kvMeta(): Promise<Record<string, string>> {
     if (!storageAvailable()) return Object.fromEntries([...demoStore.keys()].map((k) => [k, ""]));
-    const r = await api<{ keys: string[]; updated?: Record<string, string> }>(`${API}?${nsQuery}&list=1`, undefined, "meta");
+    const r = await api<{ keys: string[]; updated?: Record<string, string> }>(`${API}?list=1`, undefined, "meta");
     const out: Record<string, string> = {};
     Object.entries(r.updated ?? {}).forEach(([k, v]) => {
       if (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z0-9-]+:(adminconfig|tarifario|services:)/.test(k)) out[NS_PREFIX ? k.slice(NS_PREFIX.length) : k] = v;
@@ -161,7 +158,7 @@ export function storageFor(ns: ModuloNs) {
       .filter((k) => (NS_PREFIX ? k.startsWith(NS_PREFIX) : !/^[a-z0-9-]+:(adminconfig|tarifario|services:)/.test(k)))
       .map((k) => (NS_PREFIX ? k.slice(NS_PREFIX.length) : k));
     if (!storageAvailable()) return propias([...demoStore.keys()]);
-    const r = await api<{ keys: string[] }>(`${API}?${nsQuery}&list=1`, undefined, "list");
+    const r = await api<{ keys: string[] }>(`${API}?list=1`, undefined, "list");
     return propias(r.keys);
   }
 

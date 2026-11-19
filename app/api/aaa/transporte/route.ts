@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseTransporte } from "@/lib/supabase/server";
 import { transporteConfigured } from "@/lib/demo";
 import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
-import { authorizeTransporteNamespace, authorizeNamespaceValue, keyBelongsToNamespace } from "@/lib/transporte/serverNamespace";
 
 // API clave-valor del panel de Transporte AAA (tabla transporte_kv).
 // Contrato idéntico al window.storage del panel original:
@@ -14,10 +13,8 @@ import { authorizeTransporteNamespace, authorizeNamespaceValue, keyBelongsToName
 export const dynamic = "force-dynamic";
 
 function sinSupabase() {
-  // Fallo explícito de configuración: no se permite degradar a anon ni entrar
-  // silenciosamente en modo demo cuando la ruta está siendo usada con backend.
   return NextResponse.json(
-    { error: "El módulo no está disponible: faltan las credenciales privilegiadas de Supabase en el servidor." },
+    { error: "Supabase no está configurado; el módulo corre en modo demo en el navegador." },
     { status: 503 },
   );
 }
@@ -34,19 +31,15 @@ function errorLegible(error: { code?: string; message: string }) {
 }
 
 export async function GET(req: NextRequest) {
-  const acceso = await authorizeTransporteNamespace(req);
-  if (acceso instanceof NextResponse) return acceso;
+  const acceso = await exigirModulo("transporte");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!transporteConfigured()) return sinSupabase();
   const { searchParams } = new URL(req.url);
-  const ns = authorizeNamespaceValue(searchParams.get("ns"))!;
   const supa = supabaseTransporte();
 
   if (searchParams.get("list")) {
     // keys + fecha de actualización por clave: el cliente solo recarga lo que cambió
-    let query = supa.from("transporte_kv").select("key, updated_at");
-    if (ns.prefix) query = query.like("key", `${ns.prefix}%`);
-    else query = query.not("key", "like", "%:%");
-    const { data, error } = await query;
+    const { data, error } = await supa.from("transporte_kv").select("key, updated_at");
     if (error) return errorLegible(error);
     const rows = (data ?? []) as Array<{ key: string; updated_at: string | null }>;
     return NextResponse.json({ keys: rows.map((r) => r.key), updated: Object.fromEntries(rows.map((r) => [r.key, r.updated_at ?? ""])) });
@@ -54,7 +47,6 @@ export async function GET(req: NextRequest) {
 
   const key = searchParams.get("key");
   if (!key) return NextResponse.json({ error: "Falta ?key= o ?list=1" }, { status: 400 });
-  if (!keyBelongsToNamespace(key, acceso)) return NextResponse.json({ error: "La clave no pertenece al namespace autorizado" }, { status: 403 });
   const { data, error } = await supa.from("transporte_kv").select("key,value").eq("key", key).maybeSingle();
   if (error) return errorLegible(error);
   return NextResponse.json({ key, value: data ? (data.value as string) : null });
@@ -62,21 +54,14 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   if (!transporteConfigured()) return sinSupabase();
-  let b: { ns?: unknown; key?: unknown; value?: unknown };
+  let b: { key?: unknown; value?: unknown };
   try {
     b = await req.json();
   } catch {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
-  // El namespace del body se valida antes de autorizar y persistir la clave.
-  const requestedNs = authorizeNamespaceValue(b.ns);
-  if (!requestedNs) return NextResponse.json({ error: "Namespace inválido" }, { status: 400 });
-  const usuario = await exigirModulo(requestedNs.modulo);
-  if (esRespuestaAutorizacion(usuario)) return usuario;
-  const acceso = { usuario, ...requestedNs };
   const key = String(b.key ?? "").trim();
   if (!key) return NextResponse.json({ error: "Falta key" }, { status: 400 });
-  if (!keyBelongsToNamespace(key, acceso)) return NextResponse.json({ error: "Namespace o clave no autorizados" }, { status: 403 });
   if (typeof b.value !== "string") return NextResponse.json({ error: "value debe ser un string JSON" }, { status: 400 });
 
   const supa = supabaseTransporte();
@@ -86,13 +71,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const acceso = await authorizeTransporteNamespace(req);
-  if (acceso instanceof NextResponse) return acceso;
+  const acceso = await exigirModulo("transporte");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!transporteConfigured()) return sinSupabase();
   const { searchParams } = new URL(req.url);
   const key = searchParams.get("key");
   if (!key) return NextResponse.json({ error: "Falta ?key=" }, { status: 400 });
-  if (!keyBelongsToNamespace(key, acceso)) return NextResponse.json({ error: "La clave no pertenece al namespace autorizado" }, { status: 403 });
   const supa = supabaseTransporte();
   const { error } = await supa.from("transporte_kv").delete().eq("key", key);
   if (error) return errorLegible(error);

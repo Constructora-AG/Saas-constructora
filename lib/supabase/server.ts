@@ -3,22 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-export class SupabaseConfigurationError extends Error {
-  /** Identifica una configuración incompleta para evitar degradar a la clave pública. */
-  constructor(message: string) {
-    super(message);
-    this.name = "SupabaseConfigurationError";
-  }
-}
-
 // Cliente de servidor con service_role: salta RLS. Úsalo SOLO en rutas de servidor
 // (sync, escrituras de bitácora). Nunca lo expongas al navegador.
 export function supabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  // Las operaciones administrativas deben fallar si falta service_role: usar anon
-  // aquí ocultaría errores de despliegue y haría depender la seguridad de RLS.
-  if (!url || !key) throw new SupabaseConfigurationError("Faltan NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
+  // TODO(seguridad): cuando Coolify tenga la service_role verificada, eliminar
+  // el fallback a anon y hacer que las operaciones administrativas fallen si falta.
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error("Faltan NEXT_PUBLIC_SUPABASE_URL / clave de Supabase");
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
@@ -27,12 +19,13 @@ export function supabaseAdmin() {
 // plataforma. Nunca usa la clave pública como respaldo ni se expone al navegador.
 export function supabaseTransporte() {
   const url = process.env.TRANSPORTE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // TODO(seguridad): exigir una service_role exclusiva de Transporte cuando
+  // las variables privadas estén confirmadas en el servicio de Coolify.
   const key =
     process.env.TRANSPORTE_SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
-  // Transporte puede vivir en un proyecto separado, pero siempre necesita una
-  // clave service_role; nunca se permite continuar con NEXT_PUBLIC_*.
-  if (!url || !key) throw new SupabaseConfigurationError("Faltan credenciales privilegiadas de Supabase para Transporte AAA");
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error("Faltan credenciales de Supabase para Transporte AAA");
   return createClient(url, key, { auth: { persistSession: false } });
 }
 

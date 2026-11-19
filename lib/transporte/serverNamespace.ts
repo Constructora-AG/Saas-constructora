@@ -10,7 +10,10 @@ export interface TransporteNamespaceAccess {
 /**
  * Resuelve el espacio de datos y el módulo que lo protege.
  * El namespace determina tanto el prefijo de las claves como el permiso que
- * debe tener el usuario antes de tocar la tabla transporte_kv.
+ * deberá tener el usuario antes de tocar la tabla transporte_kv.
+ *
+ * Esta utilidad queda preparada para la próxima activación del aislamiento por
+ * namespace; actualmente la API conserva el comportamiento anterior.
  */
 export function resolveTransporteNamespace(value: unknown): { ns: string; prefix: string; modulo: string } | null {
   const ns = String(value ?? "transporte").trim() || "transporte";
@@ -20,9 +23,8 @@ export function resolveTransporteNamespace(value: unknown): { ns: string; prefix
   return { ns, prefix: `${ns}:`, modulo: "contratos" };
 }
 
+/** Autoriza un namespace recibido en los parámetros de una petición HTTP. */
 export async function authorizeTransporteNamespace(req: NextRequest): Promise<TransporteNamespaceAccess | NextResponse> {
-  // Centraliza la autenticación de GET/DELETE para que el endpoint no pueda
-  // autorizar un módulo y consultar accidentalmente los datos de otro.
   const resolved = resolveTransporteNamespace(req.nextUrl.searchParams.get("ns"));
   if (!resolved) return NextResponse.json({ error: "Namespace inválido" }, { status: 400 });
   const acceso = await exigirModulo(resolved.modulo);
@@ -30,14 +32,12 @@ export async function authorizeTransporteNamespace(req: NextRequest): Promise<Tr
   return { usuario: acceso, ...resolved };
 }
 
+/** Variante para cuerpos POST o peticiones de adjuntos que envían el namespace en el body. */
 export function authorizeNamespaceValue(value: unknown): { ns: string; prefix: string; modulo: string } | null {
-  // Variante reutilizable para cuerpos POST y endpoints de adjuntos, donde el
-  // namespace llega en el body y no en la URL.
   return resolveTransporteNamespace(value);
 }
 
+/** Comprueba que una clave solo pueda ser usada dentro del namespace autorizado. */
 export function keyBelongsToNamespace(key: string, access: Pick<TransporteNamespaceAccess, "prefix">): boolean {
-  // Impide leer o escribir claves de otro contrato aunque el cliente manipule
-  // directamente el parámetro key.
   return access.prefix ? key.startsWith(access.prefix) && key.length > access.prefix.length : !key.includes(":");
 }

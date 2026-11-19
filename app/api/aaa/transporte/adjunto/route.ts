@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseTransporte } from "@/lib/supabase/server";
 import { transporteConfigured } from "@/lib/demo";
 import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
-import { authorizeNamespaceValue } from "@/lib/transporte/serverNamespace";
 
 // POST /api/aaa/transporte/adjunto
 // Sube un adjunto (foto/PDF en base64) al bucket público «evidencias» de
@@ -16,20 +15,17 @@ const BUCKET = "evidencias";
 const MAX_BYTES = 12 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
-  if (!transporteConfigured()) return NextResponse.json({ error: "El módulo no está disponible: faltan las credenciales privilegiadas de Supabase en el servidor." }, { status: 503 });
+  const acceso = await exigirModulo("transporte");
+  if (esRespuestaAutorizacion(acceso)) return acceso;
+  if (!transporteConfigured()) return NextResponse.json({ error: "Supabase no está configurado" }, { status: 503 });
   let b: { ns?: string; monthKey?: string; serviceId?: string; name?: string; type?: string; dataUrl?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
-  // El mismo namespace que protege transporte_kv protege también los adjuntos.
-  const namespace = authorizeNamespaceValue(b.ns);
-  if (!namespace) return NextResponse.json({ error: "Namespace inválido" }, { status: 400 });
-  const acceso = await exigirModulo(namespace.modulo);
-  if (esRespuestaAutorizacion(acceso)) return acceso;
   const m = /^data:([\w.+-]+\/[\w.+-]+)?;base64,(.+)$/s.exec(String(b.dataUrl ?? ""));
   if (!m) return NextResponse.json({ error: "Adjunto inválido (se esperaba data URL base64)" }, { status: 400 });
   const bytes = Buffer.from(m[2], "base64");
   if (bytes.length > MAX_BYTES) return NextResponse.json({ error: "El adjunto supera 12 MB" }, { status: 400 });
   const type = String(b.type || m[1] || "application/octet-stream");
-  const ns = namespace.ns;
+  const ns = /^[a-z0-9-]+$/.test(String(b.ns ?? "")) ? String(b.ns) : "transporte";
   const monthKey = /^\d{4}-\d{2}$/.test(String(b.monthKey ?? "")) ? String(b.monthKey) : "sin-mes";
   const serviceId = String(b.serviceId ?? "s").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60) || "s";
   const safeName = String(b.name ?? "adjunto").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);
