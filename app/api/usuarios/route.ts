@@ -12,14 +12,14 @@ import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
 // leyendo la fila del solicitante con la service_role.
 // ════════════════════════════════════════════════════════════════════
 
-import { ROLES, MODULOS_OTORGABLES } from "@/lib/auth/modulos";
-
-function limpiarModulos(v: unknown): string[] {
-  const ok = new Set(MODULOS_OTORGABLES.map((m) => m.id));
-  return Array.isArray(v)
-    ? [...new Set(v.map(String).filter((id) => ok.has(id)))]
-    : [];
-}
+import { ROLES } from "@/lib/auth/modulos";
+import {
+  limpiarModulos,
+  normalizarEmail,
+  normalizarNombre,
+  puedeCambiarRolPropio,
+  puedeEliminarCuentaPropia,
+} from "@/lib/auth/usuarios";
 
 function generarPasswordAutomatica(): string {
   const grupos = [
@@ -85,11 +85,11 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
-  const email = b.email?.trim().toLowerCase();
-  const nombre = b.nombre?.trim();
+  const email = normalizarEmail(b.email);
+  const nombre = normalizarNombre(b.nombre);
   const rol = b.rol as (typeof ROLES)[number];
   const modulos = limpiarModulos(b.modulos);
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!email) {
     return NextResponse.json({ error: "Email inválido" }, { status: 400 });
   }
   if (!nombre)
@@ -168,7 +168,7 @@ export async function PATCH(req: NextRequest) {
     const rol = b.rol as (typeof ROLES)[number];
     if (!ROLES.includes(rol))
       return NextResponse.json({ error: "Rol inválido" }, { status: 400 });
-    if (b.id === g.uid && rol !== "superadmin") {
+    if (!puedeCambiarRolPropio(g.uid, b.id, rol)) {
       return NextResponse.json(
         { error: "No puedes quitarte a ti mismo el rol de Super admin" },
         { status: 400 },
@@ -212,7 +212,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
   if (!b.id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
-  if (b.id === g.uid)
+  if (!puedeEliminarCuentaPropia(g.uid, b.id))
     return NextResponse.json(
       { error: "No puedes eliminar tu propia cuenta" },
       { status: 400 },
