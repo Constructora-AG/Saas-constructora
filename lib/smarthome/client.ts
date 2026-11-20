@@ -1,4 +1,8 @@
 import "server-only";
+import { callSmarthome, SmarthomeError } from "./http";
+import { BI_ENDPOINTS } from "./bi";
+export { BI_ENDPOINTS } from "./bi";
+export type { BiEndpoint } from "./bi";
 import type {
   Company,
   CustomerDetail,
@@ -22,47 +26,11 @@ const COMPANY_CODE = process.env.SMARTHOME_COMPANY_CODE ?? "";
 const BI_USERKEY = process.env.SMARTHOME_BI_USERKEY ?? "";
 const API_KEY = process.env.SMARTHOME_API_KEY ?? "";
 
-export class SmarthomeError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly url: string,
-    readonly body?: string,
-  ) {
-    super(message);
-    this.name = "SmarthomeError";
-  }
-}
+export { SmarthomeError } from "./http";
 
 // fetch base. Node descomprime gzip automáticamente (la BI responde gzip).
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(API_KEY ? { ApiKey: API_KEY } : {}),
-      ...init?.headers,
-    },
-    // Sin caché: el Data Cache servía respuestas viejas (stale-while-revalidate)
-    // y los syncs guardaban datos desactualizados en Supabase.
-    cache: "no-store",
-  });
-
-  const text = await res.text();
-  if (!res.ok) {
-    throw new SmarthomeError(
-      `Smarthome ${res.status} en ${url}`,
-      res.status,
-      url,
-      text.slice(0, 500),
-    );
-  }
-  if (!text) return undefined as T;
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new SmarthomeError("Respuesta no-JSON", res.status, url, text.slice(0, 500));
-  }
+  return callSmarthome<T>(url, API_KEY, init);
 }
 
 function requireCompany(): string {
@@ -273,13 +241,3 @@ export const bi = {
   },
 };
 
-// Endpoints BI permitidos (whitelist para el proxy /api/bi/[endpoint]).
-export const BI_ENDPOINTS = [
-  "getProjectSummary",
-  "getDigitalRecords",
-  "getProspectLocationSource",
-  "getProspectRecords",
-  "getProspectDetail",
-  "getClaimRecords",
-] as const;
-export type BiEndpoint = (typeof BI_ENDPOINTS)[number];
