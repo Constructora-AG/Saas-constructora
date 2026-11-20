@@ -2,26 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncAutorizado } from "@/lib/sync/auth";
 import { rest } from "@/lib/smarthome/client";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { parseMontoEvento, parseReciboEvento } from "@/lib/sync/eventos";
 
 export const maxDuration = 300;
-
-// Extrae el monto de textos tipo "Pago cuota 22. Recibo de caja No. 1373. Valor $600,000.00."
-// Formato US: coma = miles, punto = decimal. Ignora el punto final de la frase.
-function parseMonto(txt: string): number | null {
-  const m = txt.match(/\$\s*([\d.,]+)/);
-  if (!m) return null;
-  const sinMiles = m[1].replace(/,/g, "");        // "600000.00." | "500000."
-  const num = sinMiles.match(/^\d+(?:\.\d+)?/);    // "600000.00" | "500000"
-  if (!num) return null;
-  const n = Number(num[0]);
-  return Number.isFinite(n) ? n : null;
-}
-
-// Nº de recibo: "Recibo de caja [parcial] No. 1384" → "1384" (para contar recibos distintos).
-function parseRecibo(txt: string): string | null {
-  const m = txt.match(/recibo de caja(?:\s+parcial)?\s+no\.?\s*(\d+)/i);
-  return m ? m[1] : null;
-}
 
 // POST /api/eventos/sync?secret=...  (opcional &project=CODE)
 // Trae la bitácora real (getProspectEvents) de cada cliente de cartera a Supabase.
@@ -66,8 +49,8 @@ async function handler(req: NextRequest) {
             tipo: typeof e.eventType === "number" ? e.eventType : Number(e.eventType) || 0,
             contenido,
             es_pago: esPago,
-            monto: esPago ? parseMonto(contenido) : null,
-            recibo: esPago ? parseRecibo(contenido) : null,
+            monto: esPago ? parseMontoEvento(contenido) : null,
+            recibo: esPago ? parseReciboEvento(contenido) : null,
             synced_at: new Date().toISOString(),
           };
         });
