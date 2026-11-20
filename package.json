@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --test",
+    "test": "node --experimental-test-module-mocks --import tsx --test",
     "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
