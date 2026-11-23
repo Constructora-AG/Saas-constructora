@@ -108,6 +108,8 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
   // Filtros del listado (el lote se genera con lo filtrado)
   const [fArea, setFArea] = useState("");
   const [fEstado, setFEstado] = useState("");
+  const [fDesde, setFDesde] = useState("");
+  const [fHasta, setFHasta] = useState("");
   const [generandoLote, setGenerandoLote] = useState(false);
   useEffect(() => {
     const cerrar = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.(".rowmenu")) setMenuId(null); };
@@ -125,20 +127,21 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
   }, [rows]);
   const filtradas = useMemo(() => rows.filter((r) => {
     if (fArea && ((r.area_aaa || "").trim() || SIN_AREA) !== fArea) return false;
+    if (fDesde && (r.fecha_generacion || "") < fDesde) return false;
+    if (fHasta && (r.fecha_generacion || "") > fHasta) return false;
     if (fEstado === "activas") return ACTIVAS.has(r.estado);
     if (fEstado && r.estado !== fEstado) return false;
     return true;
-  }), [rows, fArea, fEstado]);
-  const hayFiltro = fArea !== "" || fEstado !== "";
+  }), [rows, fArea, fEstado, fDesde, fHasta]);
+  const hayFiltro = fArea !== "" || fEstado !== "" || fDesde !== "" || fHasta !== "";
   const nombreArea = fArea === SIN_AREA ? "Sin área AAA" : fArea;
   const generarLote = async () => {
     if (!fArea || !filtradas.length) return;
     setGenerandoLote(true); setError(null);
     try {
       const orden = [...filtradas].sort((a, b) => String(a.numero ?? "").localeCompare(String(b.numero ?? ""), "es", { numeric: true }));
-      const estadoTxt = fEstado === "activas" ? "activas" : fEstado ? (ESTADOS[fEstado]?.label ?? fEstado).toLowerCase() : "";
-      const titulo = `Área AAA: ${nombreArea}${contratoLabel ? ` · ${contratoLabel}` : ""}${estadoTxt ? ` · ${estadoTxt}` : ""}`;
-      await descargarLotePrefacturasPdf(orden, titulo, `Lote prefacturas ${slugify(nombreArea)}${contratoFijo ? `_${contratoFijo}` : ""}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      const rango = fDesde || fHasta ? `_${fDesde || "inicio"}_a_${fHasta || "hoy"}` : "";
+      await descargarLotePrefacturasPdf(orden, `Lote prefacturas ${slugify(nombreArea)}${contratoFijo ? `_${contratoFijo}` : ""}${rango}.pdf`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo generar el lote.");
     } finally {
@@ -481,13 +484,19 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
             {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </label>
-        {hayFiltro && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setFArea(""); setFEstado(""); }}>Limpiar filtros</button>}
+        <label className="field">Generada desde
+          <input className="input" type="date" value={fDesde} max={fHasta || undefined} onChange={(e) => setFDesde(e.target.value)} />
+        </label>
+        <label className="field">Hasta
+          <input className="input" type="date" value={fHasta} min={fDesde || undefined} onChange={(e) => setFHasta(e.target.value)} />
+        </label>
+        {hayFiltro && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setFArea(""); setFEstado(""); setFDesde(""); setFHasta(""); }}>Limpiar filtros</button>}
         <span className="topbar-spacer" style={{ flex: 1 }} />
         <span className="muted" style={{ fontSize: 13 }} aria-live="polite">
           {filtradas.length} de {rows.length} · <b className="num">{COP.format(filtradas.reduce((s, r) => s + Number(r.valor_base), 0))}</b> sin IVA
         </span>
         <button type="button" className="btn btn-primary btn-sm" disabled={!fArea || !filtradas.length || generandoLote}
-          title={fArea ? `Un solo PDF con la hoja resumen y las ${filtradas.length} prefactura(s) del área` : "Elige un área para generar su lote"}
+          title={fArea ? `Un solo PDF con las ${filtradas.length} prefactura(s) filtradas del área` : "Elige un área para generar su lote"}
           onClick={() => void generarLote()}>
           {generandoLote ? "Generando lote…" : fArea ? `Generar lote del área (${filtradas.length})` : "Generar lote por área"}
         </button>

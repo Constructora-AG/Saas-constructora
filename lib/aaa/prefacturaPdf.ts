@@ -190,53 +190,11 @@ export async function descargarPrefacturaPdf(r: PrefacturaRow): Promise<void> {
   downloadBlob(new Blob([bytes as BlobPart], { type: "application/pdf" }), `Prefactura ${r.numero}.pdf`, "application/pdf");
 }
 
-/**
- * Lote: une en un solo PDF las prefacturas dadas (en el orden recibido),
- * precedidas de una hoja resumen con N°, período, valor y estado de cada una.
- */
-export async function descargarLotePrefacturasPdf(rows: PrefacturaRow[], titulo: string, archivo: string): Promise<void> {
+/** Lote: une en un solo PDF las prefacturas dadas (mismo formato oficial, en el orden recibido). */
+export async function descargarLotePrefacturasPdf(rows: PrefacturaRow[], archivo: string): Promise<void> {
   if (!rows.length) throw new Error("No hay prefacturas en el lote.");
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument } = await import("pdf-lib");
   const lote = await PDFDocument.create();
-  const font = await lote.embedFont(StandardFonts.Helvetica);
-  const bold = await lote.embedFont(StandardFonts.HelveticaBold);
-  const PW = 595.28, PH = 841.89, M = 40;
-  const gris = rgb(0.4, 0.4, 0.4), linea = rgb(0.75, 0.75, 0.75);
-  const conIva = (r: PrefacturaRow) => {
-    const items = (r.items ?? []) as PrefacturaItem[];
-    if (items.some((it) => it.iva_pct !== undefined)) return items.reduce((s, it) => s + Number(it.valor_base) * (1 + (it.iva_pct ?? ivaPctDe(r.contrato, CORTE.iva_pct))), 0);
-    return Number(r.valor_base) * (1 + ivaPctDe(r.contrato, CORTE.iva_pct));
-  };
-
-  // Hoja resumen (una o más páginas)
-  const cols = [M, M + 62, M + 230, M + 330, M + 420];
-  let page = lote.addPage([PW, PH]);
-  let y = PH - M;
-  const t = (s: string, x: number, yy: number, size = 9, f = font, color = rgb(0, 0, 0)) => page.drawText(sane(s), { x, y: yy, size, font: f, color });
-  const encabezado = () => {
-    t(`Lote de prefacturas - ${EMPRESA.nombre}`, M, y, 13, bold); y -= 18;
-    t(titulo, M, y, 10, font, gris); y -= 14;
-    t(`Generado el ${fFecha(new Date().toISOString().slice(0, 10))} · ${rows.length} prefactura(s)`, M, y, 8.5, font, gris); y -= 20;
-    ["N°", "Período", "Lugar", "Sin IVA", "Con IVA"].forEach((h, i) => t(h, cols[i], y, 8.5, bold));
-    y -= 5; page.drawLine({ start: { x: M, y }, end: { x: PW - M, y }, thickness: 0.6, color: linea }); y -= 12;
-  };
-  encabezado();
-  let base = 0, total = 0;
-  for (const r of rows) {
-    if (y < M + 40) { page = lote.addPage([PW, PH]); y = PH - M; encabezado(); }
-    const ci = conIva(r);
-    base += Number(r.valor_base); total += ci;
-    t(String(r.numero ?? ""), cols[0], y, 8.5, bold);
-    t((r.periodo ?? "").slice(0, 34), cols[1], y, 8);
-    t((r.lugar ?? "").slice(0, 22), cols[2], y, 8);
-    t(money(Number(r.valor_base)), cols[3], y, 8);
-    t(money(ci), cols[4], y, 8);
-    y -= 14;
-  }
-  y -= 2; page.drawLine({ start: { x: M, y: y + 8 }, end: { x: PW - M, y: y + 8 }, thickness: 0.6, color: linea });
-  t("TOTAL", cols[2], y - 4, 9, bold); t(money(base), cols[3], y - 4, 9, bold); t(money(total), cols[4], y - 4, 9, bold);
-
-  // Prefacturas individuales
   for (const r of rows) {
     const src = await PDFDocument.load(await buildPrefacturaPdf(r));
     const paginas = await lote.copyPages(src, src.getPageIndices());
