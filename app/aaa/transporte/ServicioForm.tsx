@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { UseTransporte } from "@/lib/transporte/useTransporte";
 import type { AdjuntoFile, AdminConfig, MonthInfo, NumLike, Servicio, Tarifario } from "@/lib/transporte/model";
 import { areaAAADe, aprobadorDe, num, nuevoServicioId } from "@/lib/transporte/model";
-import { ACTIVIDADES_RECOLECCION, DESTINO_RECOLECCION, esModuloBase, FICHA_MODULO, MAX_AYUDANTES_RECOLECCION, zonaDeRuta } from "@/lib/transporte/constants";
+import { ACTIVIDADES_RECOLECCION, AREAS_RECOLECCION, DESTINO_RECOLECCION, esModuloBase, FICHA_MODULO, MAX_AYUDANTES_RECOLECCION, servicioRecoleccionDe, zonaDeRuta } from "@/lib/transporte/constants";
 import { autoRecargos, computeValor, costoCalculado, fdate, fmtCOP, respHours, sugerenciasCampo } from "@/lib/transporte/logic";
 import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
@@ -74,6 +74,16 @@ interface Campos {
   horometroInicial: string;
   horometroFinal: string;
   ayudantes: string[];
+  /** Recolección: valor por hora sin IVA cuando el servicio no tiene tarifa en el Tarifario. */
+  valorHoraManual: string;
+}
+
+/** Recolección: opción «sin tarifa en el tarifario» del selector de volqueta o servicio. */
+const SIN_TARIFA = "manual";
+
+/** Recolección: áreas AAA = tipos de servicio del contrato + las de Administración. */
+function areasRecoleccion(admin: AdminConfig | null): string[] {
+  return [...new Set([...AREAS_RECOLECCION, ...(admin?.areas ?? [])])];
 }
 
 const sv = (v: NumLike): string => (v == null || v === "" ? "" : String(v));
@@ -107,7 +117,7 @@ function buildInit(args: {
 }): { campos: Campos; nota: string | null; hint: string | null } {
   const { editing, dup, month, admin, tarifario, esRecoleccion } = args;
   const interventores = admin?.interventores ?? [];
-  const areas = admin?.areas ?? [];
+  const areas = esRecoleccion ? areasRecoleccion(admin) : admin?.areas ?? [];
   const placas = (admin?.vehiculos ?? []).filter((v) => v.activo !== false).map((v) => v.plate);
   const equipos = (admin?.equipos ?? []).map((e) => e.name);
   const conductores = conductoresDe(admin);
@@ -133,9 +143,8 @@ function buildInit(args: {
     planilla: "", numeroInterno: "", ruta: "", actividad: "",
     horaSalida: "", horaRetorno: "", horometroInicial: "", horometroFinal: "",
     ayudantes: [],
+    valorHoraManual: "",
   };
-  // Recolección: la disposición final es siempre en el relleno autorizado (Cláusula Cuarta).
-  if (esRecoleccion) base.destination = DESTINO_RECOLECCION;
 
   const src = editing ?? dup;
   let campos = base;
@@ -173,7 +182,11 @@ function buildInit(args: {
       actividad: src.actividad ?? "",
       ayudantes: src.ayudantes ?? [],
     };
-    if (esRecoleccion && !campos.destination) campos.destination = DESTINO_RECOLECCION;
+    // Recolección sin tarifa del tarifario: el valor hora quedó guardado en el registro.
+    if (esRecoleccion && !src.tarifaCategoria && num(src.valorHora) > 0) {
+      campos.tarifaCategoria = SIN_TARIFA;
+      campos.valorHoraManual = String(num(src.valorHora));
+    }
     // Recolección: el precio del contrato incluye IVA, así que el servicio siempre lleva IVA 19%.
     if (esRecoleccion) campos.ivaAlquiler = true;
     if (editing) {
@@ -342,8 +355,10 @@ export function ServicioForm({
   const rutasHora = (c: Campos) => (tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas ?? []).filter((r) => /\(HR\)|hora/i.test(r.label));
   const tarifaTransporte = (c: Campos) => { const h = tarifaSel(c); if (!h) return null; const z = zonaDe(h.label); return (tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas ?? []).find((r) => /transporte/i.test(r.label) && zonaDe(r.label) === z) ?? null; };
   /** Alquiler: bases e IVA por ítem (19% activable en alquiler y en transporte). */
+  /** Recolección: el servicio no tiene tarifa en el tarifario y se digita su valor por hora. */
+  const sinTarifaRec = (c: Campos) => esRecoleccion && c.tarifaCategoria === SIN_TARIFA;
   const ivaDe = (c: Campos) => {
-    const r = tarifaSel(c); const unit = r ? num(r.unitario) : 0;
+    const r = tarifaSel(c); const unit = r ? num(r.unitario) : sinTarifaRec(c) ? num(c.valorHoraManual) : 0;
     const horas = c.horasMaquina.trim() === "" ? 0 : num(c.horasMaquina);
     const viajes = Math.max(0, Math.floor(num(c.viajesEquipo)));
     const tr = tarifaTransporte(c); const vViaje = tr ? num(tr.unitario) : 0;
@@ -355,8 +370,15 @@ export function ServicioForm({
     if (!tarifario) return next;
     if (esAlquiler) {
       const r = tarifaSel(next);
-      if (!r) { setTarifaHint(null); return next; }
-      const unit = num(r.unitario);
+      const manualRec = sinTarifaRec(next);
+      if (!r && !manualRec) { setTarifaHint(null); return next; }
+      const unit = r ? num(r.unitario) : num(next.valorHoraManual);
+      if (esRecoleccion && !(unit > 0)) {
+        setTarifaHint(manualRec
+          ? "Digita el valor por hora sin IVA para calcular el valor del servicio."
+          : "Esta tarifa aún no tiene precio. Regístralo en la pestaña Tarifario, o elige «Sin tarifa en el tarifario» y digita el valor por hora.");
+        return { ...next, value: "", tolls: "0" };
+      }
       const horas = next.horasMaquina.trim() === "" ? null : num(next.horasMaquina);
       const viajes = Math.max(0, Math.floor(num(next.viajesEquipo)));
       const tr = viajes > 0 ? tarifaTransporte(next) : null;
@@ -399,16 +421,22 @@ export function ServicioForm({
   };
 
   const cambiaCategoria = (catId: string) => setF(conValor({ ...f, tarifaCategoria: catId, tarifaRuta: "" }));
+  /** Recolección: valor por hora digitado (servicio sin tarifa en el tarifario). */
+  const cambiaValorHoraManual = (v: string) => setF(conValor({ ...f, valorHoraManual: v }));
   const cambiaRuta = (rutaId: string) => {
     const next = { ...f, tarifaRuta: rutaId };
     // Recolección: el tipo de servicio de la tarifa ES el área AAA solicitante
     // (Recolección y Transporte / Servicios Especiales B2B y B2G).
+    // Solo se llena cuando el tipo de servicio corresponde a un área conocida; si la tarifa
+    // tiene otro nombre (p. ej. «Tarifa por hora»), el área queda como estaba.
     const rt = catSel?.rutas.find((r) => r.id === rutaId);
     if (esRecoleccion && rt) {
-      const area = zonaDeRuta(rt.label, t.ns);
-      const sa = setSelOrOtro(area, admin?.areas ?? []);
-      next.areaAAASel = sa.sel;
-      next.areaAAAOtro = sa.otro;
+      const zona = zonaDeRuta(rt.label, t.ns);
+      const tipo = servicioRecoleccionDe(zona);
+      const opciones = areasRecoleccion(admin);
+      const area = opciones.find((a) => a.toLocaleLowerCase("es") === zona.toLocaleLowerCase("es"))
+        ?? (tipo ? opciones.find((a) => servicioRecoleccionDe(a) === tipo) : undefined);
+      if (area) { next.areaAAASel = area; next.areaAAAOtro = ""; }
     }
     setF(conValor(next));
   };
@@ -497,6 +525,16 @@ export function ServicioForm({
     setError(null);
     if (!f.date) { setError("La fecha del servicio es obligatoria."); return; }
     if (horometroInvalido) { setError("El horómetro final no puede ser menor que el inicial."); return; }
+    if (esRecoleccion) {
+      // Recolección: el valor sale de horas × valor hora; sin esos datos no hay qué facturar.
+      if (!f.tarifaCategoria) { setError("Elige la volqueta o el servicio (o «Sin tarifa en el tarifario»)."); return; }
+      if (sinTarifaRec(f)) {
+        if (!(f.equipmentSel === OTRO ? f.equipmentOtro.trim() : f.equipmentSel)) { setError("Escribe qué servicio se prestó (sin tarifa en el tarifario)."); return; }
+        if (!(num(f.valorHoraManual) > 0)) { setError("Digita el valor por hora sin IVA del servicio."); return; }
+      } else if (!f.tarifaRuta) { setError("Elige el tipo de servicio de la tarifa."); return; }
+      else if (!(num(tarifaSel(f)?.unitario) > 0)) { setError("La tarifa elegida aún no tiene precio en el Tarifario."); return; }
+      if (!(num(f.horasMaquina) > 0)) { setError("Indica las horas efectivas (o el horómetro inicial y final)."); return; }
+    }
     const r = ses.approve(); // sella con el rol de la sesión de plataforma (sin clave)
 
     const resolver = (sel: string, otro: string) => (sel === OTRO ? otro.trim() : sel);
@@ -534,7 +572,7 @@ export function ServicioForm({
       value: f.value,
       tolls: esAlquiler ? "0" : f.tolls,
       horasMaquina: esAlquiler ? f.horasMaquina.trim() : undefined,
-      valorHora: esAlquiler && esPorHora(f) ? String(num(tarifaSel(f)?.unitario ?? 0)) : undefined,
+      valorHora: esAlquiler && esPorHora(f) ? String(num(tarifaSel(f)?.unitario ?? 0)) : sinTarifaRec(f) ? String(num(f.valorHoraManual)) : undefined,
       ivaAlquiler: esAlquiler ? f.ivaAlquiler : undefined,
       ivaTransporte: esAlquiler ? f.ivaTransporte : undefined,
       // Recolección: la tarifa incluye IVA → siempre 19% del valor (también con tarifa manual).
@@ -657,7 +695,7 @@ export function ServicioForm({
                 (v) => setF({ ...f, interventorOtro: v }),
                 "Nombre del interventor",
               )}
-              {selectMaestro(
+              {!esRecoleccion && selectMaestro(
                 "Área AAA solicitante", f.areaAAASel, f.areaAAAOtro,
                 (admin?.areas ?? []).map((x) => ({ value: x, label: x })),
                 "Otra (digitar)",
@@ -667,7 +705,63 @@ export function ServicioForm({
               )}
             </div>
 
-            {seccion(esRecoleccion ? "Tarifa del contrato (volqueta y tipo de servicio — calcula el valor automáticamente)" : esEmergencia ? "Tarifa del contrato (volqueta y zona — calcula el valor automáticamente)" : esAlquiler ? "Tarifa del contrato (equipo y zona — calcula el valor automáticamente)" : "Tarifa del pliego (opcional — calcula el valor automáticamente)")}
+            {esRecoleccion ? (
+              <>
+                {seccion("Volqueta y tipo de servicio")}
+                <div className="muted" style={{ fontSize: 12.5, marginBottom: 6 }}>
+                  Elige la tarifa del contrato: con ella y las horas efectivas se calcula el valor del servicio.
+                </div>
+                <div style={gridAuto}>
+                  <label className="field">Volqueta o servicio *
+                    <select value={f.tarifaCategoria} onChange={(e) => cambiaCategoria(e.target.value)}>
+                      <option value="">— Selecciona —</option>
+                      {(tarifario?.categorias ?? []).map((c) => <option key={c.id} value={c.id}>{c.label.replace(/^Ítem \d+ · Servicio de /i, "")}</option>)}
+                      <option value={SIN_TARIFA}>Sin tarifa en el tarifario (digitar valor por hora)</option>
+                    </select>
+                  </label>
+                  {catSel && (
+                    <label className="field">Tipo de servicio *
+                      <select value={f.tarifaRuta} onChange={(e) => cambiaRuta(e.target.value)}>
+                        <option value="">— Selecciona el tipo de servicio —</option>
+                        {rutasHora(f).map((rt) => (
+                          <option key={rt.id} value={rt.id}>
+                            {etiquetaZona(rt.label)} — {num(rt.unitario) > 0 ? `${fmtCOP(num(rt.unitario))} / hora sin IVA` : "sin precio en el Tarifario"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {sinTarifaRec(f) && (
+                    <>
+                      <label className="field">Servicio prestado *
+                        <input className="input" value={f.equipmentOtro} placeholder="Ej. Minicargador"
+                          onChange={(e) => setF({ ...f, equipmentSel: OTRO, equipmentOtro: e.target.value })} />
+                      </label>
+                      <label className="field">Valor por hora sin IVA *
+                        <input className="input num" type="number" min="0" step="1" value={f.valorHoraManual} placeholder="Ej. 180000"
+                          onChange={(e) => cambiaValorHoraManual(e.target.value)} />
+                      </label>
+                    </>
+                  )}
+                  {selectMaestro(
+                    "Área AAA solicitante", f.areaAAASel, f.areaAAAOtro,
+                    areasRecoleccion(admin).map((x) => ({ value: x, label: x })),
+                    "Otra (digitar)",
+                    (v) => setF({ ...f, areaAAASel: v }),
+                    (v) => setF({ ...f, areaAAAOtro: v }),
+                    "Área solicitante",
+                  )}
+                </div>
+                <div className="muted" style={{ fontSize: 12.5 }}>
+                  {sinTarifaRec(f)
+                    ? "El valor por hora se usa solo en este registro. Para tenerlo disponible en los próximos, agrega el servicio en la pestaña Tarifario."
+                    : "El área AAA se llena sola al elegir el tipo de servicio; puedes cambiarla si otra área hizo la solicitud."}
+                </div>
+                {tarifaHint && <div className="muted" style={{ fontSize: 12.5 }}>{tarifaHint}</div>}
+              </>
+            ) : (
+              <>
+            {seccion(esEmergencia ? "Tarifa del contrato (volqueta y zona — calcula el valor automáticamente)" : esAlquiler ? "Tarifa del contrato (equipo y zona — calcula el valor automáticamente)" : "Tarifa del pliego (opcional — calcula el valor automáticamente)")}
             <div style={gridAuto}>
               <label className="field">{esVolqueta ? "Volqueta (tarifario del contrato)" : esAlquiler ? "Equipo (tarifario del contrato)" : "Categoría del tarifario"}
                 <select value={f.tarifaCategoria} onChange={(e) => cambiaCategoria(e.target.value)}>
@@ -703,6 +797,8 @@ export function ServicioForm({
               )}
             </div>
             {tarifaHint && <div className="muted" style={{ fontSize: 12.5 }}>{tarifaHint}</div>}
+              </>
+            )}
             {!esAlquiler && <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", marginTop: 6 }}>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13 }}>
                 <input type="checkbox" checked={f.recNocturno} onChange={(e) => cambiaRecargo("noct", e.target.checked)} />
@@ -799,8 +895,9 @@ export function ServicioForm({
             {seccion(esAlquiler ? "Lugar del servicio" : "Ruta")}
             <div style={gridAuto}>
               {esRecoleccion && <label className="field">Disposición final
-                <input className="input" value={f.destination} list="sug-sitios" placeholder={DESTINO_RECOLECCION}
+                <input className="input" value={f.destination} list="sug-disposicion" placeholder="Sitio donde se descargó"
                   onChange={(e) => setF({ ...f, destination: e.target.value })} />
+                {sugerencias("sug-disposicion", [...new Set([DESTINO_RECOLECCION, ...sugSitios])])}
               </label>}
               {!esAlquiler && <label className="field">Lugar de recogida
                 <input className="input" value={f.pickup} list="sug-sitios" placeholder="Escribe o elige uno ya usado"
@@ -819,6 +916,11 @@ export function ServicioForm({
             </div>
 
             {seccion(esVolqueta ? "Horas efectivas" : esAlquiler ? "Horas máquina" : "Tiempos de atención")}
+            {esRecoleccion && (
+              <div className="muted" style={{ fontSize: 12.5, marginBottom: 6 }}>
+                Digita el horómetro inicial y final de la planilla: las horas efectivas se calculan solas.
+              </div>
+            )}
             <div style={gridAuto}>
               {esRecoleccion && <>
                 <label className="field">Hora de salida
@@ -869,7 +971,7 @@ export function ServicioForm({
 
             {horometroInvalido && <div id="horometro-error" role="alert" style={{ color: "var(--high)", fontSize: 12.5 }}>El horómetro final no puede ser menor que el inicial.</div>}
 
-            {seccion("Financiero")}
+            {seccion(esRecoleccion ? "Valor del servicio" : "Financiero")}
             {esAlquiler && (() => {
               const d = ivaDe(f); const r = tarifaSel(f);
               const ro: React.CSSProperties = { background: "var(--surface-2)", color: "var(--text-2)" };
@@ -877,7 +979,7 @@ export function ServicioForm({
               return (
                 <div style={{ display: "grid", gap: 8 }}>
                   <div style={fila}>
-                    <span><b>{esVolqueta ? "Servicio de volqueta" : "Alquiler del equipo"}</b><br /><span className="muted" style={{ fontSize: 12 }}>{r ? `${d.horas} h × ${fmtCOP(d.unit)} (${esVolqueta ? "hora" : "hora máquina"})` : esRecoleccion ? "Selecciona volqueta, tipo de servicio y horas" : esEmergencia ? "Selecciona volqueta, zona y horas" : "Selecciona equipo, zona y horas"}</span></span>
+                    <span><b>{esVolqueta ? "Servicio de volqueta" : "Alquiler del equipo"}</b><br /><span className="muted" style={{ fontSize: 12 }}>{r || sinTarifaRec(f) ? `${d.horas} h × ${fmtCOP(d.unit)} (${esVolqueta ? "hora" : "hora máquina"})` : esRecoleccion ? "Selecciona volqueta, tipo de servicio y horas" : esEmergencia ? "Selecciona volqueta, zona y horas" : "Selecciona equipo, zona y horas"}</span></span>
                     <label style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }} title={esRecoleccion ? "El precio del contrato incluye IVA" : undefined}><input type="checkbox" checked={f.ivaAlquiler} disabled={esRecoleccion} onChange={(e) => setF({ ...f, ivaAlquiler: e.target.checked })} /> IVA 19%</label>
                     <span className="num" style={{ textAlign: "right" }}>Base <b>{fmtCOP(d.alq)}</b></span>
                     <span className="num" style={{ textAlign: "right" }}>IVA <b>{fmtCOP(d.ivaAlq)}</b></span>
@@ -898,7 +1000,8 @@ export function ServicioForm({
                 </div>
               );
             })()}
-            <div style={gridAuto}>
+            {/* Recolección: el valor siempre es horas × valor hora (se muestra arriba, no se digita). */}
+            {!esRecoleccion && <div style={gridAuto}>
               <label className="field">{esAlquiler ? "Valor del servicio sin IVA (COP)" : "Valor del servicio (COP)"}{esAlquiler && tarifaSel(f) && <span className="muted" style={{ fontWeight: 400 }}> · calculado</span>}
                 <input className="input num" type="number" step="1" min="0" value={f.value}
                   onChange={(e) => setF({ ...f, value: e.target.value })} />
@@ -909,7 +1012,7 @@ export function ServicioForm({
                     onChange={(e) => setF({ ...f, tolls: e.target.value })} />
                 </label>
               )}
-            </div>
+            </div>}
 
             {esTransporte && (
               <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: "10px 12px", display: "grid", gap: 8, background: "var(--surface-2)" }}>
