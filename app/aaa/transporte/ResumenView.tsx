@@ -139,6 +139,8 @@ export function ResumenView({ t }: ViewProps) {
   }, [allItems, valorEjecutado]);
 
   const ejecucionMensual = esAlquiler ? alq.meses : ejecucionTransporte;
+  /** Sin registros con valor: la gráfica muestra un mensaje en lugar de barras vacías. */
+  const sinEjecucion = ejecucionMensual.every((m) => m.real === 0);
 
   // Contrato de Recolección: horas efectivas registradas por ítem vs. la proyección
   // de la Cláusula Cuarta. El tipo de volqueta sale del equipo (o de la tarifa) y
@@ -677,6 +679,20 @@ export function ResumenView({ t }: ViewProps) {
       {/* Ejecución mensual — divs CSS (patrón bars-month), sin Chart.js */}
       <div className="chart-card" style={{ marginTop: 18 }}>
         <div className="chart-title">Ejecución mensual ({esAlquiler ? "suma de registros" : "valor facturado"})</div>
+        {sinEjecucion ? (
+          <div className="grafica-vacia" role="status">
+            <IconChart />
+            <div>
+              <b>Aún no hay ejecución que mostrar.</b>
+              <span>
+                {esAlquiler
+                  ? "La suma de cada mes aparecerá aquí al guardar el primer registro en la pestaña Registros."
+                  : "El valor de cada mes aparecerá aquí al registrar el primer servicio."}
+              </span>
+            </div>
+          </div>
+        ) : (
+        <>
         <div className="chart-sub">
           {ejecucionMensual.length > 0 ? `${ejecucionMensual[0].label} — ${ejecucionMensual[ejecucionMensual.length - 1].label}` : "—"} · barra =
           ejecutado del mes · fondo = {esAlquiler ? "promedio mensual ejecutado" : "presupuesto mensual promedio"} ({fmtShort(referenciaMes)})
@@ -705,6 +721,8 @@ export function ResumenView({ t }: ViewProps) {
             );
           })}
         </div>
+        </>
+        )}
       </div>
 
       {/* Alertas contractuales */}

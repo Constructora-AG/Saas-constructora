@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
+import { MontoAyuda } from "@/app/components/MontoAyuda";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { PerfilKey, PermKey } from "@/lib/transporte/model";
 import { num } from "@/lib/transporte/model";
@@ -531,6 +532,7 @@ export function AdminView({ t }: ViewProps) {
               </div>
               <label className="field">Valor del contrato (COP)
                 <input className="input" inputMode="decimal" placeholder="Ej. 2.891.433.496" value={contrato.valor} onChange={(e) => setContrato((c) => ({ ...c, valor: e.target.value }))} />
+                <MontoAyuda valor={contrato.valor} />
               </label>
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <button className="btn btn-primary btn-sm" type="submit" disabled={t.saving}>

@@ -14,6 +14,7 @@ import { ALCANCE_RECOLECCION, AREAS_RECOLECCION, servicioRecoleccionDe, TARIFARI
 import { fmtCOP, recalcularValores } from "@/lib/transporte/logic";
 import { MsgInline } from "./CatalogoTabla";
 import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
+import { MontoAyuda } from "@/app/components/MontoAyuda";
 
 /** Estado editable: unitarios por "catId|rutaId" + recargos, como strings. */
 interface Draft {
@@ -362,6 +363,7 @@ export function TarifarioView({ t }: ViewProps) {
                         onChange={(e) => setValor(key, e.target.value)}
                         aria-label={`Valor unitario ruta ${ruta.id}`}
                       />
+                      <MontoAyuda valor={draft.valores[key]} />
                     </label>
                     {conCosto && draftCosto && (
                       <label className="tarifa-valor">Costo contratista
@@ -376,6 +378,7 @@ export function TarifarioView({ t }: ViewProps) {
                           aria-label={`Costo contratista ruta ${ruta.id}`}
                           title={costo > 0 ? `Margen ${fmtCOP(venta - costo)}${venta > 0 ? ` (${(((venta - costo) / venta) * 100).toFixed(1)}%)` : ""}` : "Sin costo"}
                         />
+                        <MontoAyuda valor={draftCosto.valores[key]} />
                       </label>
                     )}
                     </div>
@@ -406,6 +409,7 @@ export function TarifarioView({ t }: ViewProps) {
                   )}
                   <input className="input num" type="number" min={0} step={1} aria-label="Valor sin IVA" placeholder={esRecoleccion ? "Valor hora sin IVA" : "Valor sin IVA"} value={f.valor} onChange={(e) => setNT({ valor: e.target.value })} />
                   <button className="btn btn-ghost btn-sm" onClick={() => void agregarTarifa(cat.id)} disabled={t.saving}>+ Tarifa</button>
+                  {f.valor.trim() !== "" && <span className="tarifa-nueva-monto"><MontoAyuda valor={f.valor} prefijo="Valor:" /></span>}
                 </div>
               );
             })()}

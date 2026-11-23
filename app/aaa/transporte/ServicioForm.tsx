@@ -21,6 +21,8 @@ import { ACTIVIDADES_RECOLECCION, AREAS_RECOLECCION, DESTINO_RECOLECCION, esModu
 import { autoRecargos, computeValor, costoCalculado, fdate, fmtCOP, respHours, sugerenciasCampo } from "@/lib/transporte/logic";
 import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
+import { MontoAyuda } from "@/app/components/MontoAyuda";
 
 const OTRO = "__otro__";
 const TIPOS = ["Programado", "No Programado", "Emergencia"];
@@ -78,6 +80,18 @@ interface Campos {
   valorHoraManual: string;
 }
 
+/** Fecha inicial de un registro nuevo: hoy si cae en el mes activo; si no, el día 1 del mes. */
+function fechaInicial(mesKey: string): string {
+  const hoy = new Date();
+  const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+  return iso.startsWith(`${mesKey}-`) ? iso : `${mesKey}-01`;
+}
+
+/** Campos que pueden marcarse con error al guardar (se muestran junto al campo). */
+type CampoError = "date" | "tarifaCategoria" | "tarifaRuta" | "equipmentOtro" | "valorHoraManual" | "horometroFinal" | "horasMaquina";
+/** Orden en el formulario: el foco va al primero con error. */
+const ORDEN_ERRORES: CampoError[] = ["date", "tarifaCategoria", "tarifaRuta", "equipmentOtro", "valorHoraManual", "horometroFinal", "horasMaquina"];
+
 /** Recolección: opción «sin tarifa en el tarifario» del selector de volqueta o servicio. */
 const SIN_TARIFA = "manual";
 
@@ -123,7 +137,7 @@ function buildInit(args: {
   const conductores = conductoresDe(admin);
 
   const base: Campos = {
-    date: `${month.key}-01`, // día 1 del mes activo (SPEC §4.5)
+    date: fechaInicial(month.key), // hoy si cae en el mes activo; si no, el día 1
     orderNo: "",
     serviceType: "Programado",
     interventorSel: "", interventorOtro: "",
@@ -278,6 +292,9 @@ export function ServicioForm({
   const [autoNota, setAutoNota] = useState<string | null>(init.nota);
   const [tarifaHint, setTarifaHint] = useState<string | null>(init.hint);
   const [error, setError] = useState<string | null>(null);
+  // Errores por campo: se muestran debajo de cada uno y se borran al corregirlo.
+  const [errores, setErrores] = useState<Partial<Record<CampoError, string>>>({});
+  const previoRef = useRef<Campos | null>(null);
   const [avisos, setAvisos] = useState<string[]>([]);
   const [guardando, setGuardando] = useState(false);
   // Transporte AAA — costo a contratistas (USO INTERNO, nunca en PDF ni exportaciones).
@@ -296,12 +313,47 @@ export function ServicioForm({
   // Flags touched: nuevos/duplicados arrancan false; edición arranca true (SPEC §4.2).
   const touchedRef = useRef({ noct: !!editing, dom: !!editing });
 
+  // Cambios sin guardar: se compara con el estado con que abrió el formulario.
+  const inicialRef = useRef<string | null>(null);
+  const instantanea = JSON.stringify([f, costoTxt]);
+  if (inicialRef.current === null) inicialRef.current = instantanea;
+  const hayCambios = instantanea !== inicialRef.current;
+  const [confirmarCierre, setConfirmarCierre] = useState(false);
+  /** Cerrar (×, Cancelar, clic afuera o Esc): si hay datos sin guardar, se pide confirmar antes de perderlos. */
+  const intentarCerrar = () => {
+    if (guardando) return;
+    if (hayCambios) setConfirmarCierre(true);
+    else onClose();
+  };
+  const cerrarRef = useRef(intentarCerrar);
+  cerrarRef.current = intentarCerrar;
+
   // Cierre con Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") cerrarRef.current(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
+
+  // Al corregir un campo con error, su mensaje desaparece.
+  useEffect(() => {
+    const previo = previoRef.current;
+    previoRef.current = f;
+    if (!previo) return;
+    setErrores((errs) => {
+      const claves = Object.keys(errs) as CampoError[];
+      const siguen = claves.filter((k) => previo[k] === f[k]);
+      return siguen.length === claves.length ? errs : Object.fromEntries(siguen.map((k) => [k, errs[k]])) as Partial<Record<CampoError, string>>;
+    });
+  }, [f]);
+
+  /** Atributos de accesibilidad de un campo que puede tener error. */
+  const campoProps = (k: CampoError) => ({
+    id: `campo-${k}`,
+    "aria-invalid": errores[k] ? true : undefined,
+    "aria-describedby": errores[k] ? `error-${k}` : undefined,
+  });
+  const errorDe = (k: CampoError) => (errores[k] ? <span id={`error-${k}`} className="campo-error">{errores[k]}</span> : null);
 
   // Rango de fechas del mes activo (min/max), sin pasar por UTC.
   const diasMes = new Date(month.year, month.month + 1, 0).getDate();
@@ -523,17 +575,32 @@ export function ServicioForm({
   const guardar = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!f.date) { setError("La fecha del servicio es obligatoria."); return; }
-    if (horometroInvalido) { setError("El horómetro final no puede ser menor que el inicial."); return; }
+    const errs: Partial<Record<CampoError, string>> = {};
+    if (!f.date) errs.date = "La fecha del servicio es obligatoria.";
+    else if (f.date < minDate || f.date > maxDate) errs.date = `La fecha debe estar dentro de ${month.label}.`;
+    // Alquiler, Emergencia y contratos de la app: las horas son obligatorias y no negativas.
+    if (esAlquiler && !esRecoleccion && (f.horasMaquina.trim() === "" || num(f.horasMaquina) < 0)) errs.horasMaquina = "Indica las horas (0 o más).";
+    if (horometroInvalido) errs.horometroFinal = "El horómetro final no puede ser menor que el inicial.";
     if (esRecoleccion) {
       // Recolección: el valor sale de horas × valor hora; sin esos datos no hay qué facturar.
-      if (!f.tarifaCategoria) { setError("Elige la volqueta o el servicio (o «Sin tarifa en el tarifario»)."); return; }
-      if (sinTarifaRec(f)) {
-        if (!(f.equipmentSel === OTRO ? f.equipmentOtro.trim() : f.equipmentSel)) { setError("Escribe qué servicio se prestó (sin tarifa en el tarifario)."); return; }
-        if (!(num(f.valorHoraManual) > 0)) { setError("Digita el valor por hora sin IVA del servicio."); return; }
-      } else if (!f.tarifaRuta) { setError("Elige el tipo de servicio de la tarifa."); return; }
-      else if (!(num(tarifaSel(f)?.unitario) > 0)) { setError("La tarifa elegida aún no tiene precio en el Tarifario."); return; }
-      if (!(num(f.horasMaquina) > 0)) { setError("Indica las horas efectivas (o el horómetro inicial y final)."); return; }
+      if (!f.tarifaCategoria) errs.tarifaCategoria = "Elige la volqueta o el servicio (o «Sin tarifa en el tarifario»).";
+      else if (sinTarifaRec(f)) {
+        if (!(f.equipmentSel === OTRO ? f.equipmentOtro.trim() : f.equipmentSel)) errs.equipmentOtro = "Escribe qué servicio se prestó.";
+        if (!(num(f.valorHoraManual) > 0)) errs.valorHoraManual = "Digita el valor por hora sin IVA.";
+      } else if (!f.tarifaRuta) errs.tarifaRuta = "Elige el tipo de servicio de la tarifa.";
+      else if (!(num(tarifaSel(f)?.unitario) > 0)) errs.tarifaRuta = "Esta tarifa aún no tiene precio: regístralo en la pestaña Tarifario.";
+      if (!(num(f.horasMaquina) > 0) && !errs.horometroFinal) errs.horasMaquina = "Indica las horas efectivas (o el horómetro inicial y final).";
+    }
+    const conError = ORDEN_ERRORES.filter((k) => errs[k]);
+    if (!conError.length && (num(f.value) < 0 || num(f.tolls) < 0)) { setError("El valor y los peajes no pueden ser negativos."); return; }
+    setErrores(errs);
+    if (conError.length) {
+      setError(conError.length === 1 ? "Revisa el campo marcado en rojo." : `Revisa los ${conError.length} campos marcados en rojo.`);
+      // Lleva al primer campo con error.
+      const el = document.getElementById(`campo-${conError[0]}`);
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      el?.focus({ preventScroll: true });
+      return;
     }
     const r = ses.approve(); // sella con el rol de la sesión de plataforma (sin clave)
 
@@ -660,22 +727,24 @@ export function ServicioForm({
 
   return (
     <>
-      <div className="drawer-overlay" onClick={onClose} />
+      <div className="drawer-overlay" onClick={intentarCerrar} />
       <aside className="drawer" role="dialog" aria-modal="true" aria-label={titulo}>
         <div className="drawer-head">
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 className="drawer-title">{titulo}</h2>
             <span className="cc-dias">{subtitulo}</span>
           </div>
-          <button className="drawer-close" onClick={onClose} title="Cerrar (Esc)">×</button>
+          <button className="drawer-close" onClick={intentarCerrar} title="Cerrar (Esc)" aria-label="Cerrar formulario">×</button>
         </div>
         <div className="drawer-body">
-          <form onSubmit={guardar} style={{ display: "grid", gap: 4 }}>
+          {/* noValidate: la app valida y marca cada campo (en vez de los globos del navegador). */}
+          <form onSubmit={guardar} noValidate style={{ display: "grid", gap: 4 }}>
             {seccion("Servicio")}
             <div style={gridAuto}>
               <label className="field">Fecha del servicio *
-                <input className="input" required type="date" min={minDate} max={maxDate} value={f.date}
+                <input className="input" required type="date" min={minDate} max={maxDate} value={f.date} {...campoProps("date")}
                   onChange={(e) => cambiaTiempo({ date: e.target.value })} />
+                {errorDe("date")}
               </label>
               <label className="field">N° Orden / Remisión
                 <input className="input" value={f.orderNo} readOnly={!editing} title={editing ? "" : "Se asigna automáticamente de forma consecutiva"}
@@ -714,15 +783,16 @@ export function ServicioForm({
                 </div>
                 <div style={gridAuto}>
                   <label className="field">Volqueta o servicio *
-                    <select value={f.tarifaCategoria} onChange={(e) => cambiaCategoria(e.target.value)}>
+                    <select value={f.tarifaCategoria} {...campoProps("tarifaCategoria")} onChange={(e) => cambiaCategoria(e.target.value)}>
                       <option value="">— Selecciona —</option>
                       {(tarifario?.categorias ?? []).map((c) => <option key={c.id} value={c.id}>{c.label.replace(/^Ítem \d+ · Servicio de /i, "")}</option>)}
                       <option value={SIN_TARIFA}>Sin tarifa en el tarifario (digitar valor por hora)</option>
                     </select>
+                    {errorDe("tarifaCategoria")}
                   </label>
                   {catSel && (
                     <label className="field">Tipo de servicio *
-                      <select value={f.tarifaRuta} onChange={(e) => cambiaRuta(e.target.value)}>
+                      <select value={f.tarifaRuta} {...campoProps("tarifaRuta")} onChange={(e) => cambiaRuta(e.target.value)}>
                         <option value="">— Selecciona el tipo de servicio —</option>
                         {rutasHora(f).map((rt) => (
                           <option key={rt.id} value={rt.id}>
@@ -730,17 +800,21 @@ export function ServicioForm({
                           </option>
                         ))}
                       </select>
+                      {errorDe("tarifaRuta")}
                     </label>
                   )}
                   {sinTarifaRec(f) && (
                     <>
                       <label className="field">Servicio prestado *
-                        <input className="input" value={f.equipmentOtro} placeholder="Ej. Minicargador"
+                        <input className="input" value={f.equipmentOtro} placeholder="Ej. Minicargador" {...campoProps("equipmentOtro")}
                           onChange={(e) => setF({ ...f, equipmentSel: OTRO, equipmentOtro: e.target.value })} />
+                        {errorDe("equipmentOtro")}
                       </label>
                       <label className="field">Valor por hora sin IVA *
-                        <input className="input num" type="number" min="0" step="1" value={f.valorHoraManual} placeholder="Ej. 180000"
+                        <input className="input num" type="number" min="0" step="1" value={f.valorHoraManual} placeholder="Ej. 180000" {...campoProps("valorHoraManual")}
                           onChange={(e) => cambiaValorHoraManual(e.target.value)} />
+                        <MontoAyuda valor={f.valorHoraManual} prefijo="por hora:" />
+                        {errorDe("valorHoraManual")}
                       </label>
                     </>
                   )}
@@ -936,8 +1010,8 @@ export function ServicioForm({
                     onChange={(e) => cambiaHorometro({ horometroInicial: e.target.value })} />
                 </label>
                 <label className="field">Horómetro final
-                  <input className="input num" type="number" min="0" step="0.1" value={f.horometroFinal}
-                    aria-invalid={horometroInvalido || undefined} aria-describedby={horometroInvalido ? "horometro-error" : undefined}
+                  <input className="input num" type="number" min="0" step="0.1" value={f.horometroFinal} id="campo-horometroFinal"
+                    aria-invalid={horometroInvalido || !!errores.horometroFinal || undefined} aria-describedby={horometroInvalido ? "horometro-error" : undefined}
                     onChange={(e) => cambiaHorometro({ horometroFinal: e.target.value })} />
                 </label>
               </>}
@@ -954,9 +1028,10 @@ export function ServicioForm({
               </>}
               {esAlquiler && (
                 <label className="field">{esVolqueta ? "Horas efectivas *" : "Horas máquina usadas *"}{horometroCalculado && <span className="muted" style={{ fontWeight: 400 }}> · según horómetro</span>}
-                  <input className="input num" type="number" min="0" step="0.5" required value={f.horasMaquina} placeholder="Ej. 8"
+                  <input className="input num" type="number" min="0" step="any" required value={f.horasMaquina} placeholder="Ej. 8" {...campoProps("horasMaquina")}
                     readOnly={horometroCalculado} style={horometroCalculado ? { background: "var(--surface-2)", color: "var(--text-2)" } : undefined}
                     onChange={(e) => setF(conValor({ ...f, horasMaquina: e.target.value }))} />
+                  {errorDe("horasMaquina")}
                 </label>
               )}
               {!esAlquiler && <label className="field">Hora solicitada
@@ -1006,11 +1081,13 @@ export function ServicioForm({
               <label className="field">{esAlquiler ? "Valor del servicio sin IVA (COP)" : "Valor del servicio (COP)"}{esAlquiler && tarifaSel(f) && <span className="muted" style={{ fontWeight: 400 }}> · calculado</span>}
                 <input className="input num" type="number" step="1" min="0" value={f.value}
                   onChange={(e) => setF({ ...f, value: e.target.value })} />
+                <MontoAyuda valor={f.value} />
               </label>
               {!esAlquiler && (
                 <label className="field">Peajes (COP)
                   <input className="input num" type="number" step="1" min="0" value={f.tolls}
                     onChange={(e) => setF({ ...f, tolls: e.target.value })} />
+                  <MontoAyuda valor={f.tolls} />
                 </label>
               )}
             </div>}
@@ -1023,6 +1100,7 @@ export function ServicioForm({
                     <input className="input num" type="number" step="1" min="0" value={costoTxt}
                       placeholder={costoAuto !== null ? String(costoAuto) : "Digita el costo (tarifa manual)"}
                       onChange={(e) => setCostoTxt(e.target.value)} />
+                    <MontoAyuda valor={costoTxt} />
                   </label>
                   <label className="field">Margen del servicio
                     <input className="input num" readOnly style={{ background: "var(--surface)", color: "var(--text-2)" }}
@@ -1111,7 +1189,7 @@ export function ServicioForm({
 
             {error && <div style={{ color: "var(--high)", fontSize: 13, marginTop: 6 }}>{error}</div>}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 12 }}>
-              <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+              <button type="button" className="btn btn-ghost" onClick={intentarCerrar}>Cancelar</button>
               <button type="submit" className="btn btn-primary" disabled={guardando}>
                 {guardando ? "Guardando…" : editing ? "Guardar cambios" : "Guardar servicio"}
               </button>
@@ -1123,6 +1201,16 @@ export function ServicioForm({
             )}
           </form>
         </div>
+        <ConfirmarEliminacion
+          abierto={confirmarCierre}
+          titulo={editing ? "¿Descartar los cambios de este registro?" : "¿Descartar el registro sin guardar?"}
+          descripcion="Hay datos escritos que no se han guardado. Si cierras ahora, se pierden."
+          irreversible={false}
+          textoConfirmar="Sí, descartar"
+          textoCancelar="Seguir editando"
+          onCancelar={() => setConfirmarCierre(false)}
+          onConfirmar={() => { setConfirmarCierre(false); onClose(); }}
+        />
       </aside>
     </>
   );

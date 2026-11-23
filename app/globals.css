@@ -62,7 +62,7 @@ body {
 a { color: var(--brand-500); text-decoration: none; }
 h1, h2, h3 { margin: 0; }
 
-.container { max-width: 1640px; margin: 0 auto; padding: 28px 34px 72px; }
+.container { max-width: 1640px; margin: 0 auto; padding: 28px 34px 104px; } /* abajo: espacio para la burbuja del asistente */
 
 /* ── App shell ────────────────────────────────────────── */
 .app-shell { display: flex; min-height: 100vh; }
@@ -349,11 +349,11 @@ table.clean td b { color: var(--text); font-weight: 600; }
   }
   .sidebar.open { transform: translateX(0); }
   .topbar-burger { display: grid; }
-  .container { padding: 24px 20px 60px; }
+  .container { padding: 24px 20px 100px; }
 }
 
 @media (max-width: 640px) {
-  .container { padding: 20px 16px 56px; }
+  .container { padding: 20px 16px 96px; }
   .topbar { padding: 0 18px; }
   .client-card { grid-template-columns: 1fr; }
   .cc-actions { min-width: 0; }
@@ -595,6 +595,21 @@ table.tbl-fit td.row-actions { padding-right: 6px; display: table-cell; }
   .tx-mod .table-wrap[style*="padding: 18px"] { padding: 14px !important; }
   .tx-mod .tarifa-card { padding: 14px; }
 }
+
+/* ── Campos con error y montos legibles (formularios) ─────────────── */
+.campo-error { font-size: 12px; font-weight: 600; color: var(--high); }
+.field [aria-invalid="true"] { border-color: var(--high); box-shadow: 0 0 0 3px var(--high-soft); }
+.monto-ayuda { font-size: 11.5px; font-weight: 600; color: var(--brand); font-variant-numeric: tabular-nums; text-align: right; }
+.tarifa-nueva-monto { flex: 1 0 100%; display: flex; justify-content: flex-end; }
+
+/* Gráfica sin datos: mensaje en lugar de un recuadro vacío. */
+.grafica-vacia { display: flex; gap: 12px; align-items: flex-start; margin-top: 10px; padding: 16px 18px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: 13px; }
+.grafica-vacia svg { flex: none; width: 20px; height: 20px; color: var(--brand); }
+.grafica-vacia b { display: block; color: var(--text); margin-bottom: 2px; }
+
+/* La burbuja del asistente no tapa formularios ni avisos abiertos. */
+body:has(.drawer) .burbuja-btn, body:has(.confirmar-fondo) .burbuja-btn,
+body:has(.drawer) .burbuja-panel, body:has(.confirmar-fondo) .burbuja-panel { display: none; }
 
 /* ── Confirmación de eliminación (ConfirmarEliminacion) ─────────────
    Reemplaza window.confirm: aviso en la página, centrado ("ventana") o
