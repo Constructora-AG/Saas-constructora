@@ -13,6 +13,7 @@
 // - Formulario en drawer (ServicioForm): t.setModalOpen pausa el polling.
 // ════════════════════════════════════════════════════════════════════
 
+import { rutaPrefacturasContrato } from "@/lib/aaa/rutasContrato";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconDownload } from "../../icons";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
@@ -225,7 +226,7 @@ export function RegistrosView({ t }: ViewProps) {
         creadas.push(`${numero} (${area}, ${grupo.length} servicio(s))`);
       }
       setSel(new Set());
-      setPrefMsg({ ok: `${creadas.length > 1 ? "Prefacturas creadas" : "Prefactura creada"}: ${creadas.join("; ")}. Su soporte son las evidencias fotográficas de los servicios. Puedes verlas en Proyecto Triple A → Prefacturas.` });
+      setPrefMsg({ ok: `${creadas.length > 1 ? "Prefacturas creadas" : "Prefactura creada"}: ${creadas.join("; ")}. Su soporte son las evidencias fotográficas de los servicios. Puedes verlas en ${t.ficha.nombre} → Prefacturas.` });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "No se pudo crear la prefactura.";
       setPrefMsg({ error: creadas.length ? `Se crearon ${creadas.join("; ")}, pero falló ${msg}` : msg });
@@ -418,7 +419,7 @@ export function RegistrosView({ t }: ViewProps) {
         <div className="info-bar" style={{ marginBottom: 12 }}>
           <div>{prefMsg.ok}</div>
           <span className="topbar-spacer" style={{ flex: 1 }} />
-          <a className="btn btn-ghost btn-sm" href="/aaa/prefacturas">Ver prefacturas</a>
+          <a className="btn btn-ghost btn-sm" href={rutaPrefacturasContrato(t.ns)}>Ver prefacturas</a>
           <button className="btn btn-ghost btn-sm" onClick={() => setPrefMsg(null)}>Cerrar</button>
         </div>
       )}

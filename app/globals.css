@@ -585,6 +585,8 @@ table.tbl-fit td.row-actions { padding-right: 6px; display: table-cell; }
 }
 .nav-item-add:hover, .nav-item-add.active { background: var(--sidebar-active-bg); color: #fff; border-color: var(--brand-500); }
 .nav-item.nav-sub-item.active { opacity: 1; box-shadow: none; }
+.nav-sub.nav-sub-2 { margin: 0 0 2px 12px; padding-left: 10px; }
+.nav-sub.nav-sub-2 .nav-item.nav-sub-item { padding: 4px 10px; font-size: 12px; }
 
 /* ── Asistente de gerencia ─────────────────────────────────────────── */
 .asis { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; min-height: calc(100vh - 190px); }

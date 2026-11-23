@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { exigirCualquieraDeModulos, esRespuestaAutorizacion } from "@/lib/auth/servidor";
+import { resolveTransporteNamespace } from "@/lib/transporte/namespace";
+
+/** Cada contrato tiene su módulo de prefacturas: entra quien ve Proyecto Triple A o ese contrato. */
+function exigirAccesoContrato(contrato: unknown) {
+  const ns = resolveTransporteNamespace(contrato);
+  return exigirCualquieraDeModulos(ns ? ["aaa", ns.modulo] : ["aaa"]);
+}
+/** Primer filtro (antes de leer la BD): sesión con acceso a algún módulo de Triple A. */
+const MODULOS_TRIPLE_A = ["aaa", "transporte", "alquiler", "emergencia", "contratos"];
 import {
   aplicarTransicionPrefactura,
   contratoValido,
@@ -12,15 +21,16 @@ import {
   type ItemBody,
 } from "@/lib/aaa/prefacturas";
 
-// GET /api/aaa/prefacturas — lista completa (el cliente filtra)
-export async function GET() {
-  const acceso = await exigirCualquieraDeModulos(["aaa", "transporte"]);
+// GET /api/aaa/prefacturas[?contrato=<ns>] — lista completa o solo la de un contrato
+export async function GET(req: NextRequest) {
+  const contrato = req.nextUrl.searchParams.get("contrato");
+  if (contrato !== null && !contratoValido(contrato)) return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
+  const acceso = contrato ? await exigirAccesoContrato(contrato) : await exigirCualquieraDeModulos(["aaa", "transporte"]);
   if (esRespuestaAutorizacion(acceso)) return acceso;
   const supa = supabaseAdmin();
-  const { data, error } = await supa
-    .from("aaa_prefacturas")
-    .select("*")
-    .order("fecha_generacion", { ascending: false });
+  let q = supa.from("aaa_prefacturas").select("*");
+  if (contrato) q = q.eq("contrato", contrato);
+  const { data, error } = await q.order("fecha_generacion", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ prefacturas: data });
 }
@@ -29,8 +39,6 @@ export async function GET() {
 // Body: { contrato, fecha_generacion, (numero se asigna automático) periodo?, lugar?, nota?, items: [{ item, cantidad, vr_unit }] }
 // Los ítems se validan contra el catálogo Herpro del contrato: nombre no catalogado = rechazo.
 export async function POST(req: NextRequest) {
-  const acceso = await exigirCualquieraDeModulos(["aaa", "transporte"]);
-  if (esRespuestaAutorizacion(acceso)) return acceso;
   let b: Record<string, unknown>;
   try {
     b = await req.json();
@@ -40,6 +48,8 @@ export async function POST(req: NextRequest) {
 
   if (!contratoValido(b.contrato))
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
+  const acceso = await exigirAccesoContrato(b.contrato);
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!b.fecha_generacion) return NextResponse.json({ error: "Falta la fecha de generación" }, { status: 400 });
   // Vencimiento: SIEMPRE 30 días calendario después de la generación (regla AG)
   b.fecha_vencimiento = mas30Dias(String(b.fecha_generacion)) ?? b.fecha_vencimiento ?? null;
@@ -112,8 +122,8 @@ export async function POST(req: NextRequest) {
 //         items?, estado?, numero_factura?, fecha_factura?, acta?, migo? }
 // Al quedar cargados acta Y migo, una prefactura "pendiente_acta_migo" pasa sola a "pendiente_pago".
 export async function PATCH(req: NextRequest) {
-  const acceso = await exigirCualquieraDeModulos(["aaa", "transporte"]);
-  if (esRespuestaAutorizacion(acceso)) return acceso;
+  const sesion = await exigirCualquieraDeModulos(MODULOS_TRIPLE_A);
+  if (esRespuestaAutorizacion(sesion)) return sesion;
   let b: Record<string, unknown>;
   try {
     b = await req.json();
@@ -128,6 +138,11 @@ export async function PATCH(req: NextRequest) {
   const supa = supabaseAdmin();
   const { data: actual, error: e0 } = await supa.from("aaa_prefacturas").select("*").eq("id", b.id).single();
   if (e0 || !actual) return NextResponse.json({ error: "Prefactura no encontrada" }, { status: 404 });
+  // Acceso al contrato actual y, si se cambia, también al de destino.
+  for (const c of new Set([actual.contrato, b.contrato ?? actual.contrato])) {
+    const acceso = await exigirAccesoContrato(c);
+    if (esRespuestaAutorizacion(acceso)) return acceso;
+  }
 
   const patch: Record<string, unknown> = {};
   for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "area_aaa", "interventor", "servicios", "periodo", "periodo_desde", "periodo_hasta", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
@@ -183,8 +198,8 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/aaa/prefacturas — Body: { id }
 export async function DELETE(req: NextRequest) {
-  const acceso = await exigirCualquieraDeModulos(["aaa", "transporte"]);
-  if (esRespuestaAutorizacion(acceso)) return acceso;
+  const sesion = await exigirCualquieraDeModulos(MODULOS_TRIPLE_A);
+  if (esRespuestaAutorizacion(sesion)) return sesion;
   let b: { id?: string };
   try {
     b = await req.json();
@@ -194,6 +209,9 @@ export async function DELETE(req: NextRequest) {
   if (!b.id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
   const supa = supabaseAdmin();
   const { data: row } = await supa.from("aaa_prefacturas").select("numero, contrato, servicios").eq("id", b.id).maybeSingle();
+  if (!row) return NextResponse.json({ error: "Prefactura no encontrada" }, { status: 404 });
+  const acceso = await exigirAccesoContrato(row.contrato);
+  if (esRespuestaAutorizacion(acceso)) return acceso;
   const { error } = await supa.from("aaa_prefacturas").delete().eq("id", b.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   // Prefactura de Transporte AAA, Contrato de Alquiler u Otro Sí / Emergencia: liberar los servicios que tenía

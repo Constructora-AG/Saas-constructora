@@ -43,8 +43,9 @@ export const CATALOGO_EMERGENCIA: ItemCatalogo[] = [
 ];
 
 export function catalogoDe(contrato: string): ItemCatalogo[] {
-  if (contrato === "transporte") return []; // Transporte AAA: ítems libres (uno por servicio registrado)
-  return contrato === "emergencia" ? CATALOGO_EMERGENCIA : CATALOGO_ALQUILER;
+  // Catálogo Herpro solo en Alquiler y Emergencia; Transporte AAA y los contratos
+  // creados en la app usan ítems libres (uno por servicio registrado).
+  return contrato === "emergencia" ? CATALOGO_EMERGENCIA : contrato === "alquiler" ? CATALOGO_ALQUILER : [];
 }
 
 export const CONTRATO_LABEL: Record<string, string> = { alquiler: "Alquiler", emergencia: "Emergencia", transporte: "Transporte AAA" };
@@ -68,7 +69,8 @@ export interface PrefacturaItem {
 export interface PrefacturaRow {
   id: string;
   numero: string;
-  contrato: "alquiler" | "emergencia" | "transporte";
+  /** transporte | alquiler | emergencia | id de un contrato creado en la app */
+  contrato: string;
   fecha_generacion: string;
   fecha_vencimiento: string | null;
   centro_costo: string | null;

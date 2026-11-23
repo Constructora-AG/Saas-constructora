@@ -59,7 +59,7 @@ interface ItemForm { item: string; cantidad: string; vr_unit: string }
 const ITEM0: ItemForm = { item: "", cantidad: "", vr_unit: "" };
 /** Vencimiento = generación + 30 días calendario (regla AG). */
 const mas30 = (iso: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); if (!m) return ""; const d = new Date(+m[1], +m[2] - 1, +m[3] + 30); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-const FORM0 = { contrato: "alquiler" as "alquiler" | "emergencia" | "transporte", fecha_generacion: "", fecha_vencimiento: "", centro_costo: "", area_aaa: "", interventor: "", periodo_desde: "", periodo_hasta: "", lugar: "", nota: "" };
+const FORM0 = { contrato: "alquiler" as string, fecha_generacion: "", fecha_vencimiento: "", centro_costo: "", area_aaa: "", interventor: "", periodo_desde: "", periodo_hasta: "", lugar: "", nota: "" };
 
 const OTRO = "__otro__";
 /** Desplegable de lista maestra con opción «Otro (digitar)». */
@@ -79,13 +79,18 @@ function SelectMaestro({ label, opciones, value, onChange, placeholder }: { labe
   );
 }
 
-export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows: PrefacturaRow[]; demo: boolean; maestros?: { areas: string[]; interventores: string[] } }) {
+/**
+ * Con `contrato` el componente queda atado a ese contrato (módulo de prefacturas
+ * anidado bajo el contrato): solo lista y crea prefacturas de ese contrato.
+ */
+export function PrefacturasClient({ initialRows, demo, maestros, contrato: contratoFijo, contratoLabel }: { initialRows: PrefacturaRow[]; demo: boolean; maestros?: { areas: string[]; interventores: string[] }; contrato?: string; contratoLabel?: string }) {
+  const form0 = contratoFijo ? { ...FORM0, contrato: contratoFijo } : FORM0;
   const areasAAA = maestros?.areas ?? [];
   const interventores = maestros?.interventores ?? [];
   const [rows, setRows] = useState<PrefacturaRow[]>(initialRows);
   // N° consecutivo automático (informativo; el servidor asigna el definitivo)
   const proximoNumero = `PF${String(Math.max(0, ...rows.map((r) => parseInt(String(r.numero ?? "").replace(/\D/g, ""), 10) || 0)) + 1).padStart(4, "0")} (automático)`;
-  const [form, setForm] = useState(FORM0);
+  const [form, setForm] = useState(form0);
   const [items, setItems] = useState<ItemForm[]>([{ ...ITEM0 }]);
   const [editando, setEditando] = useState<PrefacturaRow | null>(null);
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -131,7 +136,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     setItem(i, { item: nombre, vr_unit: cat ? String(cat.tarifa) : "" });
   }
 
-  const cerrarForm = () => { setMostrarForm(false); setEditando(null); setForm(FORM0); setItems([{ ...ITEM0 }]); setSoporteForm(null); };
+  const cerrarForm = () => { setMostrarForm(false); setEditando(null); setForm(form0); setItems([{ ...ITEM0 }]); setSoporteForm(null); };
   useEffect(() => {
     if (!mostrarForm) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") cerrarForm(); };
@@ -139,7 +144,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mostrarForm]);
-  const abrirNuevo = () => { setError(null); setOk(null); setEditando(null); setForm(FORM0); setItems([{ ...ITEM0 }]); setMostrarForm(true); };
+  const abrirNuevo = () => { setError(null); setOk(null); setEditando(null); setForm(form0); setItems([{ ...ITEM0 }]); setMostrarForm(true); };
   const abrirEdicion = (r: PrefacturaRow) => {
     setError(null); setOk(null);
     setEditando(r);
@@ -346,11 +351,15 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
               <input className="input" readOnly value={editando ? editando.numero : proximoNumero.replace(" (automático)", "")} title="Se asigna automáticamente de forma consecutiva" style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
             </label>
             <label className="field">Contrato *
-              <select className="input" value={form.contrato} onChange={(e) => { setForm((f) => ({ ...f, contrato: e.target.value as typeof form.contrato })); setItems([{ ...ITEM0 }]); }}>
+              {contratoFijo ? (
+                <input className="input" readOnly value={contratoLabel ?? CONTRATO_LABEL[contratoFijo] ?? contratoFijo} style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
+              ) : (
+              <select className="input" value={form.contrato} onChange={(e) => { setForm((f) => ({ ...f, contrato: e.target.value })); setItems([{ ...ITEM0 }]); }}>
                 <option value="alquiler">Contrato Alquiler</option>
                 <option value="emergencia">Otro Sí / Emergencia</option>
                 <option value="transporte">Transporte AAA</option>
               </select>
+              )}
             </label>
             <label className="field">Fecha de generación *
               <input className="input" required type="date" value={form.fecha_generacion}
@@ -452,7 +461,7 @@ export function PrefacturasClient({ initialRows, demo, maestros }: { initialRows
                 <Row key={r.id}>
                   <tr style={{ cursor: "pointer" }} onClick={() => setAbierta(open ? null : r.id)}>
                     <td><b>{r.numero}</b><span className="cc-dias">{fmtF(r.fecha_generacion)}</span></td>
-                    <td className="muted">{CONTRATO_LABEL[r.contrato] ?? r.contrato}{r.servicios?.length ? <span className="cc-dias">{r.servicios.length} servicio(s) de Transporte</span> : null}{r.centro_costo ? <span className="cc-dias">{r.centro_costo}</span> : null}{r.area_aaa ? <span className="cc-dias">{r.area_aaa}</span> : null}{r.interventor ? <span className="cc-dias">Interv.: {r.interventor}</span> : null}</td>
+                    <td className="muted">{(contratoFijo && contratoLabel) || CONTRATO_LABEL[r.contrato] || r.contrato}{r.servicios?.length ? <span className="cc-dias">{r.servicios.length} servicio(s) registrado(s)</span> : null}{r.centro_costo ? <span className="cc-dias">{r.centro_costo}</span> : null}{r.area_aaa ? <span className="cc-dias">{r.area_aaa}</span> : null}{r.interventor ? <span className="cc-dias">Interv.: {r.interventor}</span> : null}</td>
                     <td className="muted">{r.periodo ?? "—"}{r.lugar ? ` · ${r.lugar}` : ""}{r.fecha_vencimiento ? <span className="cc-dias">vence {fmtF(r.fecha_vencimiento)}</span> : null}</td>
                     <td className="num" style={{ textAlign: "right" }}><b>{COP.format(Number(r.valor_base))}</b></td>
                     <td className="num muted" style={{ textAlign: "right" }}>{COP.format(conIvaDe(r))}{r.contrato === "transporte" && <span className="cc-dias">sin IVA</span>}</td>

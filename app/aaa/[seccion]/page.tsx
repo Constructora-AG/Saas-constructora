@@ -12,7 +12,6 @@ const SECCIONES: Record<string, { tab: AaaTab; titulo: string; sub: string }> = 
   consolidado: { tab: "consolidado", titulo: "Consolidado", sub: "Presupuesto contractual vs. consumido, facturado y prefacturas de ambos contratos." },
   alquiler: { tab: "alquiler", titulo: "Contrato Alquiler (Old)", sub: "Contrato de alquiler de maquinaria con Triple A: presupuesto, consumido y facturación." },
   emergencia: { tab: "emergencia", titulo: "Otro Sí / Emergencia (Old)", sub: "Otro sí de emergencia: presupuesto, consumido y facturación." },
-  prefacturas: { tab: "prefacturas", titulo: "Prefacturas", sub: "Trabajo ejecutado y pagado por AG que aún no tiene orden de facturación." },
 };
 
 export function generateStaticParams() {
@@ -67,8 +66,8 @@ export default async function AaaSeccionPage({ params }: { params: Promise<{ sec
         <IconInfo />
         <div>
           <b>Datos del corte manual de subgerencia</b> — consumido y facturado provienen de los centros de costos
-          <b> AAA</b> y <b>AAA facturación</b> de Herpro; las prefacturas se registran aquí mismo, en la pestaña
-          Prefacturas. La sincronización automática con Herpro queda pendiente de los accesos.
+          <b> AAA</b> y <b>AAA facturación</b> de Herpro; las prefacturas se registran en el módulo
+          Prefacturas de cada contrato. La sincronización automática con Herpro queda pendiente de los accesos.
         </div>
       </div>
 

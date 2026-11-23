@@ -20,6 +20,11 @@ interface NavItem {
   accion?: { href: string; title: string; modulo: string };
 }
 
+/** Submódulo «Prefacturas» de un contrato (tercer nivel del menú). */
+function subPrefacturas(base: string, modulo: string): NavItem {
+  return { href: `${base}/prefacturas`, label: "Prefacturas", icon: null, modulo };
+}
+
 const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Operación",
@@ -45,10 +50,10 @@ const NAV: { section: string; items: NavItem[] }[] = [
         accion: { href: "/aaa/contratos", title: "Crear un contrato nuevo", modulo: "contratos" },
         children: [
           { href: "/aaa/consolidado", label: "Consolidado", icon: null, modulo: "aaa" },
-          { href: "/aaa/contrato-alquiler", label: "Contrato de Alquiler", icon: <IconBuilding />, modulo: "alquiler" },
-          { href: "/aaa/otro-si-emergencia", label: "Otro Sí / Emergencia", icon: <IconBuilding />, modulo: "emergencia" },
-          { href: "/aaa/prefacturas", label: "Prefacturas", icon: null, modulo: "aaa" },
-          { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte" },
+          // Cada contrato tiene su propio módulo de prefacturas anidado.
+          { href: "/aaa/contrato-alquiler", label: "Contrato de Alquiler", icon: <IconBuilding />, modulo: "alquiler", children: [subPrefacturas("/aaa/contrato-alquiler", "alquiler")] },
+          { href: "/aaa/otro-si-emergencia", label: "Otro Sí / Emergencia", icon: <IconBuilding />, modulo: "emergencia", children: [subPrefacturas("/aaa/otro-si-emergencia", "emergencia")] },
+          { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte", children: [subPrefacturas("/aaa/transporte", "transporte")] },
         ],
       },
     ],
@@ -78,6 +83,9 @@ const TITLES: Record<string, string> = {
   "/aaa/emergencia": "Proyecto Triple A — Otro Sí / Emergencia (Old)",
   "/aaa/otro-si-emergencia": "Proyecto Triple A — Otro Sí / Emergencia (Contrato N° 2026-060)",
   "/aaa/prefacturas": "Proyecto Triple A — Prefacturas",
+  "/aaa/contrato-alquiler/prefacturas": "Proyecto Triple A — Contrato de Alquiler · Prefacturas",
+  "/aaa/otro-si-emergencia/prefacturas": "Proyecto Triple A — Otro Sí / Emergencia · Prefacturas",
+  "/aaa/transporte/prefacturas": "Proyecto Triple A — Transporte AAA · Prefacturas",
   "/aaa/contratos": "Proyecto Triple A — Contratos",
   "/aaa": "Proyecto Triple A",
   "/usuarios": "Usuarios y roles de la plataforma",
@@ -116,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // "/aaa" es exacto para que no quede activo junto con "/aaa/transporte".
   const activeHref = (href: string) => (href === "/" ? path === href : path === href || path.startsWith(href + "/"));
   const currentTitle =
-    Object.entries(TITLES).find(([h]) => (h === "/" ? path === "/" : path.startsWith(h)))?.[1] ?? "Constructora Anaya Giraldo";
+    Object.entries(TITLES).sort(([a], [b]) => b.length - a.length).find(([h]) => (h === "/" ? path === "/" : path.startsWith(h)))?.[1] ?? "Constructora Anaya Giraldo";
 
   return (
     <div className="app-shell">
@@ -135,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {NAV.map((group) => ({
             ...group,
             items: group.items.map((i) => (i.href === "/aaa" && i.children
-              ? { ...i, children: [...i.children, ...contratosApp.map((c) => ({ href: `/aaa/contratos/${c.id}`, label: c.nombre, icon: null, modulo: "contratos" }))] }
+              ? { ...i, children: [...i.children, ...contratosApp.map((c) => ({ href: `/aaa/contratos/${c.id}`, label: c.nombre, icon: null, modulo: "contratos", children: [subPrefacturas(`/aaa/contratos/${c.id}`, "contratos")] }))] }
               : i)),
           })).map((group) => ({
             ...group,
@@ -173,14 +181,29 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {item.children && (
                     <div className="nav-sub">
                       {item.children.map((c) => (
-                        <a
-                          key={c.href}
-                          href={c.href}
-                          onClick={() => setOpen(false)}
-                          className={`nav-item nav-sub-item${activeHref(c.href) ? " active" : ""}`}
-                        >
-                          {c.label}
-                        </a>
+                        <div key={c.href}>
+                          <a
+                            href={c.href}
+                            onClick={() => setOpen(false)}
+                            className={`nav-item nav-sub-item${activeHref(c.href) && !c.children?.some((g) => activeHref(g.href)) ? " active" : ""}`}
+                          >
+                            {c.label}
+                          </a>
+                          {c.children && (
+                            <div className="nav-sub nav-sub-2">
+                              {c.children.map((g) => (
+                                <a
+                                  key={g.href}
+                                  href={g.href}
+                                  onClick={() => setOpen(false)}
+                                  className={`nav-item nav-sub-item${activeHref(g.href) ? " active" : ""}`}
+                                >
+                                  {g.label}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )}
