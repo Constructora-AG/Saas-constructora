@@ -10,7 +10,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { catalogoDe, CONTRATO_LABEL, ivaPctDe, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { DIAS_HABILES_PAGO, diasHasta, sumarDiasHabiles } from "@/lib/aaa/pago";
-import { descargarPrefacturaPdf } from "@/lib/aaa/prefacturaPdf";
+import { descargarLotePrefacturasPdf, descargarPrefacturaPdf } from "@/lib/aaa/prefacturaPdf";
+import { slugify } from "@/lib/transporte/logic";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
 import { ResponsiveTables } from "./ResponsiveTables";
 import { PrefacturasReporte } from "./PrefacturasReporte";
@@ -25,6 +26,8 @@ const ESTADOS: Record<string, { label: string; cls: string }> = {
   rechazada: { label: "Rechazada", cls: "high" },
 };
 const ACTIVAS = new Set(["pendiente_acta_migo", "por_facturar", "pendiente_pago"]);
+/** Valor del filtro para prefacturas sin Área AAA. */
+const SIN_AREA = "__sin_area__";
 
 const HOY = new Date();
 function diasDesde(fecha: string) {
@@ -102,6 +105,10 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
   const [soporteForm, setSoporteForm] = useState<AdjuntoPrefactura | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [verReportes, setVerReportes] = useState(false);
+  // Filtros del listado (el lote se genera con lo filtrado)
+  const [fArea, setFArea] = useState("");
+  const [fEstado, setFEstado] = useState("");
+  const [generandoLote, setGenerandoLote] = useState(false);
   useEffect(() => {
     const cerrar = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.(".rowmenu")) setMenuId(null); };
     document.addEventListener("mousedown", cerrar);
@@ -111,6 +118,33 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
   const pendienteSubida = useRef<{ id: string; campo: "soporte" | "acta" | "migo" | "factura" } | null>(null);
 
   const catalogo = catalogoDe(form.contrato);
+  const areasFiltro = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    rows.forEach((r) => { const k = (r.area_aaa || "").trim() || SIN_AREA; cuenta.set(k, (cuenta.get(k) ?? 0) + 1); });
+    return [...cuenta.entries()].sort((a, b) => (a[0] === SIN_AREA ? 1 : b[0] === SIN_AREA ? -1 : a[0].localeCompare(b[0], "es")));
+  }, [rows]);
+  const filtradas = useMemo(() => rows.filter((r) => {
+    if (fArea && ((r.area_aaa || "").trim() || SIN_AREA) !== fArea) return false;
+    if (fEstado === "activas") return ACTIVAS.has(r.estado);
+    if (fEstado && r.estado !== fEstado) return false;
+    return true;
+  }), [rows, fArea, fEstado]);
+  const hayFiltro = fArea !== "" || fEstado !== "";
+  const nombreArea = fArea === SIN_AREA ? "Sin área AAA" : fArea;
+  const generarLote = async () => {
+    if (!fArea || !filtradas.length) return;
+    setGenerandoLote(true); setError(null);
+    try {
+      const orden = [...filtradas].sort((a, b) => String(a.numero ?? "").localeCompare(String(b.numero ?? ""), "es", { numeric: true }));
+      const estadoTxt = fEstado === "activas" ? "activas" : fEstado ? (ESTADOS[fEstado]?.label ?? fEstado).toLowerCase() : "";
+      const titulo = `Área AAA: ${nombreArea}${contratoLabel ? ` · ${contratoLabel}` : ""}${estadoTxt ? ` · ${estadoTxt}` : ""}`;
+      await descargarLotePrefacturasPdf(orden, titulo, `Lote prefacturas ${slugify(nombreArea)}${contratoFijo ? `_${contratoFijo}` : ""}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo generar el lote.");
+    } finally {
+      setGenerandoLote(false);
+    }
+  };
   const activas = useMemo(() => rows.filter((r) => ACTIVAS.has(r.estado)), [rows]);
   const totalActivo = activas.reduce((s, r) => s + Number(r.valor_base), 0);
   const conIvaDe = (r: PrefacturaRow) => {
@@ -433,6 +467,32 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
       )}
       {!mostrarForm && error && <div style={{ color: "var(--high)", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
+        <label className="field" style={{ minWidth: 220 }}>Área AAA
+          <select className="input" value={fArea} onChange={(e) => setFArea(e.target.value)}>
+            <option value="">Todas las áreas</option>
+            {areasFiltro.map(([a, n]) => <option key={a} value={a}>{a === SIN_AREA ? "Sin área AAA" : a} ({n})</option>)}
+          </select>
+        </label>
+        <label className="field" style={{ minWidth: 200 }}>Estado
+          <select className="input" value={fEstado} onChange={(e) => setFEstado(e.target.value)}>
+            <option value="">Todos los estados</option>
+            <option value="activas">Activas (sin pagar)</option>
+            {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </label>
+        {hayFiltro && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setFArea(""); setFEstado(""); }}>Limpiar filtros</button>}
+        <span className="topbar-spacer" style={{ flex: 1 }} />
+        <span className="muted" style={{ fontSize: 13 }} aria-live="polite">
+          {filtradas.length} de {rows.length} · <b className="num">{COP.format(filtradas.reduce((s, r) => s + Number(r.valor_base), 0))}</b> sin IVA
+        </span>
+        <button type="button" className="btn btn-primary btn-sm" disabled={!fArea || !filtradas.length || generandoLote}
+          title={fArea ? `Un solo PDF con la hoja resumen y las ${filtradas.length} prefactura(s) del área` : "Elige un área para generar su lote"}
+          onClick={() => void generarLote()}>
+          {generandoLote ? "Generando lote…" : fArea ? `Generar lote del área (${filtradas.length})` : "Generar lote por área"}
+        </button>
+      </div>
+
       <div className="table-wrap">
         <table className="clean" style={{ width: "100%" }}>
           <thead>
@@ -449,10 +509,10 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={9} className="muted" style={{ padding: 18 }}>Sin prefacturas registradas.</td></tr>
+            {filtradas.length === 0 && (
+              <tr><td colSpan={9} className="muted" style={{ padding: 18 }}>{rows.length ? "Ninguna prefactura coincide con los filtros." : "Sin prefacturas registradas."}</td></tr>
             )}
-            {rows.map((r) => {
+            {filtradas.map((r) => {
               const est = ESTADOS[r.estado] ?? { label: r.estado, cls: "warn" };
               const activa = ACTIVAS.has(r.estado);
               const dias = diasDesde(r.fecha_generacion);
