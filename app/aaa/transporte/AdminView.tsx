@@ -11,6 +11,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { PerfilKey, PermKey } from "@/lib/transporte/model";
 import { num } from "@/lib/transporte/model";
@@ -99,8 +100,8 @@ function CuentasSeccion() {
     }
   };
 
+  const [porEliminar, setPorEliminar] = useState<CuentaPlataforma | null>(null);
   const eliminar = async (c: CuentaPlataforma) => {
-    if (!window.confirm(`¿Eliminar la cuenta ${c.email}? Esta acción no se puede deshacer.`)) return;
     setMsg({});
     setGuardando(true);
     try {
@@ -137,7 +138,7 @@ function CuentasSeccion() {
               Nueva clave
             </button>
             {c.id !== yo && (
-              <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void eliminar(c)} disabled={guardando}>
+              <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => setPorEliminar(c)} disabled={guardando}>
                 ×
               </button>
             )}
@@ -167,6 +168,13 @@ function CuentasSeccion() {
       <div style={{ marginTop: 8 }}>
         <MsgInline error={msg.error} ok={msg.ok} />
       </div>
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar la cuenta ${porEliminar?.email ?? ""}?`}
+        descripcion={`${porEliminar?.nombre ?? "La persona"} perderá el acceso de inmediato.`}
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await eliminar(porEliminar); setPorEliminar(null); }}
+      />
     </Seccion>
   );
 }

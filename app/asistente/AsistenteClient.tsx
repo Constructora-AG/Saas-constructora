@@ -1,5 +1,6 @@
 "use client";
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 import { IconDownload, IconInfo, IconMessage, IconRefresh } from "../icons";
 import { descargarInformePdf } from "@/lib/asistente/informePdf";
 
@@ -53,8 +54,9 @@ export function AsistenteClient({ compacto = false }: { compacto?: boolean }) {
     setId(cid); setMensajes(j.mensajes ?? []); setVerPasos(null);
   };
   const nueva = () => { setId(null); setMensajes([]); setError(""); setTexto(""); area.current?.focus(); };
+  // Conversación pendiente de confirmar su eliminación.
+  const [porEliminar, setPorEliminar] = useState<{ id: string; titulo: string } | null>(null);
   const eliminar = async (cid: string) => {
-    if (!confirm("¿Eliminar esta conversación?")) return;
     await fetch(`/api/asistente?id=${cid}`, { method: "DELETE" });
     if (cid === id) nueva();
     void cargarLista();
@@ -100,7 +102,7 @@ export function AsistenteClient({ compacto = false }: { compacto?: boolean }) {
           {convs.map((c) => (
             <div key={c.id} className={`asis-conv${c.id === id ? " active" : ""}`} onClick={() => void abrir(c.id)}>
               <div className="asis-conv-t">{c.titulo}</div>
-              <div className="asis-conv-m"><span>{fechaCorta(c.updated_at)}</span><button className="asis-x" title="Eliminar" onClick={(e) => { e.stopPropagation(); void eliminar(c.id); }}>×</button></div>
+              <div className="asis-conv-m"><span>{fechaCorta(c.updated_at)}</span><button className="asis-x" title="Eliminar" aria-label={`Eliminar la conversación «${c.titulo}»`} onClick={(e) => { e.stopPropagation(); setPorEliminar({ id: c.id, titulo: c.titulo }); }}>×</button></div>
             </div>
           ))}
           {convs.length === 0 && <div className="muted" style={{ fontSize: 12.5, padding: "8px 4px" }}>Aún no hay conversaciones.</div>}
@@ -161,6 +163,13 @@ export function AsistenteClient({ compacto = false }: { compacto?: boolean }) {
           <button className="btn btn-primary" disabled={busy || !texto.trim() || !configurado} onClick={() => void enviar()}>{busy ? "Pensando…" : "Enviar"}</button>
         </div>
       </section>
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar la conversación «${porEliminar?.titulo ?? ""}»?`}
+        descripcion="Se borran sus mensajes e informes del historial del asistente."
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await eliminar(porEliminar.id); setPorEliminar(null); }}
+      />
     </div>
   );
 }

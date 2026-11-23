@@ -10,6 +10,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 import { useUsuario } from "@/lib/auth/useUsuario";
 import { ROLES, ROL_LABELS, ROL_DESC, ROL_MODULOS, MODULOS_OTORGABLES, type RolPlataforma } from "@/lib/auth/modulos";
 
@@ -97,8 +98,9 @@ export function UsuariosClient() {
     if (ok) setResetPass(null);
   };
 
+  // Cuenta pendiente de confirmar su eliminación.
+  const [porEliminar, setPorEliminar] = useState<Cuenta | null>(null);
   const eliminar = async (c: Cuenta) => {
-    if (!window.confirm(`¿Eliminar la cuenta de ${c.nombre} (${c.email})? Perderá el acceso de inmediato.`)) return;
     await llamar(c.id, { method: "DELETE", body: JSON.stringify({ id: c.id }) }, `Cuenta ${c.email} eliminada.`);
   };
 
@@ -253,7 +255,7 @@ export function UsuariosClient() {
                         <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setEditNombre({ id: c.id, nombre: c.nombre })}>Nombre</button>
                         <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setResetPass({ id: c.id, password: generarPassword() })}>Contraseña</button>
                         {!esYo && (
-                          <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} disabled={busy} onClick={() => void eliminar(c)}>Eliminar</button>
+                          <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} disabled={busy} onClick={() => setPorEliminar(c)}>Eliminar</button>
                         )}
                       </>
                     )}
@@ -264,6 +266,13 @@ export function UsuariosClient() {
           </tbody>
         </table>
       </div>
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar la cuenta de ${porEliminar?.nombre ?? ""}?`}
+        descripcion={`${porEliminar?.email ?? ""} perderá el acceso a la plataforma de inmediato.`}
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await eliminar(porEliminar); setPorEliminar(null); }}
+      />
     </>
   );
 }

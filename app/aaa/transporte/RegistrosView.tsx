@@ -25,6 +25,7 @@ import { adjuntoSrc, openAttachment } from "@/lib/transporte/media";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 import { ServicioForm } from "./ServicioForm";
 import { buildOrderPdf } from "./ordenPdf";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 import { zonaDeRuta } from "@/lib/transporte/constants";
 
 const TIPO_BADGE: Record<string, { label: string; cls: string }> = {
@@ -124,6 +125,8 @@ export function RegistrosView({ t }: ViewProps) {
   const [colPickOpen, setColPickOpen] = useState(false);
   const [pagina, setPagina] = useState(1);
   const [menuId, setMenuId] = useState<string | null>(null);
+  // Registro pendiente de confirmar su eliminación.
+  const [porEliminar, setPorEliminar] = useState<Servicio | null>(null);
   // Selección para prefacturar
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [prefacturando, setPrefacturando] = useState(false);
@@ -260,7 +263,6 @@ export function RegistrosView({ t }: ViewProps) {
   const eliminar = async (s: Servicio) => {
     if (!mes) return;
     setMenuId(null);
-    if (!window.confirm("¿Eliminar este registro de servicio? Esta acción no se puede deshacer.")) return;
     setRowError(null);
     try {
       await t.deleteService(mes.key, s.id);
@@ -602,7 +604,7 @@ export function RegistrosView({ t }: ViewProps) {
                             <button disabled={pdfBusy === s.id} onClick={() => void ordenPdf(s)}>{pdfBusy === s.id ? "Generando…" : "Orden de servicio PDF"}</button>
                             <button onClick={() => abrir(s, null)}>Editar</button>
                             <button onClick={() => abrir(null, s)} title="No copia fecha, adjuntos ni estados">Duplicar</button>
-                            <button className="danger" onClick={() => void eliminar(s)}>Eliminar</button>
+                            <button className="danger" onClick={() => { setMenuId(null); setPorEliminar(s); }}>Eliminar</button>
                           </div>
                         )}
                       </div>
@@ -664,6 +666,19 @@ export function RegistrosView({ t }: ViewProps) {
           }}
         />
       )}
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar el registro ${porEliminar?.orderNo || ""} del ${porEliminar?.date ? fechaCorta(porEliminar.date) : ""}?`.replace(/\s+/g, " ")}
+        descripcion={porEliminar && (
+          <>
+            {[porEliminar.plate, porEliminar.equipment, fmtCOP(valorDe(porEliminar))].filter(Boolean).join(" · ")}.
+            {porEliminar.prefactura ? ` Está incluido en la prefactura ${porEliminar.prefactura}.` : ""}
+            {" "}Se borran también sus evidencias del registro.
+          </>
+        )}
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await eliminar(porEliminar); setPorEliminar(null); }}
+      />
     </>
   );
 }

@@ -6,13 +6,14 @@
 // Según SPEC §5.3 la edición NO está restringida por perfil.
 // ════════════════════════════════════════════════════════════════════
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { Tarifario } from "@/lib/transporte/model";
 import { num } from "@/lib/transporte/model";
 import { ALCANCE_RECOLECCION, AREAS_RECOLECCION, servicioRecoleccionDe, TARIFARIO_RECOLECCION_DEFAULT, volquetaDe } from "@/lib/transporte/constants";
 import { fmtCOP, recalcularValores } from "@/lib/transporte/logic";
 import { MsgInline } from "./CatalogoTabla";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 
 /** Estado editable: unitarios por "catId|rutaId" + recargos, como strings. */
 interface Draft {
@@ -41,6 +42,8 @@ export function TarifarioView({ t }: ViewProps) {
   const [draftCosto, setDraftCosto] = useState<Draft | null>(null);
   const [nuevoEquipo, setNuevoEquipo] = useState("");
   const [nuevaTarifa, setNuevaTarifa] = useState<Record<string, { tipo: "hora" | "transporte"; zona: string; valor: string }>>({});
+  // Eliminación pendiente de confirmar en la propia página (sin diálogo del navegador).
+  const [porEliminar, setPorEliminar] = useState<{ catId: string; rutaId?: string; label: string } | null>(null);
   const conCosto = t.ns === "transporte" && !!t.tarifarioCosto;
 
   // Sincroniza el borrador con el tarifario vivo mientras no haya edición local.
@@ -202,20 +205,43 @@ export function TarifarioView({ t }: ViewProps) {
     }
     setNuevaTarifa((p) => ({ ...p, [catId]: { tipo: f.tipo, zona: "", valor: "" } }));
   };
-  const quitarTarifa = async (catId: string, rutaId: string, label: string) => {
+  /** Pide confirmar en la página la eliminación de un ítem (sin rutaId) o de una de sus tarifas. */
+  const pedirEliminar = (catId: string, label: string, rutaId?: string) => {
+    setOk(null);
     const usos = usosRuta(catId, rutaId);
-    if (usos > 0) { setError(`No se puede quitar «${label}»: la usan ${usos} registro(s).`); return; }
-    if (!window.confirm(`¿Quitar la tarifa «${label}»?`)) return;
-    await guardarEstructura(
-      { ...tarifario, categorias: tarifario.categorias.map((c) => (c.id === catId ? { ...c, rutas: c.rutas.filter((r) => r.id !== rutaId) } : c)) },
-      `Tarifa «${label}» quitada.`,
-    );
+    if (usos > 0) { setError(`No se puede eliminar «${label}»: la usan ${usos} registro(s).`); return; }
+    if (dirty) { setError("Guarda o descarta primero los cambios de valores."); return; }
+    setError(null);
+    setPorEliminar({ catId, rutaId, label });
   };
-  const quitarEquipo = async (catId: string, label: string) => {
-    const usos = usosRuta(catId);
-    if (usos > 0) { setError(`No se puede quitar «${label}»: la usan ${usos} registro(s).`); return; }
-    if (!window.confirm(`¿Quitar «${label}» y sus tarifas?`)) return;
-    await guardarEstructura({ ...tarifario, categorias: tarifario.categorias.filter((c) => c.id !== catId) }, `«${label}» quitado.`);
+  const confirmarEliminar = async () => {
+    const p = porEliminar;
+    if (!p) return;
+    setPorEliminar(null);
+    if (p.rutaId) {
+      await guardarEstructura(
+        { ...tarifario, categorias: tarifario.categorias.map((c) => (c.id === p.catId ? { ...c, rutas: c.rutas.filter((r) => r.id !== p.rutaId) } : c)) },
+        `Tarifa «${p.label}» eliminada.`,
+      );
+    } else {
+      await guardarEstructura({ ...tarifario, categorias: tarifario.categorias.filter((c) => c.id !== p.catId) }, `«${p.label}» eliminado.`);
+    }
+  };
+  /** Aviso de confirmación dentro de la tarjeta, junto al ítem o la tarifa que se va a eliminar. */
+  const avisoEliminar = (catId: string, rutaId?: string) => {
+    const visible = !!porEliminar && porEliminar.catId === catId && porEliminar.rutaId === rutaId;
+    return (
+      <ConfirmarEliminacion
+        variante="en-linea"
+        abierto={visible}
+        titulo={rutaId ? `¿Eliminar la tarifa «${porEliminar?.label ?? ""}»?` : `¿Eliminar «${porEliminar?.label ?? ""}»?`}
+        descripcion={rutaId
+          ? "Se quitará esta tarifa y su valor del tarifario. No la usa ningún registro."
+          : "Se quitarán el servicio y todas sus tarifas del tarifario. No lo usa ningún registro."}
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={confirmarEliminar}
+      />
+    );
   };
 
   const restablecer = async () => {
@@ -301,8 +327,9 @@ export function TarifarioView({ t }: ViewProps) {
                 {cat.label}
                 {esRecoleccion && <span className={`badge ${esItemContrato(cat.id) ? "ok" : "warn"}`} style={{ marginLeft: 8, fontSize: 10.5, verticalAlign: "middle" }}>{esItemContrato(cat.id) ? "Contrato" : "Adicional"}</span>}
               </span>
-              {editaEstructura && !esItemContrato(cat.id) && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} title="Quitar" aria-label={`Quitar ${cat.label}`} onClick={() => void quitarEquipo(cat.id, cat.label)}>×</button>}
+              {editaEstructura && !esItemContrato(cat.id) && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} title="Quitar" aria-label={`Quitar ${cat.label}`} onClick={() => pedirEliminar(cat.id, cat.label)} aria-expanded={porEliminar?.catId === cat.id && !porEliminar.rutaId}>×</button>}
             </h3>
+            {avisoEliminar(cat.id)}
             <div className="muted" style={{ fontSize: 12 }}>
               {esRecoleccion
                 ? volquetaDe(cat.label) ? `Valor por hora efectiva sin IVA · volco mínimo ${volquetaDe(cat.label) === "sencilla" ? "7" : "14"} m³` : "Valor por hora efectiva sin IVA · servicio adicional (sin horas proyectadas en el contrato)"
@@ -314,13 +341,14 @@ export function TarifarioView({ t }: ViewProps) {
                 const venta = num(draft.valores[key]);
                 const costo = conCosto && draftCosto ? num(draftCosto.valores[key]) : 0;
                 return (
-                  <div key={ruta.id} className="tarifa-fila">
+                  <Fragment key={ruta.id}>
+                  <div className="tarifa-fila">
                     <span className="tarifa-fila-label">
                       <b>{ruta.id}</b> · {esRecoleccion ? ruta.label.replace(/\s*\(HR\)\s*$/, "") : ruta.label}
                       {esRecoleccion && horasProyectadas(cat.label, ruta.label) !== null && (
                         <span className="cc-dias">{horasProyectadas(cat.label, ruta.label)!.toLocaleString("es-CO")} h proyectadas</span>
                       )}
-                      {editaEstructura && !esItemContrato(cat.id, ruta.id) && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)", padding: "0 6px" }} title="Quitar tarifa" aria-label={`Quitar tarifa ${ruta.label}`} onClick={() => void quitarTarifa(cat.id, ruta.id, ruta.label)}>×</button>}
+                      {editaEstructura && !esItemContrato(cat.id, ruta.id) && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)", padding: "0 6px" }} title="Quitar tarifa" aria-label={`Quitar tarifa ${ruta.label}`} onClick={() => pedirEliminar(cat.id, ruta.label.replace(/\s*\(HR\)\s*$/, ""), ruta.id)} aria-expanded={porEliminar?.catId === cat.id && porEliminar.rutaId === ruta.id}>×</button>}
                     </span>
                     {/* Cada valor lleva su etiqueta encima: sigue legible aunque la fila se parta en dos líneas. */}
                     <div className="tarifa-valores">
@@ -352,6 +380,8 @@ export function TarifarioView({ t }: ViewProps) {
                     )}
                     </div>
                   </div>
+                  {avisoEliminar(cat.id, ruta.id)}
+                  </Fragment>
                 );
               })}
             </div>

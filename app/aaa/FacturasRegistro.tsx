@@ -7,6 +7,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { useEffect, useMemo, useState } from "react";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 import { IconDownload } from "../icons";
 
 export interface FacturaRow {
@@ -70,6 +71,8 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
   const [mes, setMes] = useState("");
   const [form, setForm] = useState(FORM0);
   const [editando, setEditando] = useState<FacturaRow | null>(null);
+  // Registro pendiente de confirmar su eliminación.
+  const [porEliminar, setPorEliminar] = useState<FacturaRow | null>(null);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -121,9 +124,12 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
     }
   }
 
+  function pedirEliminar(r: FacturaRow) {
+    if (demo) { setError("Modo demostración: conecta Supabase para eliminar."); return; }
+    setPorEliminar(r);
+  }
   async function eliminar(r: FacturaRow) {
     if (demo) { setError("Modo demostración: conecta Supabase para eliminar."); return; }
-    if (!window.confirm(`¿Eliminar el registro ${r.numero}? Esta acción no se puede deshacer.`)) return;
     setError(null); setOk(null);
     try {
       await llamar({ method: "DELETE", body: JSON.stringify({ id: r.id }) });
@@ -209,7 +215,7 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
                 <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{COP.format(Number(r.valor_total))}</td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <button className="btn btn-ghost btn-sm" onClick={() => editar(r)}>Editar</button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void eliminar(r)} title="Eliminar">×</button>
+                  <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => pedirEliminar(r)} title="Eliminar" aria-label={`Eliminar el registro ${r.numero}`}>×</button>
                 </td>
               </tr>
             ))}
@@ -257,6 +263,13 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
           </aside>
         </>
       )}
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar el registro ${porEliminar?.numero ?? ""}?`}
+        descripcion="Se quita de los registros de facturación del contrato."
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await eliminar(porEliminar); setPorEliminar(null); }}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 import { DateRange, rangeFor, type Range } from "../DateRange";
 import { IconUsers, IconCheck, IconKey, IconAlert, IconRefresh, IconCoins, IconActivity, IconInfo, IconDownload } from "../icons";
 import { exportarExcel, exportarPdf, nombreArchivo, type Reporte } from "@/lib/marketing/exportar";
@@ -716,8 +717,9 @@ function VistaInversion({ leads, inversion, proyectos, proyecto, canal, puedeEdi
     setF((v) => ({ ...v, monto: "", nota: "" }));
     onChange();
   }
+  // Registro de inversión pendiente de confirmar su eliminación.
+  const [porEliminar, setPorEliminar] = useState<Inversion | null>(null);
   async function borrar(id: string) {
-    if (!confirm("¿Eliminar este registro de inversión?")) return;
     await fetch(`/api/marketing/inversion?id=${id}`, { method: "DELETE" });
     onChange();
   }
@@ -790,7 +792,7 @@ function VistaInversion({ leads, inversion, proyectos, proyecto, canal, puedeEdi
                     <td className="muted">{i.canal || "Todos"}</td>
                     <td className="num" style={{ textAlign: "right" }}>{COP.format(Number(i.monto))}</td>
                     <td className="muted">{i.nota ?? ""}</td>
-                    {puedeEditar && <td style={{ textAlign: "right" }}><button className="btn btn-ghost btn-sm" onClick={() => void borrar(i.id)}>Eliminar</button></td>}
+                    {puedeEditar && <td style={{ textAlign: "right" }}><button className="btn btn-ghost btn-sm" onClick={() => setPorEliminar(i)}>Eliminar</button></td>}
                   </tr>
                 ))}
               </tbody>
@@ -798,6 +800,13 @@ function VistaInversion({ leads, inversion, proyectos, proyecto, canal, puedeEdi
           </div>
         </>
       )}
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar la inversión de ${porEliminar ? fmtMes(porEliminar.mes) : ""}?`}
+        descripcion={porEliminar && `${COP.format(Number(porEliminar.monto))} · ${porEliminar.proyecto || "Todos los proyectos"} · ${porEliminar.canal || "Todos los canales"}. Cambian el costo por lead y por cliente del periodo.`}
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await borrar(porEliminar.id); setPorEliminar(null); }}
+      />
     </>
   );
 }

@@ -14,6 +14,7 @@ import { descargarLotePrefacturasPdf, descargarPrefacturaPdf } from "@/lib/aaa/p
 import { slugify } from "@/lib/transporte/logic";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
 import { ResponsiveTables } from "./ResponsiveTables";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 import { PrefacturasReporte } from "./PrefacturasReporte";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -249,9 +250,15 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }
 
+  // Eliminaciones pendientes de confirmar: la prefactura completa o uno de sus documentos.
+  const [porEliminar, setPorEliminar] = useState<PrefacturaRow | null>(null);
+  const [porQuitar, setPorQuitar] = useState<{ row: PrefacturaRow; campo: "soporte" | "acta" | "migo" | "factura" } | null>(null);
+  function pedirEliminar(row: PrefacturaRow) {
+    if (demo) { setError("Modo demostración: conecta Supabase para eliminar."); return; }
+    setPorEliminar(row);
+  }
   async function eliminar(row: PrefacturaRow) {
     if (demo) { setError("Modo demostración: conecta Supabase para eliminar."); return; }
-    if (!window.confirm(`¿Eliminar la prefactura ${row.numero}? Esta acción no se puede deshacer.`)) return;
     setError(null); setOk(null);
     try {
       await llamar({ method: "DELETE", body: JSON.stringify({ id: row.id }) });
@@ -287,7 +294,6 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
     finally { setSubiendo(null); pendienteSubida.current = null; }
   }
   async function quitarAdjunto(row: PrefacturaRow, campo: "soporte" | "acta" | "migo" | "factura") {
-    if (!window.confirm(`¿Quitar ${campo === "factura" ? "la factura" : "el " + campo} de ${row.numero}?`)) return;
     try {
       const p = await llamar({ method: "PATCH", body: JSON.stringify({ id: row.id, [campo]: null }) });
       if (p) setRows((rs) => rs.map((r) => (r.id === row.id ? p : r)));
@@ -577,7 +583,7 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
                               )
                             ))}
                             {(["acta", "migo", "factura"] as const).filter((c) => r[c] && puedeCargar(r, c)).map((campo) => (
-                              <button key={"q-" + campo} onClick={() => { setMenuId(null); void quitarAdjunto(r, campo); }}>Quitar {LABEL_ADJ[campo].toLowerCase()}</button>
+                              <button key={"q-" + campo} onClick={() => { setMenuId(null); setPorQuitar({ row: r, campo }); }}>Quitar {LABEL_ADJ[campo].toLowerCase()}</button>
                             ))}
                             {r.estado === "pendiente_pago" && <button disabled={bloqueada(r)} onClick={() => { setMenuId(null); void cambiarEstado(r, "pagada"); }}>Marcar pagada</button>}
                             {(r.estado === "rechazada" || r.estado === "pagada") && (
@@ -585,7 +591,7 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
                             )}
                             <button onClick={() => { setMenuId(null); abrirEdicion(r); }}>Editar</button>
                             {activa && <button className="danger" disabled={bloqueada(r)} onClick={() => { setMenuId(null); void cambiarEstado(r, "rechazada"); }}>Rechazar</button>}
-                            <button className="danger" onClick={() => { setMenuId(null); void eliminar(r); }}>Eliminar</button>
+                            <button className="danger" onClick={() => { setMenuId(null); pedirEliminar(r); }}>Eliminar</button>
                           </div>
                         )}
                       </div>
@@ -621,6 +627,28 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
           </tbody>
         </table>
       </div>
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar la prefactura ${porEliminar?.numero ?? ""}?`}
+        descripcion={porEliminar && (
+          <>
+            {CONTRATO_LABEL[porEliminar.contrato] ?? porEliminar.contrato} · {COP.format(Number(porEliminar.valor_base) || 0)} sin IVA.
+            {porEliminar.servicios?.length ? ` Sus ${porEliminar.servicios.length} servicio(s) quedan otra vez sin prefacturar.` : ""}
+          </>
+        )}
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await eliminar(porEliminar); setPorEliminar(null); }}
+      />
+      <ConfirmarEliminacion
+        abierto={porQuitar !== null}
+        titulo={porQuitar ? `¿Quitar ${porQuitar.campo === "factura" ? "la factura" : `el ${LABEL_ADJ[porQuitar.campo].toLowerCase()}`} de ${porQuitar.row.numero}?` : ""}
+        descripcion={porQuitar?.campo === "soporte" ? "Sin soporte, la prefactura queda bloqueada hasta cargar uno nuevo." : "Podrás cargar el documento de nuevo cuando lo necesites."}
+        irreversible={false}
+        textoConfirmar="Sí, quitar"
+        textoOcupado="Quitando…"
+        onCancelar={() => setPorQuitar(null)}
+        onConfirmar={async () => { if (porQuitar) await quitarAdjunto(porQuitar.row, porQuitar.campo); setPorQuitar(null); }}
+      />
     </div>
   );
 }

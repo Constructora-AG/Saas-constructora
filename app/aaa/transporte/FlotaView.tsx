@@ -14,6 +14,7 @@ import { num } from "@/lib/transporte/model";
 import { ANTIGUEDAD_MAX_RECOLECCION, CAPACIDAD_MIN_M3, DISPONIBILIDAD_MIN_RECOLECCION, volquetaDe } from "@/lib/transporte/constants";
 import { useTransporteSession } from "@/lib/transporte/session";
 import { MsgInline, VencBadge } from "./CatalogoTabla";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 
 interface FormFlota {
   plate: string;
@@ -39,6 +40,8 @@ export function FlotaView({ t }: ViewProps) {
   const [form, setForm] = useState<FormFlota>(FORM_VACIO);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  // Placa pendiente de confirmar su eliminación.
+  const [porEliminar, setPorEliminar] = useState<string | null>(null);
 
   const vehiculos = t.admin?.vehiculos ?? [];
   const conductores = (t.admin?.personal ?? []).filter((p) => p.activo !== false);
@@ -133,7 +136,6 @@ export function FlotaView({ t }: ViewProps) {
   const eliminar = async (plate: string) => {
     setError(null);
     setOk(null);
-    if (!window.confirm("¿Eliminar este vehículo de la flota? No borra los servicios ya registrados con esa placa.")) return;
     try {
       await t.saveAdminCfg((a) => {
         a.vehiculos = a.vehiculos.filter((x) => x.plate !== plate);
@@ -287,7 +289,7 @@ export function FlotaView({ t }: ViewProps) {
                     {canEdit && (
                       <>
                         <button className="btn btn-ghost btn-sm" onClick={() => editar(v.plate)}>Editar</button>{" "}
-                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void eliminar(v.plate)}>
+                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => setPorEliminar(v.plate)}>
                           Eliminar
                         </button>
                       </>
@@ -300,6 +302,14 @@ export function FlotaView({ t }: ViewProps) {
         </table>
       </div>
 
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar el vehículo ${porEliminar ?? ""} de la flota?`}
+        descripcion="Deja de aparecer en el catálogo y al registrar servicios. No borra los servicios ya registrados con esa placa."
+        irreversible={false}
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await eliminar(porEliminar); setPorEliminar(null); }}
+      />
     </>
   );
 }

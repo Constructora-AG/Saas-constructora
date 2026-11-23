@@ -11,6 +11,7 @@ import { useState, type FormEvent } from "react";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import { useTransporteSession } from "@/lib/transporte/session";
 import { MsgInline, VencBadge } from "./CatalogoTabla";
+import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
 
 interface FormPersonal {
   nombre: string;
@@ -29,6 +30,8 @@ export function PersonalView({ t }: ViewProps) {
   const [form, setForm] = useState<FormPersonal>(FORM_VACIO);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  // Persona pendiente de confirmar su eliminación.
+  const [porEliminar, setPorEliminar] = useState<string | null>(null);
 
   const personal = t.admin?.personal ?? [];
   // Aislamiento por rol: sin permiso «personal» la vista es de solo lectura.
@@ -92,7 +95,6 @@ export function PersonalView({ t }: ViewProps) {
   const eliminar = async (nombre: string) => {
     setError(null);
     setOk(null);
-    if (!window.confirm("¿Eliminar esta persona del catálogo? No borra los servicios ya registrados con su nombre.")) return;
     try {
       await t.saveAdminCfg((a) => {
         a.personal = a.personal.filter((x) => x.nombre !== nombre);
@@ -213,7 +215,7 @@ export function PersonalView({ t }: ViewProps) {
                     {canEdit && (
                       <>
                         <button className="btn btn-ghost btn-sm" onClick={() => editar(p.nombre)}>Editar</button>{" "}
-                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => void eliminar(p.nombre)}>
+                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} onClick={() => setPorEliminar(p.nombre)}>
                           Eliminar
                         </button>
                       </>
@@ -226,6 +228,14 @@ export function PersonalView({ t }: ViewProps) {
         </table>
       </div>
 
+      <ConfirmarEliminacion
+        abierto={porEliminar !== null}
+        titulo={`¿Eliminar a ${porEliminar ?? ""} del catálogo de personal?`}
+        descripcion="Deja de aparecer al registrar servicios. No borra los servicios ya registrados con su nombre."
+        irreversible={false}
+        onCancelar={() => setPorEliminar(null)}
+        onConfirmar={async () => { if (porEliminar) await eliminar(porEliminar); setPorEliminar(null); }}
+      />
     </>
   );
 }
