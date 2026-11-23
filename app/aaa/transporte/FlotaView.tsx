@@ -247,8 +247,7 @@ export function FlotaView({ t }: ViewProps) {
         <table className="clean">
           <thead>
             <tr>
-              <th>Placa</th>
-              {esRecoleccion && <th>N° interno</th>}
+              <th>{esRecoleccion ? "Placa / N° interno" : "Placa"}</th>
               <th>{esRecoleccion ? "Tipo" : "Tipo / marca"}</th>
               <th>Modelo</th>
               <th style={{ textAlign: "right" }}>{esRecoleccion ? "Volco (m³)" : "Cap. (Ton)"}</th>
@@ -262,7 +261,7 @@ export function FlotaView({ t }: ViewProps) {
           </thead>
           <tbody>
             {vehiculos.length === 0 && (
-              <tr><td colSpan={conContratista || esRecoleccion ? 10 : 9} className="muted" style={{ padding: 18 }}>Sin vehículos en el catálogo.</td></tr>
+              <tr><td colSpan={conContratista ? 10 : 9} className="muted" style={{ padding: 18 }}>Sin vehículos en el catálogo.</td></tr>
             )}
             {vehiculos.map((v) => {
               const inactivo = v.activo === false;
@@ -270,9 +269,10 @@ export function FlotaView({ t }: ViewProps) {
                 <tr key={v.plate} style={inactivo ? { opacity: 0.5 } : undefined}>
                   <td>
                     <b>{v.plate}</b>
-                    {esRecoleccion && avisosRecoleccion(v).map((a) => <span key={a} className="badge warn" style={{ display: "block", marginTop: 3, width: "fit-content" }}>{a}</span>)}
+                    {esRecoleccion && <span className="muted" style={{ display: "block", fontSize: 11.5, marginTop: 2 }}>{v.numeroInterno ? `N° interno ${v.numeroInterno}` : "Sin N° interno"}</span>}
+                    {/* Los avisos pueden partirse en líneas para que la tabla quepa en el ancho. */}
+                    {esRecoleccion && avisosRecoleccion(v).map((a) => <span key={a} className="badge warn" style={{ display: "block", marginTop: 3, width: "fit-content", whiteSpace: "normal" }}>{a}</span>)}
                   </td>
-                  {esRecoleccion && <td>{v.numeroInterno || "—"}</td>}
                   <td>{v.tipo || v.marca || "—"}</td>
                   <td>{v.modelo === null || v.modelo === undefined || v.modelo === "" ? "—" : String(v.modelo)}</td>
                   <td className="num" style={{ textAlign: "right" }}>

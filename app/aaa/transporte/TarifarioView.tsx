@@ -293,68 +293,64 @@ export function TarifarioView({ t }: ViewProps) {
         </div>
       )}
 
-      <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))" }}>
+      <div className="tarifa-grid">
         {tarifario.categorias.map((cat) => (
-          <div key={cat.id} className="table-wrap" style={{ padding: 18 }}>
-            <h3 style={{ margin: "0 0 2px", fontSize: 14.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <div key={cat.id} className="table-wrap tarifa-card">
+            <h3 className="tarifa-card-head">
               <span style={{ flex: 1 }}>
                 {cat.label}
                 {esRecoleccion && <span className={`badge ${esItemContrato(cat.id) ? "ok" : "warn"}`} style={{ marginLeft: 8, fontSize: 10.5, verticalAlign: "middle" }}>{esItemContrato(cat.id) ? "Contrato" : "Adicional"}</span>}
               </span>
               {editaEstructura && !esItemContrato(cat.id) && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} title="Quitar" aria-label={`Quitar ${cat.label}`} onClick={() => void quitarEquipo(cat.id, cat.label)}>×</button>}
             </h3>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+            <div className="muted" style={{ fontSize: 12 }}>
               {esRecoleccion
                 ? volquetaDe(cat.label) ? `Valor por hora efectiva sin IVA · volco mínimo ${volquetaDe(cat.label) === "sencilla" ? "7" : "14"} m³` : "Valor por hora efectiva sin IVA · servicio adicional (sin horas proyectadas en el contrato)"
                 : num(cat.capacidad) > 0 ? `Capacidad mínima sugerida: ${num(cat.capacidad)} Ton` : "Valores unitarios sin IVA (HR = hora máquina)"}
             </div>
-            {conCosto && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px", gap: 10, fontSize: 11.5, marginBottom: 6 }} className="muted">
-                <span />
-                <span style={{ textAlign: "right" }}>Venta (pliego)</span>
-                <span style={{ textAlign: "right" }}>Costo contratista</span>
-              </div>
-            )}
-            <div style={{ display: "grid", gap: 10 }}>
+            <div className="tarifa-filas">
               {cat.rutas.map((ruta) => {
                 const key = `${cat.id}|${ruta.id}`;
                 const venta = num(draft.valores[key]);
                 const costo = conCosto && draftCosto ? num(draftCosto.valores[key]) : 0;
                 return (
-                  <div
-                    key={ruta.id}
-                    style={{ display: "grid", gridTemplateColumns: conCosto ? "1fr 110px 110px" : "1fr 150px", gap: 10, alignItems: "center" }}
-                  >
-                    <span style={{ fontSize: 13, color: "var(--text-2)" }}>
+                  <div key={ruta.id} className="tarifa-fila">
+                    <span className="tarifa-fila-label">
                       <b>{ruta.id}</b> · {esRecoleccion ? ruta.label.replace(/\s*\(HR\)\s*$/, "") : ruta.label}
                       {esRecoleccion && horasProyectadas(cat.label, ruta.label) !== null && (
                         <span className="cc-dias">{horasProyectadas(cat.label, ruta.label)!.toLocaleString("es-CO")} h proyectadas</span>
                       )}
                       {editaEstructura && !esItemContrato(cat.id, ruta.id) && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)", padding: "0 6px" }} title="Quitar tarifa" aria-label={`Quitar tarifa ${ruta.label}`} onClick={() => void quitarTarifa(cat.id, ruta.id, ruta.label)}>×</button>}
                     </span>
-                    <input
-                      className="input num"
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={draft.valores[key] ?? ""}
-                      onChange={(e) => setValor(key, e.target.value)}
-                      style={{ textAlign: "right" }}
-                      aria-label={`Valor unitario ruta ${ruta.id}`}
-                    />
-                    {conCosto && draftCosto && (
+                    {/* Cada valor lleva su etiqueta encima: sigue legible aunque la fila se parta en dos líneas. */}
+                    <div className="tarifa-valores">
+                    <label className="tarifa-valor">{conCosto ? "Venta (pliego)" : esRecoleccion ? "Valor hora sin IVA" : "Valor sin IVA"}
                       <input
                         className="input num"
                         type="number"
                         min={0}
                         step={1}
-                        value={draftCosto.valores[key] ?? ""}
-                        onChange={(e) => setCosto(key, e.target.value)}
-                        style={{ textAlign: "right", background: "var(--surface-2)" }}
-                        aria-label={`Costo contratista ruta ${ruta.id}`}
-                        title={costo > 0 ? `Margen ${fmtCOP(venta - costo)}${venta > 0 ? ` (${(((venta - costo) / venta) * 100).toFixed(1)}%)` : ""}` : "Sin costo"}
+                        value={draft.valores[key] ?? ""}
+                        onChange={(e) => setValor(key, e.target.value)}
+                        aria-label={`Valor unitario ruta ${ruta.id}`}
                       />
+                    </label>
+                    {conCosto && draftCosto && (
+                      <label className="tarifa-valor">Costo contratista
+                        <input
+                          className="input num"
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={draftCosto.valores[key] ?? ""}
+                          onChange={(e) => setCosto(key, e.target.value)}
+                          style={{ background: "var(--surface-2)" }}
+                          aria-label={`Costo contratista ruta ${ruta.id}`}
+                          title={costo > 0 ? `Margen ${fmtCOP(venta - costo)}${venta > 0 ? ` (${(((venta - costo) / venta) * 100).toFixed(1)}%)` : ""}` : "Sin costo"}
+                        />
+                      </label>
                     )}
+                    </div>
                   </div>
                 );
               })}
@@ -364,7 +360,7 @@ export function TarifarioView({ t }: ViewProps) {
               const f = nuevaTarifa[cat.id] ?? { tipo: "hora" as const, zona: "", valor: "" };
               const setNT = (patch: Partial<typeof f>) => setNuevaTarifa((p) => ({ ...p, [cat.id]: { ...f, ...patch } }));
               return (
-                <div style={{ display: "grid", gridTemplateColumns: esRecoleccion ? "1fr 110px auto" : "120px 1fr 110px auto", gap: 8, marginTop: 12, alignItems: "center" }}>
+                <div className="tarifa-nueva">
                   {!esRecoleccion && (
                     <select className="input" value={f.tipo} aria-label="Tipo de tarifa" onChange={(e) => setNT({ tipo: e.target.value as "hora" | "transporte" })}>
                       <option value="hora">Por hora</option>
@@ -372,13 +368,13 @@ export function TarifarioView({ t }: ViewProps) {
                     </select>
                   )}
                   <input className="input" aria-label={esRecoleccion ? "Tipo de servicio" : "Zona"} list={esRecoleccion ? `tipos-servicio-${cat.id}` : undefined}
-                    placeholder={esRecoleccion ? "Tipo de servicio (ej. Recolección y Transporte)" : "Zona (ej. Barranquilla, Municipios)"} value={f.zona} onChange={(e) => setNT({ zona: e.target.value })} />
+                    placeholder={esRecoleccion ? "Tipo de servicio" : "Zona (ej. Municipios)"} value={f.zona} onChange={(e) => setNT({ zona: e.target.value })} />
                   {esRecoleccion && (
                     <datalist id={`tipos-servicio-${cat.id}`}>
                       {[...new Set([...AREAS_RECOLECCION, ...(t.admin?.areas ?? [])])].map((a) => <option key={a} value={a} />)}
                     </datalist>
                   )}
-                  <input className="input num" type="number" min={0} step={1} aria-label="Valor sin IVA" placeholder={esRecoleccion ? "Valor hora sin IVA" : "Valor sin IVA"} value={f.valor} onChange={(e) => setNT({ valor: e.target.value })} style={{ textAlign: "right" }} />
+                  <input className="input num" type="number" min={0} step={1} aria-label="Valor sin IVA" placeholder={esRecoleccion ? "Valor hora sin IVA" : "Valor sin IVA"} value={f.valor} onChange={(e) => setNT({ valor: e.target.value })} />
                   <button className="btn btn-ghost btn-sm" onClick={() => void agregarTarifa(cat.id)} disabled={t.saving}>+ Tarifa</button>
                 </div>
               );
@@ -388,7 +384,7 @@ export function TarifarioView({ t }: ViewProps) {
 
         {/* Recolección: el contrato no tiene recargos (la hora efectiva es a todo costo). */}
         {!esRecoleccion && (
-        <div className="table-wrap" style={{ padding: 18 }}>
+        <div className="table-wrap tarifa-card">
           <h3 style={{ margin: "0 0 2px", fontSize: 14.5 }}>Recargos aplicables (cualquier categoría)</h3>
           <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
             Se suman al valor de la ruta cuando el servicio marca el recargo correspondiente.

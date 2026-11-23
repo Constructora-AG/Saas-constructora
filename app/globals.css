@@ -400,6 +400,10 @@ table.clean td b { color: var(--text); font-weight: 600; }
 .drawer-close { border: none; background: none; cursor: pointer; font-size: 22px; line-height: 1; color: var(--muted, #6b7688); padding: 6px 10px; border-radius: 8px; }
 .drawer-close:hover { background: rgba(9, 24, 48, 0.06); color: inherit; }
 .drawer-body { flex: 1; overflow-y: auto; padding: 18px 22px 40px; }
+/* Un <select> toma el ancho de su opción más larga: dentro del formulario lateral
+   los campos se ajustan a su columna para no desbordar en pantallas pequeñas. */
+.drawer-body .field { min-width: 0; }
+.drawer-body .field > select, .drawer-body .field > .input { width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
 
 /* ── Login (página /login, pantalla completa sin shell) ── */
 .login-screen {
@@ -546,6 +550,25 @@ table.tbl-fit td.row-actions { padding-right: 6px; display: table-cell; }
 .tx-mod .filters-bar .segmented { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .tx-mod .filters-bar .segmented .seg { white-space: nowrap; }
 
+/* Tarifario: las tarjetas se reparten según el espacio (cualquier número de
+   ítems) y cada fila acomoda sus campos con flex-wrap: nada se sale de la tarjeta. */
+.tarifa-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); align-items: start; }
+.tarifa-card { min-width: 0; padding: 18px; display: grid; gap: 10px; }
+.tarifa-card-head { margin: 0; font-size: 14.5px; display: flex; gap: 8px; align-items: flex-start; }
+.tarifa-card-head > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tarifa-filas { display: grid; gap: 12px; }
+.tarifa-fila { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.tarifa-fila-label { flex: 1 1 170px; min-width: 0; font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
+/* Los valores de una tarifa (venta y, en Transporte, costo) bajan juntos si no caben junto al nombre. */
+.tarifa-valores { flex: 1 1 140px; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; justify-content: flex-end; }
+.tarifa-valor { flex: 1 1 120px; max-width: 220px; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); }
+.tarifa-valor .input { width: 100%; min-width: 0; text-align: right; }
+.tarifa-nueva { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px dashed var(--border); }
+.tarifa-nueva > select { flex: 1 1 150px; min-width: 0; }
+.tarifa-nueva > .input { flex: 2 1 190px; min-width: 0; }
+.tarifa-nueva > .input.num { flex: 1 1 150px; text-align: right; }
+.tarifa-nueva > .btn { flex: 0 0 auto; }
+
 @media (max-width: 767px) {
   .tx-mod .page-head .page-title { font-size: 20px; }
   .tx-mod .section-title { flex-direction: column; align-items: flex-start !important; }
@@ -570,6 +593,7 @@ table.tbl-fit td.row-actions { padding-right: 6px; display: table-cell; }
   /* Grids inline (formularios, tarifario, catálogos) a una columna en móvil */
   .tx-mod [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
   .tx-mod .table-wrap[style*="padding: 18px"] { padding: 14px !important; }
+  .tx-mod .tarifa-card { padding: 14px; }
 }
 
 /* Submenú anidado (Proyecto Triple A) */

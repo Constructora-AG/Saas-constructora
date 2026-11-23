@@ -682,7 +682,8 @@ export function ServicioForm({
                   style={editing ? undefined : { background: "var(--surface-2)", color: "var(--text-2)" }}
                   onChange={(e) => setF({ ...f, orderNo: e.target.value })} />
               </label>
-              <label className="field">Tipo de servicio
+              {/* Recolección: «Tipo de servicio» es Recolección y Transporte / B2B (tarifa); aquí se pregunta la programación. */}
+              <label className="field">{esRecoleccion ? "Programación del servicio" : "Tipo de servicio"}
                 <select value={f.serviceType} onChange={(e) => setF({ ...f, serviceType: e.target.value })}>
                   {TIPOS.map((x) => <option key={x} value={x}>{x}</option>)}
                 </select>
