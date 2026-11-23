@@ -476,7 +476,7 @@ export { areaAAADe };
 // ── Sugerencias para campos de texto libre (§5.2) ───────────────────
 
 /** Campos de texto libre del servicio con autocompletado por historial. */
-export type CampoLibre = "pickup" | "destination" | "area" | "operario";
+export type CampoLibre = "pickup" | "destination" | "area" | "operario" | "ruta" | "numeroInterno";
 
 /**
  * Valores ya escritos en uno o varios campos de texto libre de los servicios

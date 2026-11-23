@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CONTRACT_END_DEFAULT, CONTRACT_START_DEFAULT, CONTRACT_VALUE, FICHA_MODULO, type ContratoDinamico, type ModuloContrato } from "@/lib/transporte/constants";
+import { CONTRACT_END_DEFAULT, CONTRACT_START_DEFAULT, CONTRACT_VALUE, esModuloBase, FICHA_MODULO, PREFIJOS_RESERVADOS, type ContratoDinamico, type ModuloContrato } from "@/lib/transporte/constants";
 import { cargarContratos, guardarContratos, idContrato, prefijoSugerido } from "@/lib/transporte/contratos";
 import { storageFor } from "@/lib/transporte/storage";
 import { num } from "@/lib/transporte/model";
@@ -24,6 +24,7 @@ const BASE: Array<{ ns: ModuloContrato; href: string }> = [
   { ns: "transporte", href: "/aaa/transporte" },
   { ns: "alquiler", href: "/aaa/contrato-alquiler" },
   { ns: "emergencia", href: "/aaa/otro-si-emergencia" },
+  { ns: "recoleccion", href: "/aaa/contrato-recoleccion" },
 ];
 
 /** Vigencia y valor vigentes de un módulo (los de su Administración; si aún no tiene, los de la ficha). */
@@ -51,7 +52,7 @@ export function ContratosClient() {
   useEffect(() => {
     if (!lista) return;
     let vivo = true;
-    const nss = [...BASE.map((x) => x.ns as string), ...lista.map((c) => c.id)];
+    const nss = [...BASE.map((x) => x.ns as string), ...lista.map((c) => c.id).filter((id) => !esModuloBase(id))];
     Promise.all(nss.map(async (ns) => [ns, await storageFor(ns).loadAdminRaw().catch(() => null)] as const)).then((pares) => {
       if (!vivo) return;
       const out: Record<string, Vigente> = {};
@@ -91,7 +92,7 @@ export function ContratosClient() {
     }
     const prefijo = (form.prefijo || prefijoAuto).toUpperCase();
     if (!/^[A-Z]{2,3}$/.test(prefijo)) { setError("El prefijo de órdenes debe tener 2 o 3 letras."); return; }
-    if (["TP", "AL", "EM", "PF"].includes(prefijo) || actual.some((c) => c.prefijoOrden === prefijo && c.id !== editando?.id)) {
+    if (PREFIJOS_RESERVADOS.includes(prefijo) || actual.some((c) => c.prefijoOrden === prefijo && c.id !== editando?.id)) {
       setError(`El prefijo ${prefijo} ya está en uso.`); return;
     }
     const valor = form.valor.trim() ? parseValor(form.valor) : 0;
@@ -172,7 +173,8 @@ export function ContratosClient() {
               );
             })}
             {lista === null && <tr><td colSpan={6} className="muted">Cargando contratos creados en la app…</td></tr>}
-            {lista?.map((c) => (
+            {/* Un contrato creado en la app que luego pasó a ser módulo propio (p. ej. Recolección) se muestra arriba. */}
+            {lista?.filter((c) => !esModuloBase(c.id)).map((c) => (
               <tr key={c.id}>
                 <td><Link href={`/aaa/contratos/${c.id}`}><b>{c.nombre}</b></Link>{c.objeto && <span className="cc-dias">{c.objeto}</span>}</td>
                 <td>{c.numero || "—"}</td>

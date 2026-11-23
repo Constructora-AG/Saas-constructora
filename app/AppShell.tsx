@@ -1,7 +1,7 @@
 "use client";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import type { ContratoDinamico } from "@/lib/transporte/constants";
+import { esModuloBase, type ContratoDinamico } from "@/lib/transporte/constants";
 import { cargarContratos } from "@/lib/transporte/contratos";
 import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, IconBuilding, IconTruck, IconLogout, IconMegaphone, IconSettings, IconKey } from "./icons";
 import { Burbuja } from "./asistente/Burbuja";
@@ -54,6 +54,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
           { href: "/aaa/contrato-alquiler", label: "Contrato de Alquiler", icon: <IconBuilding />, modulo: "alquiler", children: [subPrefacturas("/aaa/contrato-alquiler", "alquiler")] },
           { href: "/aaa/otro-si-emergencia", label: "Otro Sí / Emergencia", icon: <IconBuilding />, modulo: "emergencia", children: [subPrefacturas("/aaa/otro-si-emergencia", "emergencia")] },
           { href: "/aaa/transporte", label: "Transporte AAA", icon: <IconTruck />, modulo: "transporte", children: [subPrefacturas("/aaa/transporte", "transporte")] },
+          { href: "/aaa/contrato-recoleccion", label: "Contrato de Recolección", icon: <IconTruck />, modulo: "recoleccion", children: [subPrefacturas("/aaa/contrato-recoleccion", "recoleccion")] },
         ],
       },
     ],
@@ -86,6 +87,8 @@ const TITLES: Record<string, string> = {
   "/aaa/contrato-alquiler/prefacturas": "Proyecto Triple A — Contrato de Alquiler · Prefacturas",
   "/aaa/otro-si-emergencia/prefacturas": "Proyecto Triple A — Otro Sí / Emergencia · Prefacturas",
   "/aaa/transporte/prefacturas": "Proyecto Triple A — Transporte AAA · Prefacturas",
+  "/aaa/contrato-recoleccion": "Proyecto Triple A — Contrato de Recolección (Contrato N° CW2239410)",
+  "/aaa/contrato-recoleccion/prefacturas": "Proyecto Triple A — Contrato de Recolección · Prefacturas",
   "/aaa/contratos": "Proyecto Triple A — Contratos",
   "/aaa": "Proyecto Triple A",
   "/usuarios": "Usuarios y roles de la plataforma",
@@ -143,7 +146,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {NAV.map((group) => ({
             ...group,
             items: group.items.map((i) => (i.href === "/aaa" && i.children
-              ? { ...i, children: [...i.children, ...contratosApp.map((c) => ({ href: `/aaa/contratos/${c.id}`, label: c.nombre, icon: null, modulo: "contratos", children: [subPrefacturas(`/aaa/contratos/${c.id}`, "contratos")] }))] }
+              ? { ...i, children: [...i.children, ...contratosApp.filter((c) => !esModuloBase(c.id)).map((c) => ({ href: `/aaa/contratos/${c.id}`, label: c.nombre, icon: null, modulo: "contratos", children: [subPrefacturas(`/aaa/contratos/${c.id}`, "contratos")] }))] }
               : i)),
           })).map((group) => ({
             ...group,

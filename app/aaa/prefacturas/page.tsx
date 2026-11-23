@@ -5,7 +5,7 @@ import { cargarContratosServidor } from "@/lib/aaa/prefacturasServidor";
 import { rutaPrefacturasContrato } from "@/lib/aaa/rutasContrato";
 import { DEMO_PREFACTURAS, supabaseConfigured } from "@/lib/demo";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { FICHA_MODULO } from "@/lib/transporte/constants";
+import { esModuloBase, FICHA_MODULO } from "@/lib/transporte/constants";
 import { exigirModuloAaa } from "../_auth";
 
 export const metadata = { title: "Prefacturas por contrato — AG Constructora" };
@@ -21,8 +21,8 @@ export default async function PrefacturasPorContrato() {
     ? (((await supabaseAdmin().from("aaa_prefacturas").select("contrato,estado,valor_base")).data ?? []) as Array<{ contrato: string; estado: string; valor_base: number }>)
     : (DEMO_PREFACTURAS as Array<{ contrato: string; estado: string; valor_base: number }>);
   const contratos = [
-    ...(["alquiler", "emergencia", "transporte"] as const).map((id) => ({ id, nombre: FICHA_MODULO[id].nombre })),
-    ...(await cargarContratosServidor()).map((c) => ({ id: c.id, nombre: c.nombre })),
+    ...(["alquiler", "emergencia", "transporte", "recoleccion"] as const).map((id) => ({ id, nombre: FICHA_MODULO[id].nombre })),
+    ...(await cargarContratosServidor()).filter((c) => !esModuloBase(c.id)).map((c) => ({ id: c.id, nombre: c.nombre })),
   ];
   return (
     <>

@@ -1,11 +1,12 @@
 // Rutas de cada contrato de Proyecto Triple A y de su módulo anidado de
 // prefacturas. El "contrato" de una prefactura es el mismo espacio de datos
-// (ns) del módulo que la generó: transporte | alquiler | emergencia | <id>.
+// (ns) del módulo que la generó: transporte | alquiler | emergencia | recoleccion | <id>.
 
 const BASE_FIJA: Record<string, string> = {
   transporte: "/aaa/transporte",
   alquiler: "/aaa/contrato-alquiler",
   emergencia: "/aaa/otro-si-emergencia",
+  recoleccion: "/aaa/contrato-recoleccion",
 };
 
 /** Ruta del módulo del contrato. */

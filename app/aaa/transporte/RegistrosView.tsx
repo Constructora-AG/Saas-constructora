@@ -39,7 +39,7 @@ const PAGE_SIZE = 10;
 const COLS_KEY = "transporte.registros.columnas.v1";
 
 type ColId =
-  | "fecha" | "tipo" | "area" | "placa" | "cap" | "conductor" | "operario" | "equipo" | "destino"
+  | "fecha" | "tipo" | "area" | "placa" | "cap" | "conductor" | "operario" | "equipo" | "planilla" | "horas" | "destino"
   | "valor" | "peajes" | "soportes" | "vobo" | "factura" | "costo" | "margen" | "aprobo" | "acciones";
 interface Columna { id: ColId; label: string; fija?: boolean; w: number; num?: boolean }
 
@@ -64,6 +64,9 @@ const COLUMNAS: ReadonlyArray<Columna> = [
   { id: "conductor", label: "Conductor", w: 10 },
   { id: "operario", label: "Operario", w: 9 },
   { id: "equipo", label: "Equipo", w: 11 },
+  // Contrato de Recolección — Planilla de despacho y horómetro
+  { id: "planilla", label: "Planilla / actividad", w: 11 },
+  { id: "horas", label: "Horas efectivas", w: 8, num: true },
   { id: "destino", label: "Destino", w: 12 },
   { id: "valor", label: "Valor", w: 9, num: true },
   { id: "peajes", label: "Peajes", w: 6, num: true },
@@ -79,6 +82,8 @@ const COLUMNAS: ReadonlyArray<Columna> = [
 const OCULTAS_DEFAULT: ColId[] = ["tipo", "cap", "operario", "peajes", "aprobo"];
 /** Columnas internas de costo a contratistas: solo Transporte AAA. */
 const SOLO_TRANSPORTE = new Set<ColId>(["costo", "margen"]);
+/** Columnas de la planilla de despacho: solo Contrato de Recolección. */
+const SOLO_RECOLECCION = new Set<ColId>(["planilla", "horas"]);
 
 /** Descripción de un servicio como ítem de prefactura. */
 const descripcionServicio = (s: Servicio) =>
@@ -157,10 +162,15 @@ export function RegistrosView({ t }: ViewProps) {
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = useMemo(() => items.slice((paginaActual - 1) * PAGE_SIZE, paginaActual * PAGE_SIZE), [items, paginaActual]);
 
-  const colsModulo = useMemo(() => COLUMNAS.filter((c) => t.ns === "transporte" || !SOLO_TRANSPORTE.has(c.id)), [t.ns]);
+  const colsModulo = useMemo(
+    () => COLUMNAS.filter((c) => (t.ns === "transporte" || !SOLO_TRANSPORTE.has(c.id)) && (t.ns === "recoleccion" || !SOLO_RECOLECCION.has(c.id))),
+    [t.ns],
+  );
   const columnas = useMemo(() => colsModulo.filter((c) => !ocultas.has(c.id)), [colsModulo, ocultas]);
   const anchoTotal = columnas.reduce((a, c) => a + c.w, 0);
-  const ver = (id: ColId) => !ocultas.has(id);
+  // Visible = columna del módulo y no ocultada (así las columnas propias de un
+  // módulo nunca se pintan en otro y el encabezado queda alineado con las celdas).
+  const ver = (id: ColId) => columnas.some((c) => c.id === id);
   const toggleCol = (id: ColId) => {
     setOcultas((prev) => {
       const next = new Set(prev);
@@ -499,6 +509,18 @@ export function RegistrosView({ t }: ViewProps) {
                   {ver("conductor") && <td title={s.driver || ""}><span className="clamp">{s.driver || "—"}</span></td>}
                   {ver("operario") && <td title={s.operario || ""}><span className="clamp">{s.operario || "—"}</span></td>}
                   {ver("equipo") && <td title={s.equipment || ""}><span className="clamp">{s.equipment || "—"}</span></td>}
+                  {ver("planilla") && (
+                    <td title={[s.planilla ? `Planilla ${s.planilla}` : "", s.actividad, s.ruta].filter(Boolean).join(" · ")}>
+                      <span className="clamp">{s.planilla ? `N° ${s.planilla}` : "—"}</span>
+                      {(s.actividad || s.ruta) && <span className="sub clamp">{[s.actividad, s.ruta].filter(Boolean).join(" · ")}</span>}
+                    </td>
+                  )}
+                  {ver("horas") && (
+                    <td className="num" style={{ textAlign: "right" }} title={s.horometroInicial !== undefined && s.horometroFinal !== undefined && s.horometroFinal !== "" ? `Horómetro ${num(s.horometroInicial)} → ${num(s.horometroFinal)}` : ""}>
+                      <span className="nowrap">{s.horasMaquina !== undefined && s.horasMaquina !== "" ? `${num(s.horasMaquina)} h` : "—"}</span>
+                      {s.horaSalida && s.horaRetorno && <span className="sub">{s.horaSalida}–{s.horaRetorno}</span>}
+                    </td>
+                  )}
                   {ver("destino") && (
                     <td title={[s.pickup, s.destination].filter(Boolean).join(" → ")}>
                       <span className="clamp">{s.area || s.destination || "—"}</span>

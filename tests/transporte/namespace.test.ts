@@ -66,6 +66,8 @@ test("resolveTransporteNamespace separa módulos base y contratos dinámicos", (
   assert.deepEqual(resolveTransporteNamespace("transporte"), { ns: "transporte", prefix: "", modulo: "transporte" });
   assert.deepEqual(resolveTransporteNamespace("alquiler"), { ns: "alquiler", prefix: "alquiler:", modulo: "alquiler" });
   assert.deepEqual(resolveTransporteNamespace("emergencia"), { ns: "emergencia", prefix: "emergencia:", modulo: "emergencia" });
+  // Recolección conserva el espacio "recoleccion:" que tenía como contrato creado en la app, ahora con su propio módulo.
+  assert.deepEqual(resolveTransporteNamespace("recoleccion"), { ns: "recoleccion", prefix: "recoleccion:", modulo: "recoleccion" });
   assert.deepEqual(resolveTransporteNamespace("contrato-2026"), { ns: "contrato-2026", prefix: "contrato-2026:", modulo: "contratos" });
 });
 
@@ -146,4 +148,10 @@ test("monthSizeInfo respeta los umbrales de aviso y bloqueo", () => {
 test("withTimeout resuelve a tiempo y rechaza al superar el límite", async () => {
   assert.equal(await withTimeout(Promise.resolve("ok"), 50, "test"), "ok");
   await assert.rejects(withTimeout(new Promise<string>((resolve) => setTimeout(() => resolve("tarde"), 30)), 5, "lectura"), /Tiempo de espera agotado \(lectura\)/);
+});
+
+test("un contrato nuevo llamado «Contrato de Recolección» no reutiliza el espacio del módulo", async () => {
+  const { idContrato, prefijoSugerido } = await import("@/lib/transporte/contratos");
+  assert.equal(idContrato("Contrato de Recolección", []), "recoleccion-2");
+  assert.notEqual(prefijoSugerido("Contrato de Recolección", []), "RE");
 });

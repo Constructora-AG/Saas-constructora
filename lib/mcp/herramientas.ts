@@ -14,7 +14,7 @@ import "server-only";
 import { supabaseAdmin, supabaseTransporte } from "@/lib/supabase/server";
 import { ESQUEMA_AAA, ESQUEMA_CARTERA, ESQUEMA_MARKETING, ESQUEMA_PROSPECTOS, REGLAS_CALCULO } from "@/lib/asistente/contexto";
 import { TODAS_LAS_TABLAS, validarAlcanceSql } from "@/lib/asistente/alcance";
-import { CONTRACT_END_DEFAULT, CONTRACT_START_DEFAULT, CONTRACT_VALUE, FICHA_MODULO, KEY_CONTRATOS, tarifarioDefaultDe, type ContratoDinamico } from "@/lib/transporte/constants";
+import { CONTRACT_END_DEFAULT, CONTRACT_START_DEFAULT, CONTRACT_VALUE, esModuloBase, FICHA_MODULO, KEY_CONTRATOS, tarifarioDefaultDe, type ContratoDinamico } from "@/lib/transporte/constants";
 import { desgloseValor, findCategoria, findRuta, recargosCobrados } from "@/lib/transporte/logic";
 import { areaAAADe, aprobadorDe, num, type Servicio, type Tarifario } from "@/lib/transporte/model";
 
@@ -110,7 +110,8 @@ async function contratos() {
     fin: f.contrato?.fin ?? (ns === "transporte" ? CONTRACT_END_DEFAULT : null),
     iva_incluido: f.ivaIncluido, creado_en_la_app: false,
   }));
-  const dinamicos = parse<ContratoDinamico[]>(await kvGet(KEY_CONTRATOS), []).map((c) => ({
+  // Un contrato creado en la app que pasó a módulo propio (Recolección) ya está en `base`.
+  const dinamicos = parse<ContratoDinamico[]>(await kvGet(KEY_CONTRATOS), []).filter((c) => !esModuloBase(c.id)).map((c) => ({
     ns: c.id, nombre: c.nombre, numero: c.numero, objeto: c.objeto, prefijo_orden: c.prefijoOrden,
     valor: c.valor || null, inicio: c.inicio || null, fin: c.fin || null, iva_incluido: c.ivaIncluido, creado_en_la_app: true,
   }));

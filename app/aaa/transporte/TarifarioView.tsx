@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import type { Tarifario } from "@/lib/transporte/model";
 import { num } from "@/lib/transporte/model";
+import { ALCANCE_RECOLECCION, AREAS_RECOLECCION, servicioRecoleccionDe, TARIFARIO_RECOLECCION_DEFAULT, volquetaDe } from "@/lib/transporte/constants";
 import { fmtCOP, recalcularValores } from "@/lib/transporte/logic";
 import { MsgInline } from "./CatalogoTabla";
 
@@ -138,6 +139,22 @@ export function TarifarioView({ t }: ViewProps) {
 
   // ── Contratos creados en la app: armar el tarifario (equipos / servicios y sus tarifas) ──
   const esApp = !!t.ficha.dinamico;
+  // Contrato de Recolección: precios por hora del formulario de precios (Anexo 2), registrados a mano.
+  const esRecoleccion = t.ns === "recoleccion";
+  /** Horas proyectadas (Cláusula Cuarta) del ítem volqueta × tipo de servicio. */
+  const horasProyectadas = (catLabel: string, rutaLabel: string) =>
+    ALCANCE_RECOLECCION.find((x) => x.volqueta === volquetaDe(catLabel) && x.servicio === servicioRecoleccionDe(rutaLabel))?.horas ?? null;
+  // Recolección también puede sumar servicios nuevos (acordados con Triple A por otrosí);
+  // los 4 ítems del contrato firmado no se pueden quitar.
+  const editaEstructura = esApp || esRecoleccion;
+  const esItemContrato = (catId: string, rutaId?: string) => {
+    if (!esRecoleccion) return false;
+    const cat = TARIFARIO_RECOLECCION_DEFAULT.categorias.find((c) => c.id === catId);
+    return !!cat && (rutaId === undefined || cat.rutas.some((r) => r.id === rutaId));
+  };
+  const sinPrecio = esRecoleccion
+    ? tarifario.categorias.flatMap((c) => c.rutas.filter((r) => !(num(draft.valores[`${c.id}|${r.id}`]) > 0)).map((r) => `${c.label.replace(/^Ítem \d+ · Servicio de /, "")} · ${r.label.replace(/\s*\(HR\)\s*$/, "")}`))
+    : [];
   const usosRuta = (catId: string, rutaId?: string) =>
     Object.values(t.servicesByMonth).flat().filter((sv) => sv.tarifaCategoria === catId && (!rutaId || sv.tarifaRuta === rutaId)).length;
   const guardarEstructura = async (next: Tarifario, msg: string) => {
@@ -154,6 +171,8 @@ export function TarifarioView({ t }: ViewProps) {
   const agregarEquipo = async () => {
     const nombre = nuevoEquipo.trim();
     if (!nombre) return;
+    const normal = (x: string) => x.replace(/^Ítem \d+ · Servicio de /i, "").trim().toLocaleLowerCase("es");
+    if (tarifario.categorias.some((c) => normal(c.label) === normal(nombre))) { setError(`«${nombre}» ya está en el tarifario.`); return; }
     const n = tarifario.categorias.length + 1;
     await guardarEstructura(
       { ...tarifario, categorias: [...tarifario.categorias, { id: `eq${Date.now().toString(36)}`, label: `Ítem ${n} · Servicio de ${nombre}`, capacidad: "", rutas: [] }] },
@@ -164,16 +183,23 @@ export function TarifarioView({ t }: ViewProps) {
   const agregarTarifa = async (catId: string) => {
     const f = nuevaTarifa[catId] ?? { tipo: "hora", zona: "", valor: "" };
     const zona = f.zona.trim();
-    if (!zona || !(num(f.valor) > 0)) { setError("Indica la zona y un valor mayor que cero."); return; }
+    // Recolección: solo tarifas por hora; la «zona» es el tipo de servicio (= área AAA solicitante).
+    const tipo = esRecoleccion ? "hora" : f.tipo;
+    if (!zona || !(num(f.valor) > 0)) { setError(esRecoleccion ? "Indica el tipo de servicio y un valor por hora mayor que cero." : "Indica la zona y un valor mayor que cero."); return; }
     const idx = tarifario.categorias.findIndex((c) => c.id === catId) + 1;
     const cat = tarifario.categorias.find((c) => c.id === catId)!;
     let k = cat.rutas.length + 1;
     while (cat.rutas.some((r) => r.id === `${idx}.${k}`)) k += 1;
-    const label = f.tipo === "hora" ? `${zona} (HR)` : `Transporte del equipo · ${zona}`;
+    const label = tipo === "hora" ? `${zona} (HR)` : `Transporte del equipo · ${zona}`;
+    if (cat.rutas.some((r) => r.label.toLocaleLowerCase("es") === label.toLocaleLowerCase("es"))) { setError(`«${cat.label}» ya tiene la tarifa «${label}».`); return; }
     await guardarEstructura(
       { ...tarifario, categorias: tarifario.categorias.map((c) => (c.id === catId ? { ...c, rutas: [...c.rutas, { id: `${idx}.${k}`, label, unitario: num(f.valor) }] } : c)) },
       `Tarifa «${label}» agregada.`,
     );
+    // Recolección: un tipo de servicio nuevo queda también como área AAA solicitante.
+    if (esRecoleccion && t.admin && !t.admin.areas.includes(zona)) {
+      await t.saveAdminCfg((a) => { if (!a.areas.includes(zona)) a.areas.push(zona); }).catch(() => undefined);
+    }
     setNuevaTarifa((p) => ({ ...p, [catId]: { tipo: f.tipo, zona: "", valor: "" } }));
   };
   const quitarTarifa = async (catId: string, rutaId: string, label: string) => {
@@ -207,27 +233,48 @@ export function TarifarioView({ t }: ViewProps) {
 
   return (
     <>
-      <div className="section-title">Tarifario de precios (Formulario de Cantidades y Precios)</div>
+      <div className="section-title">{esRecoleccion ? "Tarifario del contrato (formulario de precios — Anexo 2)" : "Tarifario de precios (Formulario de Cantidades y Precios)"}</div>
+      {esRecoleccion ? (
+        <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>
+          Precio de la <b>hora efectiva</b> de cada volqueta según el tipo de servicio. Digita el valor <b>sin IVA</b>:
+          el contrato da el precio con IVA incluido, así que divídelo entre 1,19 (el registro le suma el IVA del 19%).
+          La hora es a todo costo (conductor, ayudantes, combustible, peajes, mantenimiento, GPS, lavado), sin
+          recargos. Junto a cada tarifa se muestran las horas proyectadas a 12 meses (Cláusula Cuarta). Los cambios
+          se guardan para todo el equipo.
+        </p>
+      ) : (
       <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>
         Tarifas del pliego para el cálculo automático del valor de cada servicio. Edítalas si hay un
         otrosí u OFAC. Los cambios se guardan para todo el equipo.
         {conCosto && " La columna «Costo contratista» es el valor neto que AG paga por viaje (uso interno: no sale en PDF ni exportaciones); un cambio aplica a los servicios nuevos, los ya registrados conservan su costo."}
       </p>
+      )}
+
+      {sinPrecio.length > 0 && (
+        <div className="info-bar" role="status" style={{ marginBottom: 14, background: "var(--warn-soft)", borderColor: "var(--warn)" }}>
+          <b>Faltan precios:</b> {sinPrecio.join("; ")}. Mientras estén en 0, los registros de ese ítem quedan sin valor.
+        </div>
+      )}
 
       {tarifario.categorias.length === 0 && (
         <div className="info-bar" style={{ marginBottom: 14 }}>
           Este contrato aún no tiene precios unitarios cargados: los registros llevan el valor digitado (tarifa manual).
-          {esApp && " Agrega abajo los equipos o servicios del contrato y sus tarifas por zona."}
+          {editaEstructura && " Agrega abajo los equipos o servicios del contrato y sus tarifas por zona."}
         </div>
       )}
 
-      {esApp && (
+      {editaEstructura && (
         <div className="table-wrap" style={{ padding: "12px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <b style={{ fontSize: 13 }}>Agregar equipo o servicio</b>
-          <input className="input" style={{ maxWidth: 320 }} placeholder="Ej. Volqueta doble troque, Compactador…" value={nuevoEquipo}
+          <b style={{ fontSize: 13 }}>{esRecoleccion ? "Agregar servicio nuevo" : "Agregar equipo o servicio"}</b>
+          <input className="input" style={{ maxWidth: 320 }} aria-label={esRecoleccion ? "Nombre del servicio nuevo" : "Nombre del equipo o servicio"}
+            placeholder={esRecoleccion ? "Ej. Minicargador, Volqueta 6 m³…" : "Ej. Volqueta doble troque, Compactador…"} value={nuevoEquipo}
             onChange={(e) => setNuevoEquipo(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void agregarEquipo(); }} />
           <button className="btn btn-primary btn-sm" onClick={() => void agregarEquipo()} disabled={t.saving || !nuevoEquipo.trim()}>+ Agregar</button>
-          <span className="muted" style={{ fontSize: 12 }}>Luego agrégale sus tarifas: por hora (por zona) y, si aplica, el transporte del equipo.</span>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {esRecoleccion
+              ? "Para servicios que la empresa empiece a ofrecer (acordados con Triple A por otrosí). Luego agrégale su valor por hora para cada tipo de servicio. Los ítems del contrato firmado no se pueden quitar."
+              : "Luego agrégale sus tarifas: por hora (por zona) y, si aplica, el transporte del equipo."}
+          </span>
         </div>
       )}
 
@@ -250,11 +297,16 @@ export function TarifarioView({ t }: ViewProps) {
         {tarifario.categorias.map((cat) => (
           <div key={cat.id} className="table-wrap" style={{ padding: 18 }}>
             <h3 style={{ margin: "0 0 2px", fontSize: 14.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <span style={{ flex: 1 }}>{cat.label}</span>
-              {esApp && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} title="Quitar" onClick={() => void quitarEquipo(cat.id, cat.label)}>×</button>}
+              <span style={{ flex: 1 }}>
+                {cat.label}
+                {esRecoleccion && <span className={`badge ${esItemContrato(cat.id) ? "ok" : "warn"}`} style={{ marginLeft: 8, fontSize: 10.5, verticalAlign: "middle" }}>{esItemContrato(cat.id) ? "Contrato" : "Adicional"}</span>}
+              </span>
+              {editaEstructura && !esItemContrato(cat.id) && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)" }} title="Quitar" aria-label={`Quitar ${cat.label}`} onClick={() => void quitarEquipo(cat.id, cat.label)}>×</button>}
             </h3>
             <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-              {num(cat.capacidad) > 0 ? `Capacidad mínima sugerida: ${num(cat.capacidad)} Ton` : "Valores unitarios sin IVA (HR = hora máquina)"}
+              {esRecoleccion
+                ? volquetaDe(cat.label) ? `Valor por hora efectiva sin IVA · volco mínimo ${volquetaDe(cat.label) === "sencilla" ? "7" : "14"} m³` : "Valor por hora efectiva sin IVA · servicio adicional (sin horas proyectadas en el contrato)"
+                : num(cat.capacidad) > 0 ? `Capacidad mínima sugerida: ${num(cat.capacidad)} Ton` : "Valores unitarios sin IVA (HR = hora máquina)"}
             </div>
             {conCosto && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px", gap: 10, fontSize: 11.5, marginBottom: 6 }} className="muted">
@@ -274,8 +326,11 @@ export function TarifarioView({ t }: ViewProps) {
                     style={{ display: "grid", gridTemplateColumns: conCosto ? "1fr 110px 110px" : "1fr 150px", gap: 10, alignItems: "center" }}
                   >
                     <span style={{ fontSize: 13, color: "var(--text-2)" }}>
-                      <b>{ruta.id}</b> · {ruta.label}
-                      {esApp && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)", padding: "0 6px" }} title="Quitar tarifa" onClick={() => void quitarTarifa(cat.id, ruta.id, ruta.label)}>×</button>}
+                      <b>{ruta.id}</b> · {esRecoleccion ? ruta.label.replace(/\s*\(HR\)\s*$/, "") : ruta.label}
+                      {esRecoleccion && horasProyectadas(cat.label, ruta.label) !== null && (
+                        <span className="cc-dias">{horasProyectadas(cat.label, ruta.label)!.toLocaleString("es-CO")} h proyectadas</span>
+                      )}
+                      {editaEstructura && !esItemContrato(cat.id, ruta.id) && <button className="btn btn-ghost btn-sm" style={{ color: "var(--high)", padding: "0 6px" }} title="Quitar tarifa" aria-label={`Quitar tarifa ${ruta.label}`} onClick={() => void quitarTarifa(cat.id, ruta.id, ruta.label)}>×</button>}
                     </span>
                     <input
                       className="input num"
@@ -304,17 +359,26 @@ export function TarifarioView({ t }: ViewProps) {
                 );
               })}
             </div>
-            {esApp && (() => {
+            {/* Recolección: los ítems del contrato firmado no reciben tipos de servicio nuevos; solo los servicios adicionales. */}
+            {editaEstructura && !esItemContrato(cat.id) && (() => {
               const f = nuevaTarifa[cat.id] ?? { tipo: "hora" as const, zona: "", valor: "" };
               const setNT = (patch: Partial<typeof f>) => setNuevaTarifa((p) => ({ ...p, [cat.id]: { ...f, ...patch } }));
               return (
-                <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 110px auto", gap: 8, marginTop: 12, alignItems: "center" }}>
-                  <select className="input" value={f.tipo} onChange={(e) => setNT({ tipo: e.target.value as "hora" | "transporte" })}>
-                    <option value="hora">Por hora</option>
-                    <option value="transporte">Transporte del equipo (viaje)</option>
-                  </select>
-                  <input className="input" placeholder="Zona (ej. Barranquilla, Municipios)" value={f.zona} onChange={(e) => setNT({ zona: e.target.value })} />
-                  <input className="input num" type="number" min={0} step={1} placeholder="Valor sin IVA" value={f.valor} onChange={(e) => setNT({ valor: e.target.value })} style={{ textAlign: "right" }} />
+                <div style={{ display: "grid", gridTemplateColumns: esRecoleccion ? "1fr 110px auto" : "120px 1fr 110px auto", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  {!esRecoleccion && (
+                    <select className="input" value={f.tipo} aria-label="Tipo de tarifa" onChange={(e) => setNT({ tipo: e.target.value as "hora" | "transporte" })}>
+                      <option value="hora">Por hora</option>
+                      <option value="transporte">Transporte del equipo (viaje)</option>
+                    </select>
+                  )}
+                  <input className="input" aria-label={esRecoleccion ? "Tipo de servicio" : "Zona"} list={esRecoleccion ? `tipos-servicio-${cat.id}` : undefined}
+                    placeholder={esRecoleccion ? "Tipo de servicio (ej. Recolección y Transporte)" : "Zona (ej. Barranquilla, Municipios)"} value={f.zona} onChange={(e) => setNT({ zona: e.target.value })} />
+                  {esRecoleccion && (
+                    <datalist id={`tipos-servicio-${cat.id}`}>
+                      {[...new Set([...AREAS_RECOLECCION, ...(t.admin?.areas ?? [])])].map((a) => <option key={a} value={a} />)}
+                    </datalist>
+                  )}
+                  <input className="input num" type="number" min={0} step={1} aria-label="Valor sin IVA" placeholder={esRecoleccion ? "Valor hora sin IVA" : "Valor sin IVA"} value={f.valor} onChange={(e) => setNT({ valor: e.target.value })} style={{ textAlign: "right" }} />
                   <button className="btn btn-ghost btn-sm" onClick={() => void agregarTarifa(cat.id)} disabled={t.saving}>+ Tarifa</button>
                 </div>
               );
@@ -322,6 +386,8 @@ export function TarifarioView({ t }: ViewProps) {
           </div>
         ))}
 
+        {/* Recolección: el contrato no tiene recargos (la hora efectiva es a todo costo). */}
+        {!esRecoleccion && (
         <div className="table-wrap" style={{ padding: 18 }}>
           <h3 style={{ margin: "0 0 2px", fontSize: 14.5 }}>Recargos aplicables (cualquier categoría)</h3>
           <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
@@ -368,13 +434,15 @@ export function TarifarioView({ t }: ViewProps) {
             )}
           </div>
         </div>
+        )}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 16, flexWrap: "wrap" }}>
         <button className="btn btn-primary" onClick={() => void guardar()} disabled={t.saving}>
           {t.saving ? "Guardando…" : "Guardar tarifario"}
         </button>
-        {!esApp && (
+        {/* Recolección: los precios se registran a mano; restablecer los dejaría en 0. */}
+        {!esApp && !esRecoleccion && (
           <button className="btn btn-ghost" onClick={() => void restablecer()} disabled={t.saving}>
             Restablecer valores del formulario vigente
           </button>

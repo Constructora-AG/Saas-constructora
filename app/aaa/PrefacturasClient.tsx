@@ -7,7 +7,7 @@
 // - Crear, editar (mismo formulario), eliminar; cargar/abrir acta y migo.
 // ════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useRef, useState } from "react";
-import { catalogoDe, CONTRATO_LABEL, ivaPctDe, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
+import { catalogoDe, CONTRATO_LABEL, diasVencimientoDe, ivaPctDe, vencimientoPrefactura, type AdjuntoPrefactura, type PrefacturaItem, type PrefacturaRow } from "@/lib/aaa/catalogo";
 import { CORTE } from "@/lib/aaa/compute";
 import { DIAS_HABILES_PAGO, diasHasta, sumarDiasHabiles } from "@/lib/aaa/pago";
 import { descargarLotePrefacturasPdf, descargarPrefacturaPdf } from "@/lib/aaa/prefacturaPdf";
@@ -60,8 +60,6 @@ function leerArchivo(f: File): Promise<AdjuntoPrefactura> {
 
 interface ItemForm { item: string; cantidad: string; vr_unit: string }
 const ITEM0: ItemForm = { item: "", cantidad: "", vr_unit: "" };
-/** Vencimiento = generación + 30 días calendario (regla AG). */
-const mas30 = (iso: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); if (!m) return ""; const d = new Date(+m[1], +m[2] - 1, +m[3] + 30); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const FORM0 = { contrato: "alquiler" as string, fecha_generacion: "", fecha_vencimiento: "", centro_costo: "", area_aaa: "", interventor: "", periodo_desde: "", periodo_hasta: "", lugar: "", nota: "" };
 
 const OTRO = "__otro__";
@@ -391,18 +389,19 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
               {contratoFijo ? (
                 <input className="input" readOnly value={contratoLabel ?? CONTRATO_LABEL[contratoFijo] ?? contratoFijo} style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
               ) : (
-              <select className="input" value={form.contrato} onChange={(e) => { setForm((f) => ({ ...f, contrato: e.target.value })); setItems([{ ...ITEM0 }]); }}>
+              <select className="input" value={form.contrato} onChange={(e) => { const c = e.target.value; setForm((f) => ({ ...f, contrato: c, fecha_vencimiento: vencimientoPrefactura(c, f.fecha_generacion) })); setItems([{ ...ITEM0 }]); }}>
                 <option value="alquiler">Contrato Alquiler</option>
                 <option value="emergencia">Otro Sí / Emergencia</option>
                 <option value="transporte">Transporte AAA</option>
+                <option value="recoleccion">Contrato de Recolección</option>
               </select>
               )}
             </label>
             <label className="field">Fecha de generación *
               <input className="input" required type="date" value={form.fecha_generacion}
-                onChange={(e) => { const g = e.target.value; setForm((f) => ({ ...f, fecha_generacion: g, fecha_vencimiento: mas30(g) })); }} />
+                onChange={(e) => { const g = e.target.value; setForm((f) => ({ ...f, fecha_generacion: g, fecha_vencimiento: vencimientoPrefactura(f.contrato, g) })); }} />
             </label>
-            <label className="field">Fecha de vencimiento <span className="muted" style={{ fontWeight: 400 }}>(automática: generación + 30 días)</span>
+            <label className="field">Fecha de vencimiento <span className="muted" style={{ fontWeight: 400 }}>(automática: generación + {diasVencimientoDe(form.contrato)} días)</span>
               <input className="input" type="date" value={form.fecha_vencimiento} readOnly style={{ background: "var(--surface-2)", color: "var(--text-2)" }} />
             </label>
             <label className="field">Período · desde<input className="input" type="date" value={form.periodo_desde} max={form.periodo_hasta || undefined} onChange={setF("periodo_desde")} /></label>

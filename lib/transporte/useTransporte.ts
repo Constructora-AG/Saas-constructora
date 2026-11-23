@@ -28,7 +28,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CONTRACT_VALUE,
   POLL_INTERVAL_MS,
+  AREAS_RECOLECCION,
   CONTRATO_EMERGENCIA,
+  CONTRATO_RECOLECCION,
   ZONAS_EMERGENCIA,
   FICHA_MODULO,
   esModuloBase,
@@ -248,6 +250,18 @@ export function useTransporte(ns: ModuloNs = "transporte", contratoApp?: Contrat
         if (ns === "emergencia") {
           const faltan = ZONAS_EMERGENCIA.filter((z) => !a!.areas.includes(z));
           if (faltan.length) { a.areas = [...faltan, ...a.areas]; migrado = true; }
+        }
+        // Contrato de Recolección: sus dos tipos de servicio como áreas AAA y, una sola vez,
+        // el valor del contrato N° CW2239410 si el contrato (antes creado en la app) no lo tenía.
+        if (ns === "recoleccion") {
+          const faltan = AREAS_RECOLECCION.filter((z) => !a!.areas.includes(z));
+          if (faltan.length) { a.areas = [...faltan, ...a.areas]; migrado = true; }
+          const MIG_REC = "contrato-recoleccion-cw2239410";
+          if (!(a.migraciones ?? []).includes(MIG_REC)) {
+            if (!(num(a.contractValue) > 0)) a.contractValue = CONTRATO_RECOLECCION.valor;
+            a.migraciones = [...(a.migraciones ?? []), MIG_REC];
+            migrado = true;
+          }
         }
         // Otro Sí / Emergencia (una sola vez): el valor sembrado del corte de subgerencia
         // se corrige al del contrato N° 2026-060; un valor digitado a mano no se toca.

@@ -94,6 +94,8 @@ function NotaVacia({ children }: { children: ReactNode }) {
 // ── Vista ──────────────────────────────────────────────────────────
 
 export function ReportesView({ t }: ViewProps) {
+  // Contrato de Recolección: se reporta por horas efectivas y actividad (no hay peajes ni municipios).
+  const esRecoleccion = t.ns === "recoleccion";
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VACIOS);
   const [pairs, setPairs] = useState<ExportPair[] | null>(null); // null = aún sin generar
   const [msg, setMsg] = useState<string | null>(null);
@@ -247,6 +249,18 @@ export function ReportesView({ t }: ViewProps) {
     });
     const rankArea = [...byArea.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
 
+    // Contrato de Recolección: horas efectivas (horómetro) totales y por actividad de la planilla.
+    const totalHoras = pairs.reduce((s, p) => s + num(p.item.horasMaquina), 0);
+    const byActividad = new Map<string, { count: number; horas: number }>();
+    pairs.forEach(({ item }) => {
+      const k = item.actividad || "(sin actividad)";
+      const d = byActividad.get(k) ?? { count: 0, horas: 0 };
+      d.count += 1;
+      d.horas += num(item.horasMaquina);
+      byActividad.set(k, d);
+    });
+    const rankActividad = [...byActividad.entries()].sort((a, b) => b[1].horas - a[1].horas).slice(0, 8);
+
     const conFoto = pairs.filter((p) => p.item.photo).length;
     const conVbo = pairs.filter((p) => p.item.approved).length;
     const emergencias = pairs.filter((p) => p.item.serviceType === "Emergencia");
@@ -290,9 +304,11 @@ export function ReportesView({ t }: ViewProps) {
     // Mapa de calor día (0=Dom) × franja (00-06 / 06-12 / 12-18 / 18-24) por hora de solicitud.
     const heat: number[][] = Array.from({ length: 7 }, () => [0, 0, 0, 0]);
     pairs.forEach(({ item }) => {
-      if (!item.date || !item.hourReq) return;
+      // Recolección registra la hora de salida de la planilla; las emergencias, además, la solicitud.
+      const horaRef = item.hourReq || item.horaSalida || "";
+      if (!item.date || !horaRef) return;
       const dow = new Date(item.date + "T00:00:00").getDay();
-      const hour = Number(item.hourReq.split(":")[0]);
+      const hour = Number(horaRef.split(":")[0]);
       if (!Number.isFinite(hour)) return;
       heat[dow][hour < 6 ? 0 : hour < 12 ? 1 : hour < 18 ? 2 : 3]++;
     });
@@ -307,6 +323,8 @@ export function ReportesView({ t }: ViewProps) {
       rankVeh,
       rankDriver,
       rankArea,
+      totalHoras,
+      rankActividad,
       conFoto,
       conVbo,
       emergencias: emergencias.length,
@@ -634,10 +652,17 @@ export function ReportesView({ t }: ViewProps) {
               <span className="estado-label">Valor total</span>
               <span className="estado-val">{fmtCOP(stats.totalValor)}</span>
             </div>
-            <div className="estado-item">
-              <span className="estado-label">Peajes</span>
-              <span className="estado-val">{fmtCOP(stats.totalPeajes)}</span>
-            </div>
+            {esRecoleccion ? (
+              <div className="estado-item">
+                <span className="estado-label">Horas efectivas</span>
+                <span className="estado-val">{stats.totalHoras.toLocaleString("es-CO", { maximumFractionDigits: 1 })} h</span>
+              </div>
+            ) : (
+              <div className="estado-item">
+                <span className="estado-label">Peajes</span>
+                <span className="estado-val">{fmtCOP(stats.totalPeajes)}</span>
+              </div>
+            )}
             <div className="estado-item">
               <span className="estado-label">Pendientes por facturar</span>
               <span className="estado-val">{stats.pendientes}</span>
@@ -814,6 +839,19 @@ export function ReportesView({ t }: ViewProps) {
           </div>
 
           <div className="charts-grid">
+            {esRecoleccion ? (
+              <div className="chart-card">
+                <div className="chart-title">Horas por actividad</div>
+                <div className="chart-sub">actividades de la planilla de despacho · top 8 por horas efectivas</div>
+                {stats.rankActividad.length ? (
+                  stats.rankActividad.map(([a, d]) => (
+                    <FilaDato key={a} label={`${a} (${d.count} serv.)`} value={`${d.horas.toLocaleString("es-CO", { maximumFractionDigits: 1 })} h`} />
+                  ))
+                ) : (
+                  <NotaVacia>Sin datos con estos filtros.</NotaVacia>
+                )}
+              </div>
+            ) : (
             <div className="chart-card">
               <div className="chart-title">Distribución por municipio / área</div>
               <div className="chart-sub">top 8 por número de servicios</div>
@@ -823,9 +861,10 @@ export function ReportesView({ t }: ViewProps) {
                 <NotaVacia>Sin datos con estos filtros.</NotaVacia>
               )}
             </div>
+            )}
             <div className="chart-card">
               <div className="chart-title">Cumplimiento de soportes y emergencias</div>
-              <div className="chart-sub">numerales 14 y 25 del contrato</div>
+              <div className="chart-sub">{esRecoleccion ? "emergencias: respuesta máxima de 3 h (Cláusula Quinta, num. 7)" : "numerales 14 y 25 del contrato"}</div>
               <FilaDato label="Con evidencia fotográfica" value={`${pairs.length ? Math.round((stats.conFoto / pairs.length) * 100) : 0}%`} />
               <FilaDato label="Con V°B° del interventor" value={`${pairs.length ? Math.round((stats.conVbo / pairs.length) * 100) : 0}%`} />
               <FilaDato label="Emergencias registradas" value={stats.emergencias} />
@@ -838,7 +877,7 @@ export function ReportesView({ t }: ViewProps) {
             <ChartRespuesta meses={t.months.map((m) => m.key)} datos={stats.respPorMes} />
             <div className="chart-card">
               <div className="chart-title">Ranking de riesgo (más incidencias)</div>
-              <div className="chart-sub">emergencias fuera de tiempo, soportes incompletos y sobrepesos</div>
+              <div className="chart-sub">{esRecoleccion ? "emergencias fuera de tiempo y soportes incompletos" : "emergencias fuera de tiempo, soportes incompletos y sobrepesos"}</div>
               {stats.rankRiesgo.length ? (
                 stats.rankRiesgo.map((r) => (
                   <FilaDato

@@ -51,6 +51,8 @@ export interface Vehiculo {
   activo?: boolean;
   venceSoat?: string | null;  // 'AAAA-MM-DD'
   venceTecno?: string | null; // 'AAAA-MM-DD'
+  /** Contrato de Recolección: N° interno del vehículo (va en la planilla de despacho). */
+  numeroInterno?: string;
 }
 
 export interface Equipo {
@@ -69,6 +71,10 @@ export interface PersonalItem {
   cedula: string;
   activo: boolean;
   venceLicencia: string | null; // 'AAAA-MM-DD' | null
+  /** Contrato de Recolección: conductor (por defecto) o ayudante de volqueta sencilla. */
+  rol?: "conductor" | "ayudante";
+  /** Contrato de Recolección: afiliado a riesgos laborales (ARL) en nivel V. */
+  arlNivelV?: boolean;
 }
 
 export interface FestivoCustom {
@@ -171,6 +177,16 @@ export interface Servicio {
   facturaAGF?: string;
   /** Otro Sí / Emergencia: clave de la fila de la conciliación de volquetas (fecha|placa|grupo|zona|n). */
   conciliacion?: string;
+  /** Contrato de Recolección — Planilla de Despacho de Equipos (Cláusula Cuarta). */
+  planilla?: string;          // N° de la planilla foliada
+  numeroInterno?: string;     // N° interno del vehículo
+  ruta?: string;              // ruta asignada por el despacho de Triple A
+  actividad?: string;         // escombros, limpieza de vías, podas…
+  horaSalida?: string;        // 'HH:MM'
+  horaRetorno?: string;       // 'HH:MM'
+  horometroInicial?: NumLike;
+  horometroFinal?: NumLike;   // horas efectivas = final − inicial
+  ayudantes?: string[];       // máximo 2, solo volqueta sencilla
   /**
    * Transporte AAA — USO INTERNO (nunca en PDF ni exportaciones): costo NETO que AG
    * paga al contratista por el servicio (se fija al registrar: tarifa de costo de

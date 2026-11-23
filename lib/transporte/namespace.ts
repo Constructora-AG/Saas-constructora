@@ -9,7 +9,7 @@ export function resolveTransporteNamespace(value: unknown): ResolvedTransporteNa
   const ns = String(value ?? "transporte").trim() || "transporte";
   if (!/^[a-z0-9-]+$/.test(ns)) return null;
   if (ns === "transporte") return { ns, prefix: "", modulo: "transporte" };
-  if (ns === "alquiler" || ns === "emergencia") return { ns, prefix: `${ns}:`, modulo: ns };
+  if (ns === "alquiler" || ns === "emergencia" || ns === "recoleccion") return { ns, prefix: `${ns}:`, modulo: ns };
   return { ns, prefix: `${ns}:`, modulo: "contratos" };
 }
 

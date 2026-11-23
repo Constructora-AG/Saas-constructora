@@ -17,7 +17,7 @@ import {
   IconTruck,
   IconWallet,
 } from "../../icons";
-import { CONTRATANTE, CONTRATISTA, CONTRATO_EMERGENCIA } from "@/lib/transporte/constants";
+import { ALCANCE_RECOLECCION, CONTRATANTE, CONTRATISTA, CONTRATO_EMERGENCIA, CONTRATO_RECOLECCION, servicioRecoleccionDe, volquetaDe } from "@/lib/transporte/constants";
 import {
   ALERTAS_MAX,
   ALERTAS_VACIO,
@@ -28,8 +28,10 @@ import {
   totales,
   totalesContratista,
   fdate,
+  findCategoria,
+  findRuta,
 } from "@/lib/transporte/logic";
-import { num, type Servicio } from "@/lib/transporte/model";
+import { areaAAADe, num, type Servicio } from "@/lib/transporte/model";
 import { exportServicios, type ExportFormat } from "@/lib/transporte/export";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 
@@ -137,6 +139,39 @@ export function ResumenView({ t }: ViewProps) {
   }, [allItems, valorEjecutado]);
 
   const ejecucionMensual = esAlquiler ? alq.meses : ejecucionTransporte;
+
+  // Contrato de Recolección: horas efectivas registradas por ítem vs. la proyección
+  // de la Cláusula Cuarta. El tipo de volqueta sale del equipo (o de la tarifa) y
+  // el tipo de servicio del área AAA (o de la tarifa elegida).
+  const recoleccion = useMemo(() => {
+    if (t.ns !== "recoleccion") return null;
+    const filas = ALCANCE_RECOLECCION.map((x) => ({ ...x, ejecutadas: 0, valor: 0, registros: 0 }));
+    // Servicios nuevos del tarifario (fuera de la proyección del contrato), por ítem y tipo de servicio.
+    const adicionales = new Map<string, { equipo: string; area: string; ejecutadas: number; valor: number; registros: number }>();
+    let sinClasificar = 0;
+    for (const s of allItems) {
+      const cat = t.tarifario ? findCategoria(t.tarifario, s.tarifaCategoria) : null;
+      const ruta = findRuta(cat, s.tarifaRuta);
+      const v = volquetaDe(s.equipment) ?? volquetaDe(cat?.label);
+      const sv = servicioRecoleccionDe(areaAAADe(s)) ?? servicioRecoleccionDe(ruta?.label);
+      const fila = filas.find((f) => f.volqueta === v && f.servicio === sv);
+      if (!fila) {
+        if (!cat || !ruta) { sinClasificar += 1; continue; }
+        const k = `${cat.id}|${ruta.id}`;
+        const a = adicionales.get(k) ?? { equipo: cat.label.replace(/^Ítem \d+ · Servicio de /i, ""), area: ruta.label.replace(/\s*\(HR\)\s*$/i, ""), ejecutadas: 0, valor: 0, registros: 0 };
+        a.ejecutadas += num(s.horasMaquina);
+        a.valor += valorConIva(s);
+        a.registros += 1;
+        adicionales.set(k, a);
+        continue;
+      }
+      fila.ejecutadas += num(s.horasMaquina);
+      fila.valor += valorConIva(s);
+      fila.registros += 1;
+    }
+    return { filas, adicionales: [...adicionales.values()], sinClasificar };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t.ns, t.tarifario, allItems]);
 
   // Transporte AAA — dinero en contratistas (uso interno) con corte a una fecha:
   // valor ejecutado y costo neto de los servicios hechos hasta ese día.
@@ -305,7 +340,7 @@ export function ResumenView({ t }: ViewProps) {
             <span className="kpi-label">Valor del contrato</span>
           </div>
           <div className="kpi-value" style={{ fontSize: 19 }}>{hayValor ? COP.format(valorContrato) : "Sin definir"}</div>
-          <div className="kpi-foot">{hayValor ? (t.ns === "alquiler" ? "IVA incluido (Cláusula Tercera)" : ficha.ivaIncluido ? "IVA incluido" : "IVA excluido") : "Defínelo en Administración"}</div>
+          <div className="kpi-foot">{hayValor ? (t.ns === "alquiler" || t.ns === "recoleccion" ? "IVA incluido (Cláusula Tercera)" : ficha.ivaIncluido ? "IVA incluido" : "IVA excluido") : "Defínelo en Administración"}</div>
         </div>
         <div className="kpi">
           <div className="kpi-head">
@@ -569,6 +604,73 @@ export function ResumenView({ t }: ViewProps) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Contrato de Recolección: horas efectivas por ítem vs. proyección (Cláusula Cuarta) */}
+      {recoleccion && (
+        <div className="chart-card" style={{ marginTop: 18 }}>
+          <div className="chart-title">Horas por ítem del contrato</div>
+          <div className="chart-sub">
+            Cláusula Cuarta · {CONTRATO_RECOLECCION.modalidad} · se pagan horas efectivas (horómetro) a todo costo:
+            conductor, ayudantes, combustible, peajes y mantenimiento · disposición final: Relleno Sanitario Parque
+            Ambiental Los Pocitos · las horas son proyecciones: Triple A no está obligada a consumirlas · pago a{" "}
+            {CONTRATO_RECOLECCION.diasPago} días de la radicación de la factura
+          </div>
+          <div className="table-wrap" style={{ marginTop: 10 }}>
+            <table className="clean" style={{ width: "100%" }}>
+              <thead>
+                <tr>
+                  <th>Volqueta</th>
+                  <th>Tipo de servicio (área AAA)</th>
+                  <th style={{ textAlign: "right" }}>Horas proyectadas</th>
+                  <th style={{ textAlign: "right" }}>Horas efectivas</th>
+                  <th style={{ textAlign: "right" }}>% consumido</th>
+                  <th style={{ textAlign: "right" }}>Valor ejecutado (con IVA)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recoleccion.filas.map((x) => {
+                  const pct = x.horas > 0 ? (x.ejecutadas / x.horas) * 100 : 0;
+                  return (
+                    <tr key={`${x.volqueta}-${x.servicio}`}>
+                      <td><b>{x.equipo}</b></td>
+                      <td>{x.area}</td>
+                      <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{x.horas.toLocaleString("es-CO")} h</td>
+                      <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{x.ejecutadas.toLocaleString("es-CO", { maximumFractionDigits: 1 })} h<span className="cc-dias">{x.registros} registro(s)</span></td>
+                      <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap", color: pct >= 100 ? "var(--high)" : pct >= 90 ? "var(--warn)" : undefined }}>
+                        {pct.toFixed(1)}%{pct >= 100 ? " · superado" : pct >= 90 ? " · por agotarse" : ""}
+                      </td>
+                      <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{COP.format(x.valor)}</td>
+                    </tr>
+                  );
+                })}
+                {recoleccion.adicionales.map((x) => (
+                  <tr key={`${x.equipo}-${x.area}`}>
+                    <td><b>{x.equipo}</b> <span className="badge warn" style={{ fontSize: 10.5 }}>Adicional</span></td>
+                    <td>{x.area}</td>
+                    <td className="num muted" style={{ textAlign: "right" }}>Sin proyección</td>
+                    <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{x.ejecutadas.toLocaleString("es-CO", { maximumFractionDigits: 1 })} h<span className="cc-dias">{x.registros} registro(s)</span></td>
+                    <td className="num muted" style={{ textAlign: "right" }}>—</td>
+                    <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{COP.format(x.valor)}</td>
+                  </tr>
+                ))}
+                <tr style={{ background: "var(--surface-2)" }}>
+                  <td colSpan={2}><b>Total</b></td>
+                  <td className="num" style={{ textAlign: "right" }}><b>{recoleccion.filas.reduce((a, x) => a + x.horas, 0).toLocaleString("es-CO")} h</b></td>
+                  <td className="num" style={{ textAlign: "right" }}><b>{[...recoleccion.filas, ...recoleccion.adicionales].reduce((a, x) => a + x.ejecutadas, 0).toLocaleString("es-CO", { maximumFractionDigits: 1 })} h</b></td>
+                  <td />
+                  <td className="num" style={{ textAlign: "right" }}><b>{COP.format([...recoleccion.filas, ...recoleccion.adicionales].reduce((a, x) => a + x.valor, 0))}</b></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {recoleccion.sinClasificar > 0 && (
+            <div className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
+              {recoleccion.sinClasificar} registro(s) con tarifa manual no se cuentan en la tabla: edítalos y elige el ítem y el
+              tipo de servicio del tarifario.
+            </div>
+          )}
         </div>
       )}
 

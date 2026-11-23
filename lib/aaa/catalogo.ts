@@ -48,7 +48,24 @@ export function catalogoDe(contrato: string): ItemCatalogo[] {
   return contrato === "emergencia" ? CATALOGO_EMERGENCIA : contrato === "alquiler" ? CATALOGO_ALQUILER : [];
 }
 
-export const CONTRATO_LABEL: Record<string, string> = { alquiler: "Alquiler", emergencia: "Emergencia", transporte: "Transporte AAA" };
+export const CONTRATO_LABEL: Record<string, string> = { alquiler: "Alquiler", emergencia: "Emergencia", transporte: "Transporte AAA", recoleccion: "Recolección" };
+
+/**
+ * Días calendario entre la generación y el vencimiento de una prefactura.
+ * Regla AG: 30 días; el Contrato de Recolección paga a 45 días de la
+ * radicación (Cláusula Tercera).
+ */
+export function diasVencimientoDe(contrato: string): number {
+  return contrato === "recoleccion" ? 45 : 30;
+}
+
+/** Fecha ISO de generación + los días de vencimiento del contrato ('' si la fecha no es válida). */
+export function vencimientoPrefactura(contrato: string, iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return "";
+  const d = new Date(+m[1], +m[2] - 1, +m[3] + diasVencimientoDe(contrato));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 /** IVA aplicable según el contrato: el transporte NO lleva IVA (solo el arrendamiento de maquinaria). */
 export function ivaPctDe(contrato: string, ivaBase: number): number {

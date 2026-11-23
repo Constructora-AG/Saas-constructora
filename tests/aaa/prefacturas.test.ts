@@ -125,3 +125,12 @@ test("quitar una factura devuelve el estado y limpia sus datos", () => {
   assert.equal(result.patch.fecha_factura, null);
   assert.equal(result.patch.numero_factura, null);
 });
+
+test("vencimientoPrefactura usa 30 días por regla AG y 45 en Recolección", async () => {
+  const { diasVencimientoDe, vencimientoPrefactura } = await import("@/lib/aaa/catalogo");
+  assert.equal(diasVencimientoDe("alquiler"), 30);
+  assert.equal(diasVencimientoDe("recoleccion"), 45);
+  assert.equal(vencimientoPrefactura("alquiler", "2026-01-15"), "2026-02-14");
+  assert.equal(vencimientoPrefactura("recoleccion", "2026-01-15"), "2026-03-01");
+  assert.equal(vencimientoPrefactura("recoleccion", "15-01-2026"), "");
+});

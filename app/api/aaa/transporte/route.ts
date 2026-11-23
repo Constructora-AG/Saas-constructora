@@ -3,6 +3,7 @@ import { supabaseTransporte } from "@/lib/supabase/server";
 import { transporteConfigured } from "@/lib/demo";
 import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 import { authorizeTransporteNamespace, authorizeNamespaceValue, keyBelongsToNamespace } from "@/lib/transporte/serverNamespace";
+import { validarEscrituraRecoleccion } from "@/lib/transporte/validacionRecoleccion";
 
 // API clave-valor del panel de Transporte AAA (tabla transporte_kv).
 // Contrato idéntico al window.storage del panel original:
@@ -80,6 +81,14 @@ export async function POST(req: NextRequest) {
   if (typeof b.value !== "string") return NextResponse.json({ error: "value debe ser un string JSON" }, { status: 400 });
 
   const supa = supabaseTransporte();
+  // Contrato de Recolección: se valida el contenido (registros, tarifario, administración)
+  // contra lo guardado, para revisar solo lo que cambia.
+  if (requestedNs.ns === "recoleccion") {
+    const { data: previo, error: errPrevio } = await supa.from("transporte_kv").select("value").eq("key", key).maybeSingle();
+    if (errPrevio) return errorLegible(errPrevio);
+    const invalido = validarEscrituraRecoleccion(key.slice(requestedNs.prefix.length), b.value, previo ? (previo.value as string) : null);
+    if (invalido) return NextResponse.json(invalido, { status: 400 });
+  }
   const { error } = await supa.from("transporte_kv").upsert({ key, value: b.value }, { onConflict: "key" });
   if (error) return errorLegible(error);
   return NextResponse.json({ key, value: b.value });
@@ -93,6 +102,10 @@ export async function DELETE(req: NextRequest) {
   const key = searchParams.get("key");
   if (!key) return NextResponse.json({ error: "Falta ?key=" }, { status: 400 });
   if (!keyBelongsToNamespace(key, acceso)) return NextResponse.json({ error: "La clave no pertenece al namespace autorizado" }, { status: 403 });
+  // Recolección: la configuración y el tarifario del contrato no se borran por API.
+  if (acceso.ns === "recoleccion" && !/^services:\d{4}-\d{2}$/.test(key.slice(acceso.prefix.length))) {
+    return NextResponse.json({ error: "Solo se pueden borrar meses de registros del Contrato de Recolección" }, { status: 403 });
+  }
   const supa = supabaseTransporte();
   const { error } = await supa.from("transporte_kv").delete().eq("key", key);
   if (error) return errorLegible(error);

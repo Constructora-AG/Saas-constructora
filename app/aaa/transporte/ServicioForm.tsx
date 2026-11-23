@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { UseTransporte } from "@/lib/transporte/useTransporte";
 import type { AdjuntoFile, AdminConfig, MonthInfo, NumLike, Servicio, Tarifario } from "@/lib/transporte/model";
 import { areaAAADe, aprobadorDe, num, nuevoServicioId } from "@/lib/transporte/model";
-import { esModuloBase, FICHA_MODULO, zonaDeRuta } from "@/lib/transporte/constants";
+import { ACTIVIDADES_RECOLECCION, DESTINO_RECOLECCION, esModuloBase, FICHA_MODULO, MAX_AYUDANTES_RECOLECCION, zonaDeRuta } from "@/lib/transporte/constants";
 import { autoRecargos, computeValor, costoCalculado, fdate, fmtCOP, respHours, sugerenciasCampo } from "@/lib/transporte/logic";
 import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
@@ -64,6 +64,16 @@ interface Campos {
   notes: string;
   photoFiles: AdjuntoFile[];
   approvalFile: AdjuntoFile | null;
+  // Contrato de Recolección — Planilla de Despacho de Equipos
+  planilla: string;
+  numeroInterno: string;
+  ruta: string;
+  actividad: string;
+  horaSalida: string;
+  horaRetorno: string;
+  horometroInicial: string;
+  horometroFinal: string;
+  ayudantes: string[];
 }
 
 const sv = (v: NumLike): string => (v == null || v === "" ? "" : String(v));
@@ -77,8 +87,14 @@ function setSelOrOtro(value: string, opciones: string[]): { sel: string; otro: s
 function conductoresDe(admin: AdminConfig | null): string[] {
   const set = new Set<string>();
   admin?.vehiculos.forEach((v) => { if (v.driver) set.add(v.driver); });
-  admin?.personal.filter((p) => p.activo !== false).forEach((p) => { if (p.nombre) set.add(p.nombre); });
+  // Los ayudantes (Contrato de Recolección) no conducen: no se ofrecen como conductores.
+  admin?.personal.filter((p) => p.activo !== false && p.rol !== "ayudante").forEach((p) => { if (p.nombre) set.add(p.nombre); });
   return [...set];
+}
+
+/** Recolección: ayudantes activos del catálogo de Personal. */
+function ayudantesDe(admin: AdminConfig | null): string[] {
+  return (admin?.personal ?? []).filter((p) => p.activo !== false && p.rol === "ayudante" && p.nombre).map((p) => p.nombre);
 }
 
 function buildInit(args: {
@@ -87,8 +103,9 @@ function buildInit(args: {
   month: MonthInfo;
   admin: AdminConfig | null;
   tarifario: Tarifario | null;
+  esRecoleccion: boolean;
 }): { campos: Campos; nota: string | null; hint: string | null } {
-  const { editing, dup, month, admin, tarifario } = args;
+  const { editing, dup, month, admin, tarifario, esRecoleccion } = args;
   const interventores = admin?.interventores ?? [];
   const areas = admin?.areas ?? [];
   const placas = (admin?.vehiculos ?? []).filter((v) => v.activo !== false).map((v) => v.plate);
@@ -113,7 +130,12 @@ function buildInit(args: {
     photo: false, approved: false, invoiced: false,
     notes: "",
     photoFiles: [], approvalFile: null,
+    planilla: "", numeroInterno: "", ruta: "", actividad: "",
+    horaSalida: "", horaRetorno: "", horometroInicial: "", horometroFinal: "",
+    ayudantes: [],
   };
+  // Recolección: la disposición final es siempre en el relleno autorizado (Cláusula Cuarta).
+  if (esRecoleccion) base.destination = DESTINO_RECOLECCION;
 
   const src = editing ?? dup;
   let campos = base;
@@ -144,7 +166,16 @@ function buildInit(args: {
       tarifaCategoria: src.tarifaCategoria ?? "", tarifaRuta: src.tarifaRuta ?? "",
       value: sv(src.value), tolls: sv(src.tolls),
       notes: src.notes ?? "",
+      // Recolección: el duplicado conserva vehículo, ruta y actividad; la planilla,
+      // las horas y el horómetro son propios de cada servicio.
+      numeroInterno: src.numeroInterno ?? "",
+      ruta: src.ruta ?? "",
+      actividad: src.actividad ?? "",
+      ayudantes: src.ayudantes ?? [],
     };
+    if (esRecoleccion && !campos.destination) campos.destination = DESTINO_RECOLECCION;
+    // Recolección: el precio del contrato incluye IVA, así que el servicio siempre lleva IVA 19%.
+    if (esRecoleccion) campos.ivaAlquiler = true;
     if (editing) {
       // Edición: restaura fecha, checkboxes (incluidos los recargos persistidos), adjuntos.
       // (El duplicado NO los copia.)
@@ -156,6 +187,11 @@ function buildInit(args: {
       campos.invoiced = !!editing.invoiced;
       campos.photoFiles = editing.photoFiles ?? [];
       campos.approvalFile = editing.approvalFile ?? null;
+      campos.planilla = editing.planilla ?? "";
+      campos.horaSalida = editing.horaSalida ?? "";
+      campos.horaRetorno = editing.horaRetorno ?? "";
+      campos.horometroInicial = sv(editing.horometroInicial);
+      campos.horometroFinal = sv(editing.horometroFinal);
     }
   }
 
@@ -222,7 +258,7 @@ export function ServicioForm({
   const admin = t.admin;
   const tarifario = t.tarifario;
 
-  const [init] = useState(() => buildInit({ editing, dup: dupFrom, month, admin, tarifario }));
+  const [init] = useState(() => buildInit({ editing, dup: dupFrom, month, admin, tarifario, esRecoleccion: t.ns === "recoleccion" }));
   // N° de orden automático y consecutivo (0001, 0002, …) sobre TODOS los meses;
   // al editar se conserva el existente.
   const [f, setF] = useState<Campos>(() => (editing ? init.campos : { ...init.campos, orderNo: siguienteOrden(t.servicesByMonth, t.ficha.prefijoOrden) }));
@@ -274,6 +310,12 @@ export function ServicioForm({
   // repite en ambos sentidos. Se recalcula solo cuando cambian los servicios.
   const sugSitios = useMemo(() => sugerenciasCampo(t.servicesByMonth, ["pickup", "destination"]), [t.servicesByMonth]);
   const sugAreas = useMemo(() => sugerenciasCampo(t.servicesByMonth, "area"), [t.servicesByMonth]);
+  const sugAyudantes = useMemo(
+    () => [...new Set([...ayudantesDe(admin), ...Object.values(t.servicesByMonth).flat().flatMap((sv) => sv.ayudantes ?? [])])].filter(Boolean).sort((a, b) => a.localeCompare(b, "es")),
+    [t.servicesByMonth, admin],
+  );
+  const sugRutas = useMemo(() => sugerenciasCampo(t.servicesByMonth, "ruta"), [t.servicesByMonth]);
+  const sugInternos = useMemo(() => sugerenciasCampo(t.servicesByMonth, "numeroInterno"), [t.servicesByMonth]);
   const sugOperarios = useMemo(
     () => sugerenciasCampo(t.servicesByMonth, "operario", conductoresDe(admin)),
     [t.servicesByMonth, admin],
@@ -284,9 +326,13 @@ export function ServicioForm({
   /** Aplica computeValor sobre un estado candidato y actualiza el hint. */
   // Alquiler y Otro Sí / Emergencia se cobran por hora (horas × valor hora de la zona).
   const esEmergencia = t.ns === "emergencia";
+  // Contrato de Recolección: volquetas por horas efectivas (horómetro) y tipo de servicio.
+  const esRecoleccion = t.ns === "recoleccion";
+  /** Emergencia y Recolección se registran por volqueta (placa + conductor), sin transporte del equipo. */
+  const esVolqueta = esEmergencia || esRecoleccion;
   // Contratos creados en la app: misma estructura que Contrato de Alquiler.
-  const esAlquiler = t.ns === "alquiler" || esEmergencia || !!t.ficha.dinamico;
-  const etiquetaZona = (label: string) => (esEmergencia ? label.replace(/\s*\(HR\)\s*$/i, "") : zonaDe(label));
+  const esAlquiler = t.ns === "alquiler" || esVolqueta || !!t.ficha.dinamico;
+  const etiquetaZona = (label: string) => (esVolqueta ? label.replace(/\s*\(HR\)\s*$/i, "") : zonaDe(label));
   const esApp = !!t.ficha.dinamico;
   /** Alquiler: unitario de la tarifa elegida (valor hora máquina o valor del viaje de transporte). */
   const tarifaSel = (c: Campos) => tarifario?.categorias.find((x) => x.id === c.tarifaCategoria)?.rutas.find((r) => r.id === c.tarifaRuta) ?? null;
@@ -317,12 +363,12 @@ export function ServicioForm({
       const vTr = tr ? num(tr.unitario) * viajes : 0;
       const txTr = tr ? ` + ${viajes} viaje(s) × ${fmtCOP(num(tr.unitario))} (transporte del equipo) = ${fmtCOP(vTr)}` : "";
       if (horas == null) {
-        setTarifaHint(esEmergencia ? `Valor hora sin IVA: ${fmtCOP(unit)} — indica las horas efectivas de la volqueta.` : `Valor hora máquina: ${fmtCOP(unit)}${txTr} — indica las horas máquina usadas para calcular el alquiler.`);
+        setTarifaHint(esVolqueta ? `Valor hora sin IVA: ${fmtCOP(unit)} — indica las horas efectivas de la volqueta${esRecoleccion ? " (horómetro final − inicial)" : ""}.` : `Valor hora máquina: ${fmtCOP(unit)}${txTr} — indica las horas máquina usadas para calcular el alquiler.`);
         return { ...next, value: tr ? String(vTr) : next.value, tolls: "0", transporteEquipo: viajes > 0 };
       }
       const alq = Math.round(unit * horas);
       const total = alq + vTr;
-      setTarifaHint(`${horas} h × ${fmtCOP(unit)} (${esEmergencia ? "hora sin IVA" : "hora máquina"}) = ${fmtCOP(alq)}${txTr}${tr ? ` → total ${fmtCOP(total)}` : ""}`);
+      setTarifaHint(`${horas} h × ${fmtCOP(unit)} (${esVolqueta ? "hora sin IVA" : "hora máquina"}) = ${fmtCOP(alq)}${txTr}${tr ? ` → total ${fmtCOP(total)}` : ""}`);
       return { ...next, value: String(total), tolls: "0", transporteEquipo: viajes > 0 };
     }
     const c = computeValor(tarifario, next.tarifaCategoria || null, next.tarifaRuta || null, next.recNocturno, next.recDominical);
@@ -353,7 +399,38 @@ export function ServicioForm({
   };
 
   const cambiaCategoria = (catId: string) => setF(conValor({ ...f, tarifaCategoria: catId, tarifaRuta: "" }));
-  const cambiaRuta = (rutaId: string) => setF(conValor({ ...f, tarifaRuta: rutaId }));
+  const cambiaRuta = (rutaId: string) => {
+    const next = { ...f, tarifaRuta: rutaId };
+    // Recolección: el tipo de servicio de la tarifa ES el área AAA solicitante
+    // (Recolección y Transporte / Servicios Especiales B2B y B2G).
+    const rt = catSel?.rutas.find((r) => r.id === rutaId);
+    if (esRecoleccion && rt) {
+      const area = zonaDeRuta(rt.label, t.ns);
+      const sa = setSelOrOtro(area, admin?.areas ?? []);
+      next.areaAAASel = sa.sel;
+      next.areaAAAOtro = sa.otro;
+    }
+    setF(conValor(next));
+  };
+
+  /** Recolección: horas efectivas = horómetro final − inicial (si ambos son válidos). */
+  const cambiaHorometro = (patch: Partial<Pick<Campos, "horometroInicial" | "horometroFinal">>) => {
+    const next = { ...f, ...patch };
+    const ini = next.horometroInicial.trim(), fin = next.horometroFinal.trim();
+    if (ini !== "" && fin !== "" && num(fin) >= num(ini)) {
+      next.horasMaquina = String(Math.round((num(fin) - num(ini)) * 100) / 100);
+    }
+    setF(conValor(next));
+  };
+  const horometroCalculado = esRecoleccion && f.horometroInicial.trim() !== "" && f.horometroFinal.trim() !== "" && num(f.horometroFinal) >= num(f.horometroInicial);
+  const horometroInvalido = esRecoleccion && f.horometroInicial.trim() !== "" && f.horometroFinal.trim() !== "" && num(f.horometroFinal) < num(f.horometroInicial);
+  /** Recolección: los ayudantes solo van en la volqueta sencilla (Cláusula Cuarta). */
+  const conAyudantes = esRecoleccion && /sencilla/i.test(catSel?.label ?? "");
+  const cambiaAyudante = (idx: number, valor: string) => {
+    const lista = [...f.ayudantes];
+    lista[idx] = valor;
+    setF({ ...f, ayudantes: lista });
+  };
 
   const cambiaPlaca = (v: string) => {
     const next = { ...f, plateSel: v };
@@ -362,6 +439,7 @@ export function ServicioForm({
       if (veh) {
         next.capacity = sv(veh.capacity);
         if (veh.driver) { next.driverSel = veh.driver; next.driverOtro = ""; }
+        if (veh.numeroInterno) next.numeroInterno = veh.numeroInterno;
       }
     }
     setF(next);
@@ -418,6 +496,7 @@ export function ServicioForm({
     e.preventDefault();
     setError(null);
     if (!f.date) { setError("La fecha del servicio es obligatoria."); return; }
+    if (horometroInvalido) { setError("El horómetro final no puede ser menor que el inicial."); return; }
     const r = ses.approve(); // sella con el rol de la sesión de plataforma (sin clave)
 
     const resolver = (sel: string, otro: string) => (sel === OTRO ? otro.trim() : sel);
@@ -458,7 +537,8 @@ export function ServicioForm({
       valorHora: esAlquiler && esPorHora(f) ? String(num(tarifaSel(f)?.unitario ?? 0)) : undefined,
       ivaAlquiler: esAlquiler ? f.ivaAlquiler : undefined,
       ivaTransporte: esAlquiler ? f.ivaTransporte : undefined,
-      valorIva: esAlquiler ? String(ivaDe(f).total) : undefined,
+      // Recolección: la tarifa incluye IVA → siempre 19% del valor (también con tarifa manual).
+      valorIva: esRecoleccion ? String(Math.round(num(f.value) * 0.19)) : esAlquiler ? String(ivaDe(f).total) : undefined,
       transporteEquipo: esAlquiler ? num(f.viajesEquipo) > 0 : undefined,
       viajesEquipo: esAlquiler ? String(Math.max(0, Math.floor(num(f.viajesEquipo)))) : undefined,
       valorTransporte: esAlquiler && num(f.viajesEquipo) > 0 ? String(num(tarifaTransporte(f)?.unitario ?? 0)) : undefined,
@@ -472,6 +552,18 @@ export function ServicioForm({
       approvalFile: approvalSubido,
       tarifaCategoria: manual ? null : f.tarifaCategoria,
       tarifaRuta: manual ? null : f.tarifaRuta || null,
+      ...(esRecoleccion ? {
+        planilla: f.planilla.trim(),
+        numeroInterno: f.numeroInterno.trim(),
+        ruta: f.ruta.trim(),
+        actividad: f.actividad,
+        horaSalida: f.horaSalida,
+        horaRetorno: f.horaRetorno,
+        horometroInicial: f.horometroInicial.trim(),
+        horometroFinal: f.horometroFinal.trim(),
+        ayudantes: conAyudantes ? f.ayudantes.map((a) => a.trim()).filter(Boolean).slice(0, MAX_AYUDANTES_RECOLECCION) : [],
+        ivaAlquiler: true, // el precio del contrato incluye IVA: siempre se factura con IVA 19%
+      } : {}),
       ...(esTransporte ? {
         costoContratista: costoFinal !== null ? String(costoFinal) : undefined,
       } : {}),
@@ -575,9 +667,9 @@ export function ServicioForm({
               )}
             </div>
 
-            {seccion(esEmergencia ? "Tarifa del contrato (volqueta y zona — calcula el valor automáticamente)" : esAlquiler ? "Tarifa del contrato (equipo y zona — calcula el valor automáticamente)" : "Tarifa del pliego (opcional — calcula el valor automáticamente)")}
+            {seccion(esRecoleccion ? "Tarifa del contrato (volqueta y tipo de servicio — calcula el valor automáticamente)" : esEmergencia ? "Tarifa del contrato (volqueta y zona — calcula el valor automáticamente)" : esAlquiler ? "Tarifa del contrato (equipo y zona — calcula el valor automáticamente)" : "Tarifa del pliego (opcional — calcula el valor automáticamente)")}
             <div style={gridAuto}>
-              <label className="field">{esEmergencia ? "Volqueta (tarifario del contrato)" : esAlquiler ? "Equipo (tarifario del contrato)" : "Categoría del tarifario"}
+              <label className="field">{esVolqueta ? "Volqueta (tarifario del contrato)" : esAlquiler ? "Equipo (tarifario del contrato)" : "Categoría del tarifario"}
                 <select value={f.tarifaCategoria} onChange={(e) => cambiaCategoria(e.target.value)}>
                   <option value="">Tarifa manual (digitar el valor)</option>
                   {(tarifario?.categorias ?? []).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -594,16 +686,16 @@ export function ServicioForm({
                 </label>
               )}
               {catSel && esAlquiler && (
-                <label className="field">Zona del servicio
+                <label className="field">{esRecoleccion ? "Tipo de servicio (área AAA)" : "Zona del servicio"}
                   <select value={f.tarifaRuta} onChange={(e) => cambiaRuta(e.target.value)}>
-                    <option value="">— Selecciona la zona —</option>
+                    <option value="">{esRecoleccion ? "— Selecciona el tipo de servicio —" : "— Selecciona la zona —"}</option>
                     {rutasHora(f).map((rt) => (
-                      <option key={rt.id} value={rt.id}>{etiquetaZona(rt.label)} — {fmtCOP(num(rt.unitario))} / hora{esEmergencia ? " sin IVA" : ""}</option>
+                      <option key={rt.id} value={rt.id}>{etiquetaZona(rt.label)} — {fmtCOP(num(rt.unitario))} / hora{esVolqueta ? " sin IVA" : ""}</option>
                     ))}
                   </select>
                 </label>
               )}
-              {catSel && esAlquiler && !esEmergencia && f.tarifaRuta && (
+              {catSel && esAlquiler && !esVolqueta && f.tarifaRuta && (
                 <label className="field">Viajes de transporte del equipo{tarifaTransporte(f) ? <span className="muted" style={{ fontWeight: 400 }}> · {fmtCOP(num(tarifaTransporte(f)!.unitario))} por viaje</span> : null}
                   <input className="input num" type="number" min="0" step="1" value={f.viajesEquipo}
                     onChange={(e) => setF(conValor({ ...f, viajesEquipo: e.target.value }))} placeholder="0" />
@@ -623,11 +715,13 @@ export function ServicioForm({
             </div>}
             {!esAlquiler && autoNota && <div style={{ color: "var(--warn)", fontSize: 12.5 }}>{autoNota}</div>}
 
-            {seccion(esEmergencia ? "Volqueta y conductor" : esAlquiler ? "Operario" : "Vehículo y carga")}
+            {seccion(esVolqueta ? "Volqueta y conductor" : esAlquiler ? "Operario" : "Vehículo y carga")}
             <div style={gridAuto}>
-              {(!esAlquiler || esEmergencia) && selectMaestro(
+              {(!esAlquiler || esVolqueta) && selectMaestro(
                 "Placa del vehículo", f.plateSel, f.plateOtro,
-                vehiculosActivos.map((v) => ({ value: v.plate, label: `${v.plate} · ${num(v.capacity)} T · ${v.driver || "sin conductor"}` })),
+                vehiculosActivos.map((v) => ({ value: v.plate, label: esRecoleccion
+                  ? `${v.plate}${v.numeroInterno ? ` (${v.numeroInterno})` : ""} · ${v.tipo || "volqueta"} · ${num(v.capacity)} m³ · ${v.driver || "sin conductor"}`
+                  : `${v.plate} · ${num(v.capacity)} T · ${v.driver || "sin conductor"}` })),
                 "Otra placa (digitar)",
                 cambiaPlaca,
                 (v) => setF({ ...f, plateOtro: v.toUpperCase() }),
@@ -637,7 +731,7 @@ export function ServicioForm({
                 <input className="input num" type="number" step="0.1" min="0" value={f.capacity}
                   onChange={(e) => setF({ ...f, capacity: e.target.value })} />
               </label>}
-              {(!esAlquiler || esEmergencia) && selectMaestro(
+              {(!esAlquiler || esVolqueta) && selectMaestro(
                 "Conductor", f.driverSel, f.driverOtro,
                 conductores.map((d) => ({ value: d, label: d === designado ? `${d} (designado)` : d })),
                 "Otro conductor (digitar)",
@@ -657,15 +751,57 @@ export function ServicioForm({
                 <input className="input num" type="number" step="0.01" min="0" value={f.weight}
                   onChange={(e) => setF({ ...f, weight: e.target.value })} />
               </label>}
-              {!esEmergencia && <label className="field">Nombre del operario
+              {esRecoleccion && (
+                <label className="field">N° interno del vehículo
+                  <input className="input" value={f.numeroInterno} list="sug-internos" placeholder="Ej. VD-03"
+                    onChange={(e) => setF({ ...f, numeroInterno: e.target.value })} />
+                  {sugerencias("sug-internos", sugInternos)}
+                </label>
+              )}
+              {conAyudantes && Array.from({ length: MAX_AYUDANTES_RECOLECCION }, (_, i) => (
+                <label key={i} className="field">Ayudante {i + 1}
+                  <input className="input" value={f.ayudantes[i] ?? ""} list="sug-ayudantes" placeholder="Nombre del ayudante (opcional)"
+                    onChange={(e) => cambiaAyudante(i, e.target.value)} />
+                </label>
+              ))}
+              {conAyudantes && sugerencias("sug-ayudantes", sugAyudantes)}
+              {!esVolqueta && <label className="field">Nombre del operario
                 <input className="input" value={f.operario} placeholder="Operario del equipo" list="sug-operarios"
                   onChange={(e) => setF({ ...f, operario: e.target.value })} />
                 {sugerencias("sug-operarios", sugOperarios)}
               </label>}
             </div>
 
+            {esRecoleccion && (
+              <>
+                {seccion("Planilla de despacho")}
+                <div style={gridAuto}>
+                  <label className="field">N° de planilla
+                    <input className="input" value={f.planilla} placeholder="Folio de la planilla"
+                      onChange={(e) => setF({ ...f, planilla: e.target.value })} />
+                  </label>
+                  <label className="field">Actividad
+                    <select value={f.actividad} onChange={(e) => setF({ ...f, actividad: e.target.value })}>
+                      <option value="">— Selecciona la actividad —</option>
+                      {ACTIVIDADES_RECOLECCION.map((a) => <option key={a} value={a}>{a}</option>)}
+                      {f.actividad && !ACTIVIDADES_RECOLECCION.includes(f.actividad) && <option value={f.actividad}>{f.actividad}</option>}
+                    </select>
+                  </label>
+                  <label className="field">Ruta asignada
+                    <input className="input" value={f.ruta} list="sug-rutas" placeholder="Ruta del despacho de Triple A"
+                      onChange={(e) => setF({ ...f, ruta: e.target.value })} />
+                    {sugerencias("sug-rutas", sugRutas)}
+                  </label>
+                </div>
+              </>
+            )}
+
             {seccion(esAlquiler ? "Lugar del servicio" : "Ruta")}
             <div style={gridAuto}>
+              {esRecoleccion && <label className="field">Disposición final
+                <input className="input" value={f.destination} list="sug-sitios" placeholder={DESTINO_RECOLECCION}
+                  onChange={(e) => setF({ ...f, destination: e.target.value })} />
+              </label>}
               {!esAlquiler && <label className="field">Lugar de recogida
                 <input className="input" value={f.pickup} list="sug-sitios" placeholder="Escribe o elige uno ya usado"
                   onChange={(e) => setF({ ...f, pickup: e.target.value })} />
@@ -682,11 +818,41 @@ export function ServicioForm({
               {sugerencias("sug-areas", sugAreas)}
             </div>
 
-            {seccion(esEmergencia ? "Horas efectivas" : esAlquiler ? "Horas máquina" : "Tiempos de atención")}
+            {seccion(esVolqueta ? "Horas efectivas" : esAlquiler ? "Horas máquina" : "Tiempos de atención")}
             <div style={gridAuto}>
+              {esRecoleccion && <>
+                <label className="field">Hora de salida
+                  <input className="input" type="time" value={f.horaSalida} onChange={(e) => setF({ ...f, horaSalida: e.target.value })} />
+                </label>
+                <label className="field">Hora de retorno
+                  <input className="input" type="time" value={f.horaRetorno} onChange={(e) => setF({ ...f, horaRetorno: e.target.value })} />
+                </label>
+                <label className="field">Horómetro inicial
+                  <input className="input num" type="number" min="0" step="0.1" value={f.horometroInicial}
+                    aria-invalid={horometroInvalido || undefined}
+                    onChange={(e) => cambiaHorometro({ horometroInicial: e.target.value })} />
+                </label>
+                <label className="field">Horómetro final
+                  <input className="input num" type="number" min="0" step="0.1" value={f.horometroFinal}
+                    aria-invalid={horometroInvalido || undefined} aria-describedby={horometroInvalido ? "horometro-error" : undefined}
+                    onChange={(e) => cambiaHorometro({ horometroFinal: e.target.value })} />
+                </label>
+              </>}
+              {esRecoleccion && f.serviceType === "Emergencia" && <>
+                <label className="field">Hora de la solicitud
+                  <input className="input" type="time" value={f.hourReq} onChange={(e) => setF({ ...f, hourReq: e.target.value })} />
+                </label>
+                <label className="field">Hora de llegada al sitio
+                  <input className="input" type="time" value={f.hourAtt} onChange={(e) => setF({ ...f, hourAtt: e.target.value })} />
+                </label>
+                <label className="field">Tiempo de respuesta <span className="muted" style={{ fontWeight: 400 }}>· máximo 3 h</span>
+                  <input className="input num" readOnly value={(() => { const h = respHours(f.hourReq, f.hourAtt); if (h == null) return ""; return `${h} h${h > 3 ? " · fuera de tiempo" : ""}`; })()} style={{ background: "var(--surface-2)", color: (respHours(f.hourReq, f.hourAtt) ?? 0) > 3 ? "var(--high)" : "var(--text-2)" }} />
+                </label>
+              </>}
               {esAlquiler && (
-                <label className="field">{esEmergencia ? "Horas efectivas *" : "Horas máquina usadas *"}
+                <label className="field">{esVolqueta ? "Horas efectivas *" : "Horas máquina usadas *"}{horometroCalculado && <span className="muted" style={{ fontWeight: 400 }}> · según horómetro</span>}
                   <input className="input num" type="number" min="0" step="0.5" required value={f.horasMaquina} placeholder="Ej. 8"
+                    readOnly={horometroCalculado} style={horometroCalculado ? { background: "var(--surface-2)", color: "var(--text-2)" } : undefined}
                     onChange={(e) => setF(conValor({ ...f, horasMaquina: e.target.value }))} />
                 </label>
               )}
@@ -701,6 +867,8 @@ export function ServicioForm({
               </label>}
             </div>
 
+            {horometroInvalido && <div id="horometro-error" role="alert" style={{ color: "var(--high)", fontSize: 12.5 }}>El horómetro final no puede ser menor que el inicial.</div>}
+
             {seccion("Financiero")}
             {esAlquiler && (() => {
               const d = ivaDe(f); const r = tarifaSel(f);
@@ -709,12 +877,12 @@ export function ServicioForm({
               return (
                 <div style={{ display: "grid", gap: 8 }}>
                   <div style={fila}>
-                    <span><b>{esEmergencia ? "Servicio de volqueta" : "Alquiler del equipo"}</b><br /><span className="muted" style={{ fontSize: 12 }}>{r ? `${d.horas} h × ${fmtCOP(d.unit)} (${esEmergencia ? "hora" : "hora máquina"})` : esEmergencia ? "Selecciona volqueta, zona y horas" : "Selecciona equipo, zona y horas"}</span></span>
-                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}><input type="checkbox" checked={f.ivaAlquiler} onChange={(e) => setF({ ...f, ivaAlquiler: e.target.checked })} /> IVA 19%</label>
+                    <span><b>{esVolqueta ? "Servicio de volqueta" : "Alquiler del equipo"}</b><br /><span className="muted" style={{ fontSize: 12 }}>{r ? `${d.horas} h × ${fmtCOP(d.unit)} (${esVolqueta ? "hora" : "hora máquina"})` : esRecoleccion ? "Selecciona volqueta, tipo de servicio y horas" : esEmergencia ? "Selecciona volqueta, zona y horas" : "Selecciona equipo, zona y horas"}</span></span>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }} title={esRecoleccion ? "El precio del contrato incluye IVA" : undefined}><input type="checkbox" checked={f.ivaAlquiler} disabled={esRecoleccion} onChange={(e) => setF({ ...f, ivaAlquiler: e.target.checked })} /> IVA 19%</label>
                     <span className="num" style={{ textAlign: "right" }}>Base <b>{fmtCOP(d.alq)}</b></span>
                     <span className="num" style={{ textAlign: "right" }}>IVA <b>{fmtCOP(d.ivaAlq)}</b></span>
                   </div>
-                  {!esEmergencia && <div style={fila}>
+                  {!esVolqueta && <div style={fila}>
                     <span><b>Transporte del equipo</b><br /><span className="muted" style={{ fontSize: 12 }}>{d.viajes > 0 && d.tr ? `${d.viajes} viaje(s) × ${fmtCOP(d.vViaje)}` : "Sin viajes"}</span></span>
                     <label style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}><input type="checkbox" checked={f.ivaTransporte} onChange={(e) => setF({ ...f, ivaTransporte: e.target.checked })} /> IVA 19%</label>
                     <span className="num" style={{ textAlign: "right" }}>Base <b>{fmtCOP(d.trans)}</b></span>

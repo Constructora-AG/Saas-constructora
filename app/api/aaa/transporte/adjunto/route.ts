@@ -3,6 +3,7 @@ import { supabaseTransporte } from "@/lib/supabase/server";
 import { transporteConfigured } from "@/lib/demo";
 import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 import { authorizeNamespaceValue } from "@/lib/transporte/serverNamespace";
+import { validarAdjuntoRecoleccion } from "@/lib/transporte/validacionRecoleccion";
 
 // POST /api/aaa/transporte/adjunto
 // Sube un adjunto (foto/PDF en base64) al bucket público «evidencias» de
@@ -29,6 +30,11 @@ export async function POST(req: NextRequest) {
   const bytes = Buffer.from(m[2], "base64");
   if (bytes.length > MAX_BYTES) return NextResponse.json({ error: "El adjunto supera 12 MB" }, { status: 400 });
   const type = String(b.type || m[1] || "application/octet-stream");
+  // Recolección: solo fotos o PDF, ligados a un mes y un registro.
+  if (namespace.ns === "recoleccion") {
+    const invalido = validarAdjuntoRecoleccion(type, m[1], b.monthKey, b.serviceId);
+    if (invalido) return NextResponse.json(invalido, { status: 400 });
+  }
   const ns = namespace.ns;
   const monthKey = /^\d{4}-\d{2}$/.test(String(b.monthKey ?? "")) ? String(b.monthKey) : "sin-mes";
   const serviceId = String(b.serviceId ?? "s").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60) || "s";

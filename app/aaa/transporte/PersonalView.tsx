@@ -17,9 +17,12 @@ interface FormPersonal {
   cedula: string;
   venceLicencia: string;
   activo: "si" | "no";
+  /** Contrato de Recolección */
+  rol: "conductor" | "ayudante";
+  arl: "si" | "no";
 }
 
-const FORM_VACIO: FormPersonal = { nombre: "", cedula: "", venceLicencia: "", activo: "si" };
+const FORM_VACIO: FormPersonal = { nombre: "", cedula: "", venceLicencia: "", activo: "si", rol: "conductor", arl: "no" };
 
 export function PersonalView({ t }: ViewProps) {
   const ses = useTransporteSession();
@@ -30,6 +33,9 @@ export function PersonalView({ t }: ViewProps) {
   const personal = t.admin?.personal ?? [];
   // Aislamiento por rol: sin permiso «personal» la vista es de solo lectura.
   const canEdit = ses.canEditPersonal();
+  // Contrato de Recolección: conductores y ayudantes (volqueta sencilla), todos con ARL nivel V.
+  const esRecoleccion = t.ns === "recoleccion";
+  const sinArl = esRecoleccion ? personal.filter((p) => p.activo !== false && !p.arlNivelV).length : 0;
 
   const guardarNucleo = async () => {
     const nombre = form.nombre.trim();
@@ -42,6 +48,7 @@ export function PersonalView({ t }: ViewProps) {
           // Actualización: solo sobreescribe campos no vacíos (activo siempre).
           if (form.cedula.trim()) p.cedula = form.cedula.trim();
           if (form.venceLicencia) p.venceLicencia = form.venceLicencia;
+          if (esRecoleccion) { p.rol = form.rol; p.arlNivelV = form.arl === "si"; }
           p.activo = activo;
         } else {
           a.personal.push({
@@ -49,6 +56,7 @@ export function PersonalView({ t }: ViewProps) {
             cedula: form.cedula.trim(),
             activo,
             venceLicencia: form.venceLicencia || null,
+            ...(esRecoleccion ? { rol: form.rol, arlNivelV: form.arl === "si" } : {}),
           });
         }
       });
@@ -76,6 +84,8 @@ export function PersonalView({ t }: ViewProps) {
       cedula: p.cedula || "",
       venceLicencia: p.venceLicencia || "",
       activo: p.activo !== false ? "si" : "no",
+      rol: p.rol ?? "conductor",
+      arl: p.arlNivelV ? "si" : "no",
     });
   };
 
@@ -95,12 +105,20 @@ export function PersonalView({ t }: ViewProps) {
 
   return (
     <>
-      <div className="section-title">Personal — conductores</div>
+      <div className="section-title">{esRecoleccion ? "Personal — conductores y ayudantes" : "Personal — conductores"}</div>
       <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>
         Catálogo de conductores: alimenta el desplegable de conductores al registrar servicios y las
         alertas de licencias por vencer. Editan Gerencia y los perfiles con permiso de «Personal»;
         los demás la consultan en solo lectura.
       </p>
+
+      {esRecoleccion && (
+        <div className="info-bar" role="status" style={{ marginBottom: 14, ...(sinArl ? { background: "var(--warn-soft)", borderColor: "var(--warn)" } : {}) }}>
+          Conductores y ayudantes deben estar afiliados a riesgos laborales en <b>nivel V</b>; la volqueta sencilla lleva
+          hasta 2 ayudantes con pala y cepillo (Cláusula Cuarta). La seguridad social al día se exige para radicar cada factura.
+          {sinArl ? ` ${sinArl} persona(s) activa(s) sin ARL nivel V confirmada.` : ""}
+        </div>
+      )}
 
       {!canEdit && (
         <div className="info-bar" style={{ marginBottom: 14 }}>
@@ -124,7 +142,23 @@ export function PersonalView({ t }: ViewProps) {
           <label className="field">N° de identificación
             <input className="input" value={form.cedula} onChange={(e) => setForm((f) => ({ ...f, cedula: e.target.value }))} />
           </label>
-          <label className="field">Vence licencia
+          {esRecoleccion && (
+            <label className="field">Rol
+              <select value={form.rol} onChange={(e) => setForm((f) => ({ ...f, rol: e.target.value as "conductor" | "ayudante" }))}>
+                <option value="conductor">Conductor</option>
+                <option value="ayudante">Ayudante</option>
+              </select>
+            </label>
+          )}
+          {esRecoleccion && (
+            <label className="field">ARL nivel V
+              <select value={form.arl} onChange={(e) => setForm((f) => ({ ...f, arl: e.target.value as "si" | "no" }))}>
+                <option value="si">Afiliado</option>
+                <option value="no">Sin confirmar</option>
+              </select>
+            </label>
+          )}
+          <label className="field">{esRecoleccion ? "Vence licencia (conductores)" : "Vence licencia"}
             <input
               className="input"
               type="date"
@@ -153,23 +187,27 @@ export function PersonalView({ t }: ViewProps) {
           <thead>
             <tr>
               <th>Nombre</th>
+              {esRecoleccion && <th>Rol</th>}
               <th>Identificación</th>
               <th>Vence licencia</th>
+              {esRecoleccion && <th>ARL nivel V</th>}
               <th>Estado</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {personal.length === 0 && (
-              <tr><td colSpan={5} className="muted" style={{ padding: 18 }}>Sin personal en el catálogo.</td></tr>
+              <tr><td colSpan={esRecoleccion ? 7 : 5} className="muted" style={{ padding: 18 }}>Sin personal en el catálogo.</td></tr>
             )}
             {personal.map((p) => {
               const inactivo = p.activo === false;
               return (
                 <tr key={p.nombre} style={inactivo ? { opacity: 0.5 } : undefined}>
                   <td><b>{p.nombre}</b></td>
+                  {esRecoleccion && <td>{p.rol === "ayudante" ? "Ayudante" : "Conductor"}</td>}
                   <td className="num">{p.cedula || "—"}</td>
-                  <td><VencBadge fecha={p.venceLicencia} /></td>
+                  <td>{esRecoleccion && p.rol === "ayudante" ? <span className="muted">No aplica</span> : <VencBadge fecha={p.venceLicencia} />}</td>
+                  {esRecoleccion && <td><span className={`badge ${p.arlNivelV ? "ok" : "warn"}`}>{p.arlNivelV ? "Afiliado" : "Sin confirmar"}</span></td>}
                   <td><span className={`badge ${inactivo ? "high" : "ok"}`}>{inactivo ? "Inactivo" : "Activo"}</span></td>
                   <td className="row-actions" style={{ whiteSpace: "nowrap" }}>
                     {canEdit && (

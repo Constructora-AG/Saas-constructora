@@ -11,6 +11,7 @@
 import { useState, type FormEvent } from "react";
 import type { ViewProps } from "@/lib/transporte/useTransporte";
 import { num } from "@/lib/transporte/model";
+import { ANTIGUEDAD_MAX_RECOLECCION, CAPACIDAD_MIN_M3, DISPONIBILIDAD_MIN_RECOLECCION, volquetaDe } from "@/lib/transporte/constants";
 import { useTransporteSession } from "@/lib/transporte/session";
 import { MsgInline, VencBadge } from "./CatalogoTabla";
 
@@ -23,9 +24,15 @@ interface FormFlota {
   activo: "si" | "no";
   venceSoat: string;
   venceTecno: string;
+  /** Contrato de Recolección */
+  numeroInterno: string;
+  modelo: string;
 }
 
-const FORM_VACIO: FormFlota = { plate: "", tipo: "", capacity: "", driver: "", contratista: "", activo: "si", venceSoat: "", venceTecno: "" };
+const FORM_VACIO: FormFlota = { plate: "", tipo: "", capacity: "", driver: "", contratista: "", activo: "si", venceSoat: "", venceTecno: "", numeroInterno: "", modelo: "" };
+
+/** Contrato de Recolección: tipos de volqueta del contrato (Grupo 3). */
+const TIPOS_VOLQUETA = ["Volqueta dobletroque", "Volqueta sencilla"];
 
 export function FlotaView({ t }: ViewProps) {
   const ses = useTransporteSession();
@@ -39,6 +46,20 @@ export function FlotaView({ t }: ViewProps) {
   const canEdit = ses.canEditFleet();
   // Transporte AAA: contratista (propietario) de cada placa, para el detalle de dinero en contratistas.
   const conContratista = t.ns === "transporte";
+  // Contrato de Recolección: volquetas en m³, N° interno, modelo (antigüedad) y disponibilidad mínima.
+  const esRecoleccion = t.ns === "recoleccion";
+  const anioActual = new Date().getFullYear();
+  const activosPor = (tipo: "dobletroque" | "sencilla") => vehiculos.filter((v) => v.activo !== false && volquetaDe(v.tipo || v.marca) === tipo).length;
+  /** Observaciones de un vehículo frente a los requisitos del contrato (Cláusula Cuarta). */
+  const avisosRecoleccion = (v: (typeof vehiculos)[number]): string[] => {
+    const out: string[] = [];
+    const tipo = volquetaDe(v.tipo || v.marca);
+    if (!tipo) out.push("Sin tipo de volqueta");
+    else if (v.capacity !== "" && v.capacity != null && num(v.capacity) < CAPACIDAD_MIN_M3[tipo]) out.push(`Volco menor a ${CAPACIDAD_MIN_M3[tipo]} m³`);
+    const anio = Number(v.modelo);
+    if (Number.isFinite(anio) && anio > 1900 && anioActual - anio > ANTIGUEDAD_MAX_RECOLECCION) out.push(`Más de ${ANTIGUEDAD_MAX_RECOLECCION} años`);
+    return out;
+  };
   const contratistasConocidos = [...new Set(vehiculos.map((v) => (v.contratista ?? "").trim()).filter(Boolean))].sort();
 
   const setF = (k: keyof FormFlota) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -59,6 +80,8 @@ export function FlotaView({ t }: ViewProps) {
           if (form.venceSoat) v.venceSoat = form.venceSoat;
           if (form.venceTecno) v.venceTecno = form.venceTecno;
           if (conContratista) v.contratista = form.contratista.trim() || undefined;
+          if (esRecoleccion && form.numeroInterno.trim()) v.numeroInterno = form.numeroInterno.trim();
+          if (esRecoleccion && form.modelo.trim()) v.modelo = form.modelo.trim();
           v.activo = activo;
         } else {
           a.vehiculos.push({
@@ -70,6 +93,7 @@ export function FlotaView({ t }: ViewProps) {
             activo,
             venceSoat: form.venceSoat || null,
             venceTecno: form.venceTecno || null,
+            ...(esRecoleccion ? { numeroInterno: form.numeroInterno.trim() || undefined, modelo: form.modelo.trim() || null } : {}),
           });
         }
       });
@@ -101,6 +125,8 @@ export function FlotaView({ t }: ViewProps) {
       activo: v.activo !== false ? "si" : "no",
       venceSoat: v.venceSoat || "",
       venceTecno: v.venceTecno || "",
+      numeroInterno: v.numeroInterno || "",
+      modelo: v.modelo === null || v.modelo === undefined ? "" : String(v.modelo),
     });
   };
 
@@ -120,13 +146,25 @@ export function FlotaView({ t }: ViewProps) {
 
   return (
     <>
-      <div className="section-title">Flota de vehículos</div>
+      <div className="section-title">{esRecoleccion ? "Flota de volquetas" : "Flota de vehículos"}</div>
       <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>
         Catálogo único de la flota: alimenta el desplegable de placas al registrar servicios (la
         capacidad y el conductor designado se autollenan) y las alertas de vencimiento de SOAT y
         tecnomecánica. Editan Gerencia y los perfiles con permiso de «Vehículos»; los demás la
         consultan en solo lectura.
       </p>
+
+      {esRecoleccion && (() => {
+        const faltan = (["dobletroque", "sencilla"] as const).filter((k) => activosPor(k) < DISPONIBILIDAD_MIN_RECOLECCION[k]);
+        return (
+          <div className="info-bar" role="status" style={{ marginBottom: 14, ...(faltan.length ? { background: "var(--warn-soft)", borderColor: "var(--warn)" } : {}) }}>
+            <b>Disponibilidad mínima del contrato:</b> {DISPONIBILIDAD_MIN_RECOLECCION.dobletroque} dobletroques y {DISPONIBILIDAD_MIN_RECOLECCION.sencilla} sencillas
+            (activas: {activosPor("dobletroque")} dobletroque · {activosPor("sencilla")} sencilla).
+            {faltan.length ? ` Faltan volquetas ${faltan.join(" y ")}.` : " Se cumple."}
+            {" "}Volco mínimo: {CAPACIDAD_MIN_M3.dobletroque} m³ (dobletroque) y {CAPACIDAD_MIN_M3.sencilla} m³ (sencilla) · antigüedad máxima {ANTIGUEDAD_MAX_RECOLECCION} años.
+          </div>
+        );
+      })()}
 
       {!canEdit && (
         <div className="info-bar" style={{ marginBottom: 14 }}>
@@ -147,10 +185,28 @@ export function FlotaView({ t }: ViewProps) {
               onChange={(e) => setForm((f) => ({ ...f, plate: e.target.value.toUpperCase() }))}
             />
           </label>
+          {esRecoleccion ? (
+            <>
+              <label className="field">Tipo de volqueta
+                <select value={form.tipo} onChange={setF("tipo")}>
+                  <option value="">— Selecciona —</option>
+                  {TIPOS_VOLQUETA.map((x) => <option key={x} value={x}>{x}</option>)}
+                  {form.tipo && !TIPOS_VOLQUETA.includes(form.tipo) && <option value={form.tipo}>{form.tipo}</option>}
+                </select>
+              </label>
+              <label className="field">N° interno
+                <input className="input" placeholder="Ej. VD-03" value={form.numeroInterno} onChange={setF("numeroInterno")} />
+              </label>
+              <label className="field">Modelo (año)
+                <input className="input" type="number" min={1950} max={anioActual + 1} step={1} value={form.modelo} onChange={setF("modelo")} />
+              </label>
+            </>
+          ) : (
           <label className="field">Tipo / marca
             <input className="input" placeholder="Ej. Camión plancha JAC" value={form.tipo} onChange={setF("tipo")} />
           </label>
-          <label className="field">Capacidad (Ton)
+          )}
+          <label className="field">{esRecoleccion ? "Capacidad del volco (m³)" : "Capacidad (Ton)"}
             <input className="input" type="number" min={0} step="0.1" value={form.capacity} onChange={setF("capacity")} />
           </label>
           <label className="field">Conductor designado
@@ -192,9 +248,10 @@ export function FlotaView({ t }: ViewProps) {
           <thead>
             <tr>
               <th>Placa</th>
-              <th>Tipo / marca</th>
+              {esRecoleccion && <th>N° interno</th>}
+              <th>{esRecoleccion ? "Tipo" : "Tipo / marca"}</th>
               <th>Modelo</th>
-              <th style={{ textAlign: "right" }}>Cap. (Ton)</th>
+              <th style={{ textAlign: "right" }}>{esRecoleccion ? "Volco (m³)" : "Cap. (Ton)"}</th>
               <th>Conductor</th>
               {conContratista && <th>Contratista</th>}
               <th>SOAT</th>
@@ -205,13 +262,17 @@ export function FlotaView({ t }: ViewProps) {
           </thead>
           <tbody>
             {vehiculos.length === 0 && (
-              <tr><td colSpan={conContratista ? 10 : 9} className="muted" style={{ padding: 18 }}>Sin vehículos en el catálogo.</td></tr>
+              <tr><td colSpan={conContratista || esRecoleccion ? 10 : 9} className="muted" style={{ padding: 18 }}>Sin vehículos en el catálogo.</td></tr>
             )}
             {vehiculos.map((v) => {
               const inactivo = v.activo === false;
               return (
                 <tr key={v.plate} style={inactivo ? { opacity: 0.5 } : undefined}>
-                  <td><b>{v.plate}</b></td>
+                  <td>
+                    <b>{v.plate}</b>
+                    {esRecoleccion && avisosRecoleccion(v).map((a) => <span key={a} className="badge warn" style={{ display: "block", marginTop: 3, width: "fit-content" }}>{a}</span>)}
+                  </td>
+                  {esRecoleccion && <td>{v.numeroInterno || "—"}</td>}
                   <td>{v.tipo || v.marca || "—"}</td>
                   <td>{v.modelo === null || v.modelo === undefined || v.modelo === "" ? "—" : String(v.modelo)}</td>
                   <td className="num" style={{ textAlign: "right" }}>

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { exigirCualquieraDeModulos, esRespuestaAutorizacion } from "@/lib/auth/servidor";
 import { resolveTransporteNamespace } from "@/lib/transporte/namespace";
+import { vencimientoPrefactura } from "@/lib/aaa/catalogo";
+import { validarFechasPrefacturaRecoleccion, validarItemsPrefacturaRecoleccion } from "@/lib/transporte/validacionRecoleccion";
 
 /** Cada contrato tiene su módulo de prefacturas: entra quien ve Proyecto Triple A o ese contrato. */
 function exigirAccesoContrato(contrato: unknown) {
@@ -9,13 +11,12 @@ function exigirAccesoContrato(contrato: unknown) {
   return exigirCualquieraDeModulos(ns ? ["aaa", ns.modulo] : ["aaa"]);
 }
 /** Primer filtro (antes de leer la BD): sesión con acceso a algún módulo de Triple A. */
-const MODULOS_TRIPLE_A = ["aaa", "transporte", "alquiler", "emergencia", "contratos"];
+const MODULOS_TRIPLE_A = ["aaa", "transporte", "alquiler", "emergencia", "recoleccion", "contratos"];
 import {
   aplicarTransicionPrefactura,
   contratoValido,
   ESTADOS_PREFACTURA,
   limpiarAdjunto,
-  mas30Dias,
   periodoTexto,
   validarItems,
   type ItemBody,
@@ -51,8 +52,12 @@ export async function POST(req: NextRequest) {
   const acceso = await exigirAccesoContrato(b.contrato);
   if (esRespuestaAutorizacion(acceso)) return acceso;
   if (!b.fecha_generacion) return NextResponse.json({ error: "Falta la fecha de generación" }, { status: 400 });
-  // Vencimiento: SIEMPRE 30 días calendario después de la generación (regla AG)
-  b.fecha_vencimiento = mas30Dias(String(b.fecha_generacion)) ?? b.fecha_vencimiento ?? null;
+  if (b.contrato === "recoleccion") {
+    const invalido = validarFechasPrefacturaRecoleccion(b) ?? validarItemsPrefacturaRecoleccion(b.items);
+    if (invalido) return NextResponse.json(invalido, { status: 400 });
+  }
+  // Vencimiento: 30 días calendario después de la generación (regla AG); Recolección, 45 (Cláusula Tercera).
+  b.fecha_vencimiento = vencimientoPrefactura(String(b.contrato), String(b.fecha_generacion)) || b.fecha_vencimiento || null;
 
   const v = validarItems(String(b.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : [], b.origen === "modulo" || b.origen === "transporte");
   if ("error" in v) return NextResponse.json({ error: v.error }, { status: 400 });
@@ -148,9 +153,22 @@ export async function PATCH(req: NextRequest) {
   for (const k of ["contrato", "fecha_generacion", "fecha_vencimiento", "centro_costo", "area_aaa", "interventor", "servicios", "periodo", "periodo_desde", "periodo_hasta", "lugar", "nota", "estado", "numero_factura", "fecha_factura"]) {
     if (k in b) patch[k] = b[k];
   }
-  if ("fecha_generacion" in b) patch.fecha_vencimiento = mas30Dias(String(b.fecha_generacion)) ?? patch.fecha_vencimiento ?? actual.fecha_vencimiento;
+  if ("fecha_generacion" in b || "contrato" in b) {
+    const contratoFinal = String(patch.contrato ?? actual.contrato);
+    const generacion = String(patch.fecha_generacion ?? actual.fecha_generacion ?? "");
+    patch.fecha_vencimiento = vencimientoPrefactura(contratoFinal, generacion) || patch.fecha_vencimiento || actual.fecha_vencimiento;
+  }
   if ("periodo_desde" in b || "periodo_hasta" in b) {
     patch.periodo = periodoTexto(patch.periodo_desde ?? actual.periodo_desde, patch.periodo_hasta ?? actual.periodo_hasta, patch.periodo ?? actual.periodo);
+  }
+  // Recolección: fechas válidas y periodo coherente; ítems con valor y siempre IVA 19%.
+  if (String(patch.contrato ?? actual.contrato) === "recoleccion") {
+    const invalido = validarFechasPrefacturaRecoleccion({
+      fecha_generacion: "fecha_generacion" in b ? b.fecha_generacion : undefined,
+      periodo_desde: "periodo_desde" in b ? b.periodo_desde : actual.periodo_desde,
+      periodo_hasta: "periodo_hasta" in b ? b.periodo_hasta : actual.periodo_hasta,
+    }) ?? (b.items !== undefined ? validarItemsPrefacturaRecoleccion(b.items) : null);
+    if (invalido) return NextResponse.json(invalido, { status: 400 });
   }
   if (b.items !== undefined) {
     const v = validarItems(String(patch.contrato ?? actual.contrato), Array.isArray(b.items) ? (b.items as ItemBody[]) : [], Array.isArray(actual.servicios) && actual.servicios.length > 0);

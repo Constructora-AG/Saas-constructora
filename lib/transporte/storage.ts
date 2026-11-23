@@ -28,7 +28,7 @@ const API = "/api/aaa/transporte";
 // transporte_kv: "" para Transporte (claves históricas sin prefijo) y
 // "alquiler:" para Contrato de Alquiler. useTransporte(ns) lo fija al
 // renderizar; los módulos nunca están montados a la vez.
-/** Espacio de datos: "transporte" | "alquiler" | "emergencia" | id de un contrato creado en la app. */
+/** Espacio de datos: "transporte" | "alquiler" | "emergencia" | "recoleccion" | id de un contrato creado en la app. */
 export type ModuloNs = ModuloContrato | (string & {});
 const prefijoDe = (ns: ModuloNs) => (ns === "transporte" ? "" : `${ns}:`);
 
@@ -256,6 +256,9 @@ export function storageFor(ns: ModuloNs) {
     const ajeno = !!t && (ns === "alquiler"
       ? !t.categorias.some((c) => /alquiler/i.test(c.label))
       : ns === "emergencia" ? (t.categorias.length === 0 || t.categorias.some((c) => /^cat\d+$/.test(c.id)))
+      // Recolección: venía de un contrato creado en la app (tarifario vacío) → se siembra
+      // el del contrato; si ya tiene ítems registrados a mano, se conservan.
+      : ns === "recoleccion" ? (t.categorias.length === 0 || t.categorias.some((c) => /^cat\d+$/.test(c.id)))
       // Contrato creado en la app: nunca hereda el tarifario de Transporte AAA.
       : ns !== "transporte" && t.categorias.some((c) => /^cat\d+$/.test(c.id)));
     if (t && !ajeno) return t;

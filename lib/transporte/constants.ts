@@ -506,8 +506,113 @@ export const TARIFARIO_EMERGENCIA_DEFAULT: Tarifario = {
 /** Zonas (centros de costo) del servicio de emergencia: B2B y B2G. */
 export const ZONAS_EMERGENCIA = ["B2B", "B2G"];
 
+// ── Contrato de Recolección (Grupo 3) ──────────────────────────────
+// Contrato CW2239410 con Triple A: recolección, transporte y disposición final
+// de residuos sólidos no compactables con volquetas dobletroque y sencillas.
+// Se cobra por HORAS EFECTIVAS (horómetro) × precio unitario de la hora; los
+// precios están en el formulario de precios (Anexo 2), que se registra a mano
+// en el Tarifario. La fecha de inicio es la del acta de inicio (Administración).
+export const CONTRATO_RECOLECCION = {
+  numero: "CW2239410",
+  objeto: "Recolección, transporte y disposición final de residuos sólidos no susceptibles de compactación, mediante volquetas dobletroque y sencillas (Grupo 3)",
+  modalidad: "Invitación abierta a ofertar IAO No. 19-2026",
+  /** Cláusula Tercera: hasta $3.746.015.451, IVA incluido. */
+  valor: 3746015451,
+  /** Cláusula Segunda: 12 meses desde el acta de inicio (aún sin fecha) o hasta agotar el valor. */
+  inicio: "",
+  fin: "",
+  /** Cláusula Tercera: pago dentro de los 45 días calendario siguientes a la radicación. */
+  diasPago: 45,
+};
+
+/**
+ * Tarifario del Contrato de Recolección: tipo de volqueta × tipo de servicio
+ * (que es también el área AAA solicitante). Precio por hora SIN IVA, en 0
+ * hasta que se registren los del formulario de precios (Anexo 2).
+ */
+export const TARIFARIO_RECOLECCION_DEFAULT: Tarifario = {
+  recargos: { nocturno: 0, dominicalFestivo: 0 },
+  categorias: [
+    {
+      id: "rec1",
+      label: "Ítem 1 · Servicio de Volqueta dobletroque",
+      capacidad: "",
+      rutas: [
+        { id: "1.1", label: "Recolección y Transporte (HR)", unitario: 0 },       // 7.200 h proyectadas
+        { id: "1.2", label: "Servicios Especiales B2B y B2G (HR)", unitario: 0 }, // 4.160 h proyectadas
+      ],
+    },
+    {
+      id: "rec2",
+      label: "Ítem 2 · Servicio de Volqueta sencilla (incluye ayudantes)",
+      capacidad: "",
+      rutas: [
+        { id: "2.1", label: "Recolección y Transporte (HR)", unitario: 0 },       // 2.880 h proyectadas
+        { id: "2.2", label: "Servicios Especiales B2B y B2G (HR)", unitario: 0 }, // 2.448 h proyectadas
+      ],
+    },
+  ],
+};
+
+/** Actividades de la Planilla de Despacho de Equipos (Cláusula Cuarta). */
+export const ACTIVIDADES_RECOLECCION = [
+  "Escombros",
+  "Limpieza de vías",
+  "Podas",
+  "Puntos críticos",
+  "Raspe",
+  "Recolección de barrido",
+  "Servicios especiales",
+];
+
+/** Áreas AAA que solicitan servicios (= tipos de servicio del tarifario). */
+export const AREAS_RECOLECCION = ["Recolección y Transporte", "Servicios Especiales B2B y B2G"];
+
+export type VolquetaRecoleccion = "dobletroque" | "sencilla";
+export type ServicioRecoleccion = "rt" | "b2b";
+
+/**
+ * Proyección presupuestal de consumo a 12 meses (Cláusula Cuarta). Son
+ * proyecciones ajustables: Triple A no está obligada a consumir esas horas.
+ */
+export const ALCANCE_RECOLECCION: ReadonlyArray<{ volqueta: VolquetaRecoleccion; servicio: ServicioRecoleccion; equipo: string; area: string; horas: number }> = [
+  { volqueta: "dobletroque", servicio: "rt", equipo: "Volqueta dobletroque", area: "Recolección y Transporte", horas: 7200 },
+  { volqueta: "dobletroque", servicio: "b2b", equipo: "Volqueta dobletroque", area: "Servicios Especiales B2B y B2G", horas: 4160 },
+  { volqueta: "sencilla", servicio: "b2b", equipo: "Volqueta sencilla (incluye ayudantes)", area: "Servicios Especiales B2B y B2G", horas: 2448 },
+  { volqueta: "sencilla", servicio: "rt", equipo: "Volqueta sencilla (incluye ayudantes)", area: "Recolección y Transporte", horas: 2880 },
+];
+
+/** Capacidad mínima del volco por tipo de volqueta, en m³ (Cláusula Cuarta, XIV). */
+export const CAPACIDAD_MIN_M3: Record<VolquetaRecoleccion, number> = { dobletroque: 14, sencilla: 7 };
+/** Disponibilidad mínima de la flota (Cláusula Cuarta). */
+export const DISPONIBILIDAD_MIN_RECOLECCION: Record<VolquetaRecoleccion, number> = { dobletroque: 3, sencilla: 2 };
+/** Antigüedad máxima de los vehículos, en años (Cláusula Cuarta, I). */
+export const ANTIGUEDAD_MAX_RECOLECCION = 15;
+
+/** Tipo de volqueta a partir de un texto (equipo del registro, tipo del vehículo o ítem del tarifario). */
+export function volquetaDe(texto: string | undefined | null): VolquetaRecoleccion | null {
+  const s = String(texto ?? "").toLowerCase();
+  if (/sencilla/.test(s)) return "sencilla";
+  if (/doble\s*-?\s*tro(qu|k)e|dobletroque|doble troque/.test(s)) return "dobletroque";
+  return null;
+}
+
+/** Tipo de servicio a partir del área AAA o de la tarifa elegida. */
+export function servicioRecoleccionDe(texto: string | undefined | null): ServicioRecoleccion | null {
+  const s = String(texto ?? "").toLowerCase();
+  if (/especial|b2b|b2g/.test(s)) return "b2b";
+  if (/recolecci/.test(s)) return "rt";
+  return null;
+}
+
+/** Sitio autorizado de disposición final (Cláusula Cuarta). */
+export const DESTINO_RECOLECCION = "Relleno Sanitario Parque Ambiental Los Pocitos";
+
+/** Máximo de ayudantes por servicio; solo aplica a la volqueta sencilla. */
+export const MAX_AYUDANTES_RECOLECCION = 2;
+
 /** Módulos del motor de registros (cada uno con su espacio de datos en transporte_kv). */
-export type ModuloContrato = "transporte" | "alquiler" | "emergencia";
+export type ModuloContrato = "transporte" | "alquiler" | "emergencia" | "recoleccion";
 
 /** Ficha de un módulo: nombre, contrato y prefijo de órdenes. */
 export interface FichaModulo {
@@ -529,10 +634,13 @@ export const FICHA_MODULO: Record<ModuloContrato, FichaModulo> = {
   transporte: { nombre: "Transporte AAA", numero: "IS No. 04-2026", objeto: "Transporte de equipos y maquinaria propia", prefijoOrden: "TP", registros: false, ivaIncluido: false, contrato: null },
   alquiler: { nombre: "Contrato de Alquiler", numero: `N° ${CONTRATO_ALQUILER.numero}`, objeto: CONTRATO_ALQUILER.objeto, prefijoOrden: "AL", registros: true, ivaIncluido: true, contrato: CONTRATO_ALQUILER },
   emergencia: { nombre: "Otro Sí / Emergencia", numero: `N° ${CONTRATO_EMERGENCIA.numero}`, objeto: CONTRATO_EMERGENCIA.objeto, prefijoOrden: "EM", registros: true, ivaIncluido: true, contrato: CONTRATO_EMERGENCIA },
+  // "RE" es el prefijo que la app ya le sugería al «Contrato de Recolección» creado
+  // desde Contratos, cuyos datos (espacio "recoleccion:") pasan a este módulo.
+  recoleccion: { nombre: "Contrato de Recolección", numero: `N° ${CONTRATO_RECOLECCION.numero}`, objeto: CONTRATO_RECOLECCION.objeto, prefijoOrden: "RE", registros: true, ivaIncluido: true, contrato: CONTRATO_RECOLECCION },
 };
 
 export function esModuloBase(ns: string): ns is ModuloContrato {
-  return ns === "transporte" || ns === "alquiler" || ns === "emergencia";
+  return ns === "transporte" || ns === "alquiler" || ns === "emergencia" || ns === "recoleccion";
 }
 
 // ── Contratos creados desde la app ─────────────────────────────────
@@ -557,8 +665,8 @@ export interface ContratoDinamico {
 export const KEY_CONTRATOS = "contratos";
 
 /** Espacios de datos y prefijos de orden que no puede usar un contrato nuevo. */
-export const NS_RESERVADOS = ["transporte", "alquiler", "emergencia", "contratos", "services", "tarifario", "adminconfig"];
-export const PREFIJOS_RESERVADOS = ["TP", "AL", "EM", "PF"];
+export const NS_RESERVADOS = ["transporte", "alquiler", "emergencia", "recoleccion", "contratos", "services", "tarifario", "adminconfig"];
+export const PREFIJOS_RESERVADOS = ["TP", "AL", "EM", "RE", "PF"];
 
 export function fichaDinamica(c: ContratoDinamico): FichaModulo {
   return {
@@ -576,6 +684,7 @@ export function fichaDinamica(c: ContratoDinamico): FichaModulo {
 /** Tarifario inicial de cada módulo (cada uno con el suyo; los creados en la app arrancan vacíos). */
 export function tarifarioDefaultDe(ns: string): Tarifario {
   const t = ns === "alquiler" ? TARIFARIO_ALQUILER_DEFAULT : ns === "emergencia" ? TARIFARIO_EMERGENCIA_DEFAULT
+    : ns === "recoleccion" ? TARIFARIO_RECOLECCION_DEFAULT
     : ns === "transporte" ? TARIFARIO_DEFAULT : { recargos: { nocturno: 0, dominicalFestivo: 0 }, categorias: [] };
   return JSON.parse(JSON.stringify(t)) as Tarifario;
 }

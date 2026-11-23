@@ -419,7 +419,7 @@ export function AdminView({ t }: ViewProps) {
         )}
 
         {ses.profileCan("areas") && (
-          <Seccion titulo="Áreas AAA" sub="Áreas solicitantes de Triple A.">
+          <Seccion titulo="Áreas AAA" sub={t.ns === "recoleccion" ? "Áreas solicitantes de Triple A: Recolección y Transporte y Servicios Especiales B2B y B2G (= tipos de servicio del tarifario)." : "Áreas solicitantes de Triple A."}>
             <ListaMaestra
               items={admin.areas}
               placeholder="Nombre del área"
@@ -431,7 +431,8 @@ export function AdminView({ t }: ViewProps) {
           </Seccion>
         )}
 
-        {ses.profileCan("equipos") && (
+        {/* Recolección: no transporta maquinaria (catálogo de equipos sin uso en este contrato). */}
+        {ses.profileCan("equipos") && t.ns !== "recoleccion" && (
           <Seccion titulo="Equipos" sub="Maquinaria transportada (el peso se autollena al registrar).">
             <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
               {admin.equipos.length === 0 && <span className="muted" style={{ fontSize: 13 }}>Lista vacía.</span>}
@@ -472,7 +473,7 @@ export function AdminView({ t }: ViewProps) {
         )}
 
         {ses.profileCan("festivos") && (
-          <Seccion titulo="Festivos" sub="Los oficiales (Ley Emiliani) no son editables; agrega los adicionales.">
+          <Seccion titulo="Festivos" sub={t.ns === "recoleccion" ? "Calendario de festivos (Ley Emiliani) para alertas y reportes; este contrato no cobra recargos dominicales ni festivos." : "Los oficiales (Ley Emiliani) no son editables; agrega los adicionales."}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
               {FESTIVOS_DEFAULT.map((f) => (
                 <Chip key={f.date} title="Calendario oficial (no editable)">
@@ -507,7 +508,9 @@ export function AdminView({ t }: ViewProps) {
         {esGerencia && (
           <Seccion
             titulo="Vigencia y valor del contrato"
-            sub="Al guardar, el panel recalcula los meses visibles, la línea de tiempo y el saldo (fecha fin inclusiva). Cada módulo tiene su propio valor."
+            sub={t.ns === "recoleccion"
+              ? "Inicio = fecha del acta de inicio (requiere pólizas aprobadas); fin = 12 meses después o antes si se agota el valor (Cláusula Segunda). Valor: $3.746.015.451 IVA incluido (Cláusula Tercera). Al guardar, el panel recalcula meses, línea de tiempo y saldo."
+              : "Al guardar, el panel recalcula los meses visibles, la línea de tiempo y el saldo (fecha fin inclusiva). Cada módulo tiene su propio valor."}
           >
             <form onSubmit={guardarContrato} style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
