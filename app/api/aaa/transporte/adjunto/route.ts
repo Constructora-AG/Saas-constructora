@@ -39,5 +39,6 @@ export async function POST(req: NextRequest) {
   const { error } = await supa.storage.from(BUCKET).upload(path, bytes, { contentType: type, upsert: true });
   if (error) return NextResponse.json({ error: `Storage: ${error.message}` }, { status: 500 });
   const { data } = supa.storage.from(BUCKET).getPublicUrl(path);
-  return NextResponse.json({ ok: true, url: data.publicUrl, path, name: String(b.name ?? safeName), type, size: bytes.length });
+  // El Supabase autoalojado devuelve http://; se guarda en https para que el navegador pueda descargarla.
+  return NextResponse.json({ ok: true, url: data.publicUrl.replace(/^http:\/\//i, "https://"), path, name: String(b.name ?? safeName), type, size: bytes.length });
 }

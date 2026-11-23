@@ -97,15 +97,25 @@ export function fmtBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+/**
+ * URL de Storage siempre en https. El Supabase autoalojado devuelve getPublicUrl
+ * con http://, y desde la app (https) el navegador bloquea fetch() a http por
+ * contenido mixto: las fotos se veían en la tabla (las <img> se actualizan solas)
+ * pero no entraban al PDF ni al Excel.
+ */
+export function urlSegura(url: string): string {
+  return url.replace(/^http:\/\//i, "https://");
+}
+
 /** Fuente mostrable del adjunto: URL de Storage o data URL legado. */
 export function adjuntoSrc(file: AdjuntoFile): string {
-  return file.url || file.dataUrl || "";
+  return file.url ? urlSegura(file.url) : file.dataUrl || "";
 }
 
 /** Bytes del adjunto (descarga desde Storage o decodifica el base64 legado). */
 export async function adjuntoBytesAsync(file: AdjuntoFile): Promise<Uint8Array> {
   if (file.url) {
-    const r = await fetch(file.url);
+    const r = await fetch(urlSegura(file.url));
     if (!r.ok) throw new Error(`No se pudo descargar ${file.name}`);
     return new Uint8Array(await r.arrayBuffer());
   }
@@ -132,7 +142,7 @@ export async function subirAdjunto(file: AdjuntoFile, ctx: { ns: string; monthKe
 
 /** Abre un adjunto en pestaña nueva (URL de Storage, o Blob URL para base64 legado). */
 export function openAttachment(file: AdjuntoFile): void {
-  if (file.url) { window.open(file.url, "_blank", "noopener"); return; }
+  if (file.url) { window.open(urlSegura(file.url), "_blank", "noopener"); return; }
   const d = file.dataUrl || "";
   const i = d.indexOf(",");
   const bin = atob(d.slice(i + 1));

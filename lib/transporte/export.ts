@@ -22,6 +22,7 @@ import {
   CONTRATISTA_NIT,
 } from "./constants";
 import { desgloseValor, fmtCOP, respHours } from "./logic";
+import { urlSegura } from "./media";
 import type { AdjuntoFile, Servicio, Tarifario } from "./model";
 import { aprobadorDe, areaAAADe, num } from "./model";
 
@@ -298,7 +299,7 @@ interface PdfAdjunto {
 async function adjuntoBytes(f: AdjuntoFile): Promise<PdfAdjunto> {
   if (f.url) {
     try {
-      const r = await fetch(f.url);
+      const r = await fetch(urlSegura(f.url));
       if (r.ok) return { name: f.name, type: f.type, bytes: new Uint8Array(await r.arrayBuffer()) };
     } catch { /* cae a vacío */ }
     return { name: f.name, type: f.type, bytes: new Uint8Array() };
@@ -311,7 +312,7 @@ async function adjuntoBase64(f: AdjuntoFile): Promise<string> {
   if (f.dataUrl) return f.dataUrl.split(",")[1] || "";
   if (!f.url) return "";
   try {
-    const r = await fetch(f.url);
+    const r = await fetch(urlSegura(f.url));
     if (!r.ok) return "";
     const bytes = new Uint8Array(await r.arrayBuffer());
     let bin = "";
