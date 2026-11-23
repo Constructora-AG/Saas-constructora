@@ -6,6 +6,7 @@ import { rutaPrefacturasContrato } from "@/lib/aaa/rutasContrato";
 import { DEMO_PREFACTURAS, supabaseConfigured } from "@/lib/demo";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { FICHA_MODULO } from "@/lib/transporte/constants";
+import { exigirModuloAaa } from "../_auth";
 
 export const metadata = { title: "Prefacturas por contrato — AG Constructora" };
 export const dynamic = "force-dynamic";
@@ -14,6 +15,8 @@ const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP",
 const ACTIVAS = new Set(["pendiente_acta_migo", "por_facturar", "pendiente_pago"]);
 
 export default async function PrefacturasPorContrato() {
+  // Resume las prefacturas de TODOS los contratos: solo Proyecto Triple A.
+  await exigirModuloAaa("aaa");
   const filas: Array<{ contrato: string; estado: string; valor_base: number }> = supabaseConfigured()
     ? (((await supabaseAdmin().from("aaa_prefacturas").select("contrato,estado,valor_base")).data ?? []) as Array<{ contrato: string; estado: string; valor_base: number }>)
     : (DEMO_PREFACTURAS as Array<{ contrato: string; estado: string; valor_base: number }>);

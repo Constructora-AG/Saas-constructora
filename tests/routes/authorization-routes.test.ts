@@ -57,7 +57,7 @@ async function loadRoutes(): Promise<Routes> {
 
 test("los endpoints financieros rechazan un usuario sin módulo antes de tocar datos", async () => {
   const r = await loadRoutes();
-  const prefacturas = await r.prefacturas.GET();
+  const prefacturas = await r.prefacturas.GET(new NextRequest("https://app.test/api/aaa/prefacturas?contrato=alquiler"));
   assert.equal(prefacturas.status, 403);
 
   const facturas = await r.facturas.GET(new NextRequest("https://app.test/api/aaa/facturas?contrato=alquiler"));

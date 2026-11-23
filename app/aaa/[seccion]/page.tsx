@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { IconInfo } from "../../icons";
 import { notFound, redirect } from "next/navigation";
 import { AaaClient, type AaaTab } from "../AaaClient";
+import { exigirModuloAaa } from "../_auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,13 @@ const SECCIONES: Record<string, { tab: AaaTab; titulo: string; sub: string }> = 
   consolidado: { tab: "consolidado", titulo: "Consolidado", sub: "Presupuesto contractual vs. consumido, facturado y prefacturas de ambos contratos." },
   alquiler: { tab: "alquiler", titulo: "Contrato Alquiler (Old)", sub: "Contrato de alquiler de maquinaria con Triple A: presupuesto, consumido y facturación." },
   emergencia: { tab: "emergencia", titulo: "Otro Sí / Emergencia (Old)", sub: "Otro sí de emergencia: presupuesto, consumido y facturación." },
+};
+
+const MODULO_POR_SECCION: Record<string, string> = {
+  consolidado: "aaa",
+  alquiler: "alquiler",
+  emergencia: "emergencia",
+  prefacturas: "aaa",
 };
 
 export function generateStaticParams() {
@@ -23,6 +31,7 @@ export default async function AaaSeccionPage({ params }: { params: Promise<{ sec
   if (seccion === "transporte") redirect("/aaa/transporte");
   const cfg = SECCIONES[seccion];
   if (!cfg) notFound();
+  await exigirModuloAaa(MODULO_POR_SECCION[seccion]);
   const demo = !supabaseConfigured();
   let prefacturas: PrefacturaRow[] = [];
   let maestros: { areas: string[]; interventores: string[] } = { areas: [], interventores: [] };

@@ -1,4 +1,5 @@
 import { TransporteClient } from "../transporte/TransporteClient";
+import { exigirModuloAaa } from "../_auth";
 
 export const metadata = {
   title: "Contrato de Alquiler — AG Constructora",
@@ -9,7 +10,8 @@ export const dynamic = "force-dynamic";
 // Contrato de Alquiler (Proyecto Triple A): mismo motor que Transporte AAA
 // (registros, tarifario, reportes, flota, personal, administración) con su
 // propio espacio de datos ("alquiler:" en transporte_kv). Se irá adaptando.
-export default function ContratoAlquilerPage() {
+export default async function ContratoAlquilerPage() {
+  await exigirModuloAaa("alquiler");
   return (
     <TransporteClient
       ns="alquiler"

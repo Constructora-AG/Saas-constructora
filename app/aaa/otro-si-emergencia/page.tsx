@@ -1,4 +1,5 @@
 import { TransporteClient } from "../transporte/TransporteClient";
+import { exigirModuloAaa } from "../_auth";
 
 export const metadata = {
   title: "Otro Sí / Emergencia — AG Constructora",
@@ -10,7 +11,8 @@ export const dynamic = "force-dynamic";
 // (registros, tarifario, reportes, flota, personal, administración) con su
 // propio espacio de datos ("emergencia:" en transporte_kv). Nunca se mezcla con
 // Contrato de Alquiler ni con Transporte AAA.
-export default function OtroSiEmergenciaPage() {
+export default async function OtroSiEmergenciaPage() {
+  await exigirModuloAaa("emergencia");
   return (
     <TransporteClient
       ns="emergencia"
