@@ -7,6 +7,21 @@
 import { useState, type FormEvent } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
+/**
+ * Devuelve `next` solo si apunta al mismo origen; si no, "/".
+ * Resolver con URL cubre variantes como "//dominio", "/\dominio" o "javascript:".
+ */
+function destinoInterno(next: string | null): string {
+  if (!next || !next.startsWith("/")) return "/";
+  try {
+    const url = new URL(next, window.location.origin);
+    if (url.origin !== window.location.origin) return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
 export default function LoginPage() {
   const supa = supabaseBrowser();
 
@@ -63,7 +78,7 @@ export default function LoginPage() {
 
     const next = new URLSearchParams(window.location.search).get("next");
 
-    window.location.href = next && next.startsWith("/") ? next : "/";
+    window.location.href = destinoInterno(next);
   };
 
   // RECUPERACIÓN DE CONTRASEÑA
