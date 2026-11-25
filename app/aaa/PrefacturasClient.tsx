@@ -15,6 +15,7 @@ import { slugify } from "@/lib/transporte/logic";
 import { IconAlert, IconCheck, IconChart, IconCoins } from "../icons";
 import { ResponsiveTables } from "./ResponsiveTables";
 import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
+import { InputMonto } from "@/app/components/InputMonto";
 import { PrefacturasReporte } from "./PrefacturasReporte";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -453,7 +454,7 @@ export function PrefacturasClient({ initialRows, demo, maestros, contrato: contr
                   <input className="input" required placeholder="Descripción del servicio *" value={it.item} onChange={(e) => setItem(i, { item: e.target.value })} style={{ gridColumn: "1 / -1" }} />
                 )}
                 <input className="input" required type="number" min="0.01" step="0.01" placeholder={`Cant. ${cat?.unidad ?? ""}`} value={it.cantidad} onChange={(e) => setItem(i, { cantidad: e.target.value })} />
-                <input className="input" required type="number" min="1" step="0.01" placeholder="Tarifa sin IVA" value={it.vr_unit} onChange={(e) => setItem(i, { vr_unit: e.target.value })} />
+                <InputMonto className="input" required placeholder="Tarifa sin IVA" aria-label="Tarifa sin IVA" value={it.vr_unit} onChange={(v) => setItem(i, { vr_unit: v })} />
                 <div className="num muted" style={{ textAlign: "right" }}>{valor > 0 ? COP.format(valor) : "—"}</div>
                 <button type="button" className="btn btn-ghost btn-sm" title="Quitar ítem" disabled={items.length === 1} onClick={() => setItems((arr) => arr.filter((_, j) => j !== i))}>×</button>
               </div>

@@ -22,7 +22,7 @@ import { autoRecargos, computeValor, costoCalculado, fdate, fmtCOP, respHours, s
 import { openAttachment, processSelectedFile, subirAdjunto } from "@/lib/transporte/media";
 import { useTransporteSession } from "@/lib/transporte/session";
 import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
-import { MontoAyuda } from "@/app/components/MontoAyuda";
+import { InputMonto, montoVisible } from "@/app/components/InputMonto";
 
 const OTRO = "__otro__";
 const TIPOS = ["Programado", "No Programado", "Emergencia"];
@@ -811,9 +811,8 @@ export function ServicioForm({
                         {errorDe("equipmentOtro")}
                       </label>
                       <label className="field">Valor por hora sin IVA *
-                        <input className="input num" type="number" min="0" step="1" value={f.valorHoraManual} placeholder="Ej. 180000" {...campoProps("valorHoraManual")}
-                          onChange={(e) => cambiaValorHoraManual(e.target.value)} />
-                        <MontoAyuda valor={f.valorHoraManual} prefijo="por hora:" />
+                        <InputMonto className="input num" value={f.valorHoraManual} placeholder="Ej. $ 180.000" {...campoProps("valorHoraManual")}
+                          onChange={cambiaValorHoraManual} />
                         {errorDe("valorHoraManual")}
                       </label>
                     </>
@@ -1079,15 +1078,13 @@ export function ServicioForm({
             {/* Recolección: el valor siempre es horas × valor hora (se muestra arriba, no se digita). */}
             {!esRecoleccion && <div style={gridAuto}>
               <label className="field">{esAlquiler ? "Valor del servicio sin IVA (COP)" : "Valor del servicio (COP)"}{esAlquiler && tarifaSel(f) && <span className="muted" style={{ fontWeight: 400 }}> · calculado</span>}
-                <input className="input num" type="number" step="1" min="0" value={f.value}
-                  onChange={(e) => setF({ ...f, value: e.target.value })} />
-                <MontoAyuda valor={f.value} />
+                <InputMonto className="input num" value={f.value}
+                  onChange={(v) => setF({ ...f, value: v })} />
               </label>
               {!esAlquiler && (
                 <label className="field">Peajes (COP)
-                  <input className="input num" type="number" step="1" min="0" value={f.tolls}
-                    onChange={(e) => setF({ ...f, tolls: e.target.value })} />
-                  <MontoAyuda valor={f.tolls} />
+                  <InputMonto className="input num" value={f.tolls}
+                    onChange={(v) => setF({ ...f, tolls: v })} />
                 </label>
               )}
             </div>}
@@ -1097,10 +1094,9 @@ export function ServicioForm({
                 <div style={{ fontSize: 12.5, fontWeight: 600 }}>Costo del contratista <span className="muted" style={{ fontWeight: 400 }}>· uso interno, no sale en PDF ni exportaciones</span></div>
                 <div style={gridAuto}>
                   <label className="field">Costo contratista (neto, COP)
-                    <input className="input num" type="number" step="1" min="0" value={costoTxt}
-                      placeholder={costoAuto !== null ? String(costoAuto) : "Digita el costo (tarifa manual)"}
-                      onChange={(e) => setCostoTxt(e.target.value)} />
-                    <MontoAyuda valor={costoTxt} />
+                    <InputMonto className="input num" value={costoTxt}
+                      placeholder={costoAuto !== null ? montoVisible(String(Math.round(costoAuto))) : "Digita el costo (tarifa manual)"}
+                      onChange={setCostoTxt} />
                   </label>
                   <label className="field">Margen del servicio
                     <input className="input num" readOnly style={{ background: "var(--surface)", color: "var(--text-2)" }}

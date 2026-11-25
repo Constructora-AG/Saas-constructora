@@ -19,6 +19,7 @@ import type { MonthInfo, Servicio } from "@/lib/transporte/model";
 import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
 import { ServicioForm } from "./ServicioForm";
 import { ReporteItemsView } from "./ReporteItemsView";
+import { InputMonto } from "@/app/components/InputMonto";
 import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 
 // ── Utilidades locales ─────────────────────────────────────────────
@@ -621,10 +622,10 @@ export function ReportesView({ t }: ViewProps) {
             </select>
           </label>
           <label className="field">Valor mínimo (COP)
-            <input className="input" type="number" min={0} value={filtros.valorMin} onChange={setF("valorMin")} />
+            <InputMonto className="input" value={filtros.valorMin} onChange={(v) => setFiltros((x) => ({ ...x, valorMin: v }))} />
           </label>
           <label className="field">Valor máximo (COP)
-            <input className="input" type="number" min={0} value={filtros.valorMax} onChange={setF("valorMax")} />
+            <InputMonto className="input" value={filtros.valorMax} onChange={(v) => setFiltros((x) => ({ ...x, valorMax: v }))} />
           </label>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

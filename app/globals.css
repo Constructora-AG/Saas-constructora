@@ -108,6 +108,10 @@ h1, h2, h3 { margin: 0; }
 .nav-item.active { background: var(--sidebar-active-bg); color: #fff; font-weight: 600; box-shadow: inset 2px 0 0 var(--brand-500); }
 .nav-item-icon { width: 18px; height: 18px; flex: none; display: grid; place-items: center; opacity: .85; }
 .nav-item-icon svg { width: 18px; height: 18px; }
+/* Contador de pendientes junto a un ítem del menú (p. ej. informes de cartera por revisar). */
+.nav-badge { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--mid); color: #fff; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
+/* Texto solo para lectores de pantalla. */
+.sr-text { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 .sidebar-foot {
   display: flex; align-items: center; gap: 11px;
@@ -138,6 +142,8 @@ h1, h2, h3 { margin: 0; }
   border-radius: var(--radius-sm); width: 36px; height: 36px; cursor: pointer; place-items: center; color: var(--text-2);
 }
 .topbar-burger svg { width: 20px; height: 20px; }
+.topbar-burger { position: relative; }
+.topbar-burger-dot { position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--mid); box-shadow: 0 0 0 2px var(--surface); }
 
 /* ── Encabezados de página ────────────────────────────── */
 .page-head { margin-bottom: 24px; }
@@ -400,6 +406,9 @@ table.clean td b { color: var(--text); font-weight: 600; }
 .drawer-close { border: none; background: none; cursor: pointer; font-size: 22px; line-height: 1; color: var(--muted, #6b7688); padding: 6px 10px; border-radius: 8px; }
 .drawer-close:hover { background: rgba(9, 24, 48, 0.06); color: inherit; }
 .drawer-body { flex: 1; overflow-y: auto; padding: 18px 22px 40px; }
+/* Pie fijo del panel lateral: acciones siempre al borde inferior, sin tapar el contenido. */
+.drawer-foot { flex-shrink: 0; padding: 12px 22px; border-top: 1px solid var(--border); background: var(--surface); max-height: 50vh; overflow-y: auto; }
+.drawer-foot:empty { display: none; }
 /* Un <select> toma el ancho de su opción más larga: dentro del formulario lateral
    los campos se ajustan a su columna para no desbordar en pantallas pequeñas. */
 .drawer-body .field { min-width: 0; }
@@ -596,11 +605,9 @@ table.tbl-fit td.row-actions { padding-right: 6px; display: table-cell; }
   .tx-mod .tarifa-card { padding: 14px; }
 }
 
-/* ── Campos con error y montos legibles (formularios) ─────────────── */
+/* ── Campos con error (formularios) ─────────────── */
 .campo-error { font-size: 12px; font-weight: 600; color: var(--high); }
 .field [aria-invalid="true"] { border-color: var(--high); box-shadow: 0 0 0 3px var(--high-soft); }
-.monto-ayuda { font-size: 11.5px; font-weight: 600; color: var(--brand); font-variant-numeric: tabular-nums; text-align: right; }
-.tarifa-nueva-monto { flex: 1 0 100%; display: flex; justify-content: flex-end; }
 
 /* Gráfica sin datos: mensaje en lugar de un recuadro vacío. */
 .grafica-vacia { display: flex; gap: 12px; align-items: flex-start; margin-top: 10px; padding: 16px 18px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: 13px; }

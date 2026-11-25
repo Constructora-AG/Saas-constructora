@@ -3,6 +3,9 @@ import { DEMO_CARTERA, DEMO_COBRADORES, supabaseConfigured } from "@/lib/demo";
 import { CarteraClient, type CarteraRow, type Cobrador } from "./CarteraClient";
 import { IconInfo } from "../icons";
 import Actualizado from "@/app/Actualizado";
+import { usuarioServidor } from "@/lib/auth/servidor";
+import { puedeVer } from "@/lib/auth/modulos";
+import { InformeMensual, type ClienteCartera } from "./_informes/InformeMensual";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,11 @@ export default async function CarteraPage() {
     cobradores = soloCartera.length ? soloCartera : all;
   }
 
+  // Informe mensual de cartera: aprobar/devolver requiere el permiso «cartera_revision».
+  const usuario = demo ? null : await usuarioServidor();
+  const puedeRevisar = puedeVer(usuario, "cartera_revision");
+  const clientes: ClienteCartera[] = rows.map((r) => ({ prospect_id: r.prospect_id, cliente: r.cliente, project_name: r.project_name, monto_en_mora: r.monto_en_mora }));
+
   return (
     <>
       <div className="page-head">
@@ -50,6 +58,8 @@ export default async function CarteraPage() {
           <div><b>Modo demostración</b> — datos de ejemplo. Al conectar Supabase y Smarthome verás tus clientes reales.</div>
         </div>
       )}
+
+      {!demo && <InformeMensual clientes={clientes} puedeRevisar={puedeRevisar} />}
 
       {rows.length === 0 ? (
         <div className="table-wrap" style={{ padding: 24 }}>

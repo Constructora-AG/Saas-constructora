@@ -36,6 +36,11 @@ export interface Modulo {
   seccion: "Operación" | "Comercial" | "Finanzas" | "Administración";
   /** Solo superadmin; no se puede otorgar como módulo extra. */
   soloSuperadmin?: boolean;
+  /**
+   * Permiso dentro de otra página (no es una ruta propia): no controla qué
+   * ruta se ve (moduloDeRuta) ni sirve como página de inicio (rutaInicial).
+   */
+  permiso?: boolean;
 }
 
 export const MODULOS: Modulo[] = [
@@ -56,6 +61,9 @@ export const MODULOS: Modulo[] = [
   { id: "usuarios", label: "Usuarios y roles", href: "/usuarios", seccion: "Administración", soloSuperadmin: true },
   // Otorgable: la página no muestra el token (el acceso a los datos lo da el token, que entrega Gerencia).
   { id: "conector_mcp", label: "Conector Claude (MCP)", href: "/conector-mcp", seccion: "Administración" },
+  // Permiso: aprobar o devolver el informe mensual de cartera (dentro de /cartera).
+  // Para ver y subir informes basta el módulo «cartera».
+  { id: "cartera_revision", label: "Revisar informes de cartera", href: "/cartera#informe-mensual", seccion: "Operación", permiso: true },
 ];
 
 /** Módulos que cada rol ve por defecto. */
@@ -84,12 +92,12 @@ export function puedeVer(u: { rol: RolPlataforma; modulos?: string[] } | null | 
 
 /** Módulo al que pertenece una ruta (la más específica). */
 export function moduloDeRuta(path: string): Modulo | null {
-  const cands = MODULOS.filter((m) => (m.href === "/" ? path === "/" : path === m.href || path.startsWith(m.href + "/")));
+  const cands = MODULOS.filter((m) => !m.permiso && (m.href === "/" ? path === "/" : path === m.href || path.startsWith(m.href + "/")));
   return cands.sort((a, b) => b.href.length - a.href.length)[0] ?? null;
 }
 
 /** Primera ruta visible para el usuario (destino tras login / acceso denegado). */
 export function rutaInicial(u: { rol: RolPlataforma; modulos?: string[] } | null | undefined): string {
-  const m = MODULOS.find((x) => puedeVer(u, x.id));
+  const m = MODULOS.find((x) => !x.permiso && puedeVer(u, x.id));
   return m?.href ?? "/";
 }

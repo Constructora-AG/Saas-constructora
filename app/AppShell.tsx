@@ -7,6 +7,7 @@ import { IconHome, IconWallet, IconActivity, IconMessage, IconChart, IconMenu, I
 import { Burbuja } from "./asistente/Burbuja";
 import { useUsuario, ROL_LABELS } from "@/lib/auth/useUsuario";
 import { moduloDeRuta, puedeVer, rutaInicial } from "@/lib/auth/modulos";
+import { EVENTO_INFORMES, pendientesDeUsuario, type PendientesInformes } from "@/lib/cartera/informes";
 
 interface NavItem {
   href: string;
@@ -112,6 +113,31 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("ag:contratos-cambiaron", cargar);
   }, [esPantallaAuth, path]);
 
+  // Informes mensuales de cartera pendientes (contador junto a «Cartera»):
+  // quien revisa ve los enviados; el equipo de cartera, los devueltos.
+  const [pendCartera, setPendCartera] = useState<{ n: number; texto: string }>({ n: 0, texto: "" });
+  const veCartera = puedeVer(usuario, "cartera");
+  useEffect(() => {
+    if (esPantallaAuth || !veCartera) { setPendCartera({ n: 0, texto: "" }); return; }
+    let vivo = true;
+    const cargar = () => {
+      fetch("/api/cartera/informes?pendientes=1")
+        .then((r) => (r.ok ? (r.json() as Promise<PendientesInformes>) : null))
+        .then((p) => { if (vivo && p) setPendCartera(pendientesDeUsuario(p)); })
+        // El contador es un aviso secundario: si falla, la página de Cartera muestra el detalle.
+        .catch(() => undefined);
+    };
+    cargar();
+    const alVolver = () => { if (document.visibilityState === "visible") cargar(); };
+    window.addEventListener(EVENTO_INFORMES, cargar);
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      vivo = false;
+      window.removeEventListener(EVENTO_INFORMES, cargar);
+      document.removeEventListener("visibilitychange", alVolver);
+    };
+  }, [esPantallaAuth, veCartera, path]);
+
   // Las pantallas de autenticación se pintan a pantalla completa, sin barra lateral ni topbar.
   if (esPantallaAuth) return <>{children}</>;
 
@@ -168,6 +194,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                     >
                       <span className="nav-item-icon">{item.icon}</span>
                       {item.label}
+                      {item.modulo === "cartera" && pendCartera.n > 0 && (
+                        <>
+                          <span className="nav-badge" aria-hidden="true" title={pendCartera.texto}>{pendCartera.n}</span>
+                          <span className="sr-text">: {pendCartera.texto}</span>
+                        </>
+                      )}
                     </a>
                     {item.accion && puedeVer(usuario, item.accion.modulo) && (
                       <a
@@ -234,8 +266,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="main">
         <header className="topbar">
-          <button className="topbar-burger" aria-label="Menú" onClick={() => setOpen((v) => !v)}>
+          <button className="topbar-burger" aria-label={pendCartera.n > 0 ? `Menú (${pendCartera.texto})` : "Menú"} onClick={() => setOpen((v) => !v)}>
             <IconMenu />
+            {pendCartera.n > 0 && <span className="topbar-burger-dot" aria-hidden="true" />}
           </button>
           <span className="topbar-title">{currentTitle}</span>
           <span className="topbar-spacer" />

@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
+import { InputMonto } from "@/app/components/InputMonto";
 import { IconDownload } from "../icons";
 
 export interface FacturaRow {
@@ -251,7 +252,7 @@ export function FacturasRegistro({ contrato, titulo, conceptos = [] }: { contrat
                   <input className="input" required list={`conceptos-${contrato}`} placeholder="Ej. Transporte de Residuos Especiales" value={form.concepto} onChange={setF("concepto")} />
                   <datalist id={`conceptos-${contrato}`}>{sugerencias.map((c) => <option key={c} value={c} />)}</datalist>
                 </label>
-                <label className="field">Valor total (con IVA)<input className="input" required inputMode="decimal" placeholder="Ej. 16263151.66" value={form.valor_total} onChange={setF("valor_total")} /></label>
+                <label className="field">Valor total (con IVA)<InputMonto className="input" required placeholder="Ej. $ 16.263.151,66" value={form.valor_total} onChange={(v) => setForm((f) => ({ ...f, valor_total: v }))} /></label>
                 <label className="field">Nota (opcional)<textarea className="input" rows={3} value={form.nota} onChange={setF("nota")} /></label>
                 {error && <div style={{ color: "var(--high)", fontSize: 13 }}>{error}</div>}
                 <div style={{ display: "flex", gap: 8 }}>

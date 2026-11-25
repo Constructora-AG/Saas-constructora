@@ -14,7 +14,7 @@ import { ALCANCE_RECOLECCION, AREAS_RECOLECCION, servicioRecoleccionDe, TARIFARI
 import { fmtCOP, recalcularValores } from "@/lib/transporte/logic";
 import { MsgInline } from "./CatalogoTabla";
 import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
-import { MontoAyuda } from "@/app/components/MontoAyuda";
+import { InputMonto } from "@/app/components/InputMonto";
 
 /** Estado editable: unitarios por "catId|rutaId" + recargos, como strings. */
 interface Draft {
@@ -354,31 +354,23 @@ export function TarifarioView({ t }: ViewProps) {
                     {/* Cada valor lleva su etiqueta encima: sigue legible aunque la fila se parta en dos líneas. */}
                     <div className="tarifa-valores">
                     <label className="tarifa-valor">{conCosto ? "Venta (pliego)" : esRecoleccion ? "Valor hora sin IVA" : "Valor sin IVA"}
-                      <input
+                      <InputMonto
                         className="input num"
-                        type="number"
-                        min={0}
-                        step={1}
                         value={draft.valores[key] ?? ""}
-                        onChange={(e) => setValor(key, e.target.value)}
+                        onChange={(v) => setValor(key, v)}
                         aria-label={`Valor unitario ruta ${ruta.id}`}
                       />
-                      <MontoAyuda valor={draft.valores[key]} />
                     </label>
                     {conCosto && draftCosto && (
                       <label className="tarifa-valor">Costo contratista
-                        <input
+                        <InputMonto
                           className="input num"
-                          type="number"
-                          min={0}
-                          step={1}
                           value={draftCosto.valores[key] ?? ""}
-                          onChange={(e) => setCosto(key, e.target.value)}
+                          onChange={(v) => setCosto(key, v)}
                           style={{ background: "var(--surface-2)" }}
                           aria-label={`Costo contratista ruta ${ruta.id}`}
                           title={costo > 0 ? `Margen ${fmtCOP(venta - costo)}${venta > 0 ? ` (${(((venta - costo) / venta) * 100).toFixed(1)}%)` : ""}` : "Sin costo"}
                         />
-                        <MontoAyuda valor={draftCosto.valores[key]} />
                       </label>
                     )}
                     </div>
@@ -407,9 +399,8 @@ export function TarifarioView({ t }: ViewProps) {
                       {[...new Set([...AREAS_RECOLECCION, ...(t.admin?.areas ?? [])])].map((a) => <option key={a} value={a} />)}
                     </datalist>
                   )}
-                  <input className="input num" type="number" min={0} step={1} aria-label="Valor sin IVA" placeholder={esRecoleccion ? "Valor hora sin IVA" : "Valor sin IVA"} value={f.valor} onChange={(e) => setNT({ valor: e.target.value })} />
+                  <InputMonto className="input num" aria-label="Valor sin IVA" placeholder={esRecoleccion ? "Valor hora sin IVA" : "Valor sin IVA"} value={f.valor} onChange={(v) => setNT({ valor: v })} />
                   <button className="btn btn-ghost btn-sm" onClick={() => void agregarTarifa(cat.id)} disabled={t.saving}>+ Tarifa</button>
-                  {f.valor.trim() !== "" && <span className="tarifa-nueva-monto"><MontoAyuda valor={f.valor} prefijo="Valor:" /></span>}
                 </div>
               );
             })()}
@@ -425,24 +416,18 @@ export function TarifarioView({ t }: ViewProps) {
           </div>
           <div style={{ display: "grid", gap: 12 }}>
             <label className="field">Recargo nocturno (COP)
-              <input
+              <InputMonto
                 className="input num"
-                type="number"
-                min={0}
-                step={1}
                 value={draft.recNocturno}
-                onChange={(e) => setRecargo("recNocturno", e.target.value)}
+                onChange={(v) => setRecargo("recNocturno", v)}
                 style={{ textAlign: "right" }}
               />
             </label>
             <label className="field">Recargo dominical y festivo (COP)
-              <input
+              <InputMonto
                 className="input num"
-                type="number"
-                min={0}
-                step={1}
                 value={draft.recDominical}
-                onChange={(e) => setRecargo("recDominical", e.target.value)}
+                onChange={(v) => setRecargo("recDominical", v)}
                 style={{ textAlign: "right" }}
               />
             </label>
@@ -453,12 +438,12 @@ export function TarifarioView({ t }: ViewProps) {
               <>
                 <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 6 }}>Costo de recargos al contratista <span className="muted" style={{ fontWeight: 400 }}>· uso interno</span></div>
                 <label className="field">Costo recargo nocturno (COP)
-                  <input className="input num" type="number" min={0} step={1} value={draftCosto.recNocturno}
-                    onChange={(e) => setRecargoCosto("recNocturno", e.target.value)} style={{ textAlign: "right", background: "var(--surface-2)" }} />
+                  <InputMonto className="input num" value={draftCosto.recNocturno}
+                    onChange={(v) => setRecargoCosto("recNocturno", v)} style={{ textAlign: "right", background: "var(--surface-2)" }} />
                 </label>
                 <label className="field">Costo recargo dominical y festivo (COP)
-                  <input className="input num" type="number" min={0} step={1} value={draftCosto.recDominical}
-                    onChange={(e) => setRecargoCosto("recDominical", e.target.value)} style={{ textAlign: "right", background: "var(--surface-2)" }} />
+                  <InputMonto className="input num" value={draftCosto.recDominical}
+                    onChange={(v) => setRecargoCosto("recDominical", v)} style={{ textAlign: "right", background: "var(--surface-2)" }} />
                 </label>
               </>
             )}

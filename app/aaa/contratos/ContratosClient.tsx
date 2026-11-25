@@ -14,6 +14,7 @@ import { cargarContratos, guardarContratos, idContrato, prefijoSugerido } from "
 import { storageFor } from "@/lib/transporte/storage";
 import { num } from "@/lib/transporte/model";
 import { parseValor } from "../FacturasRegistro";
+import { InputMonto } from "@/app/components/InputMonto";
 
 const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 const fFecha = (iso: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); return m ? `${m[3]}/${m[2]}/${m[1]}` : iso || "—"; };
@@ -209,7 +210,7 @@ export function ContratosClient() {
                 <label className="field">Objeto<textarea className="input" rows={3} value={form.objeto} onChange={set("objeto")} /></label>
                 {!editando && (
                   <>
-                    <label className="field">Valor del contrato (COP)<input className="input" inputMode="decimal" placeholder="Ej. 1.500.000.000" value={form.valor} onChange={set("valor")} /></label>
+                    <label className="field">Valor del contrato (COP)<InputMonto className="input" placeholder="Ej. $ 1.500.000.000" value={form.valor} onChange={(v) => setForm((f) => ({ ...f, valor: v }))} /></label>
                     <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13 }}>
                       <input type="checkbox" checked={form.ivaIncluido} onChange={(e) => setForm((f) => ({ ...f, ivaIncluido: e.target.checked }))} />
                       El valor incluye IVA

@@ -7,6 +7,7 @@ import { exportarExcel, exportarPdf, nombreArchivo, type Reporte } from "@/lib/m
 import { useUsuario } from "@/lib/auth/useUsuario";
 import type { Inversion, Lead, MarketingData, Prospecto, VentaCartera } from "@/lib/marketing/types";
 import type { GestionAsesor } from "@/lib/marketing/compute";
+import { InputMonto } from "@/app/components/InputMonto";
 import {
   agruparLeads, canalCorto, cpaPorMes, distribucion, embudo, esCompra, esContactado, esDescartado,
   gestionPorAsesor, normGenero, pct, porCreativo, rangoEdad, totalGestion, SEGUIMIENTO_LABEL, nombreLead, ventasPorProyecto, partirModulo } from "@/lib/marketing/compute";
@@ -738,7 +739,7 @@ function VistaInversion({ leads, inversion, proyectos, proyecto, canal, puedeEdi
             <label className="field">Mes<input className="input" type="month" value={f.mes} onChange={(e) => setF({ ...f, mes: e.target.value })} /></label>
             <label className="field">Proyecto<select className="input select-sm" value={f.proyecto} onChange={(e) => setF({ ...f, proyecto: e.target.value })}><option value="">Todos</option>{proyectos.map((p) => <option key={p} value={p}>{p}</option>)}</select></label>
             <label className="field">Canal<select className="input select-sm" value={f.canal} onChange={(e) => setF({ ...f, canal: e.target.value })}><option value="">Todos</option><option>Facebook</option><option>Instagram</option><option>WhatsApp</option></select></label>
-            <label className="field">Monto (COP)<input className="input" inputMode="numeric" placeholder="3.500.000" value={f.monto} onChange={(e) => setF({ ...f, monto: e.target.value })} /></label>
+            <label className="field">Monto (COP)<InputMonto className="input" placeholder="$ 3.500.000" value={f.monto} onChange={(v) => setF({ ...f, monto: v })} /></label>
             <label className="field">Nota<input className="input" placeholder="opcional" value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} /></label>
             <button className="btn btn-primary" disabled={busy || !f.monto} onClick={() => void guardar()}><IconCoins /> Guardar</button>
           </div>
