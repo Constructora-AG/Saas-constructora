@@ -21,6 +21,8 @@ import { downloadBlob } from "@/lib/transporte/export";
 import { IconDownload } from "../../icons";
 import { COP, pct } from "./comun";
 import { GraficasCuadro } from "./GraficasCuadro";
+import { TiraSmarthome, type MesTira } from "./TiraSmarthome";
+import type { ComparacionSmarthome } from "@/lib/cartera/referenciaSmarthome";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -115,7 +117,7 @@ const fmt = (v: number | null, f: Formato) =>
     : COP.format(v);
 
 /** Totales de Smarthome por mes (Lotes Reserva del Manantial), de /api/cartera/informes/referencia?anio=. */
-interface MesSmarthome { periodo: string; recaudoReal: number; separacionesTotal: number; anticipado: number; nSeparaciones: number }
+interface MesSmarthome extends ComparacionSmarthome { periodo: string; recaudoReal: number; separacionesTotal: number; anticipado: number; nSeparaciones: number }
 
 /** Bloque «Referencia Smarthome»: recaudo real del informe frente a Smarthome, mes a mes. */
 function bloqueSmarthome(c: Cuadro, meses: MesSmarthome[]): Bloque {
@@ -184,11 +186,24 @@ export function CuadroAnual({ informes, onAbrir, puedeRevisar = false }: {
   }, []);
   useEffect(() => { if (puedeRevisar) void cargarSh(anio); }, [puedeRevisar, anio, cargarSh]);
   const bloqueSh = useMemo(() => (sh?.estado === "ok" && sh.anio === anio ? bloqueSmarthome(cuadro, sh.meses) : null), [sh, anio, cuadro]);
+  const [verTablaSh, setVerTablaSh] = useState(false);
+  // Datos de la tira de meses: el informe respeta el filtro «Solo aprobados»; la pista
+  // del servidor se muestra solo si corresponde a la misma diferencia.
+  const mesesTira = useMemo<MesTira[]>(() => {
+    if (!bloqueSh || !sh) return [];
+    const [inf, real, dif, sep, ant] = [0, 1, 2, 3, 4].map((i) => bloqueSh.filas[i].valores);
+    return cuadro.meses.map((m, k) => {
+      const srv = sh.meses.find((x) => x.periodo === m.periodo);
+      const d = dif[k];
+      const pista = d !== null && srv?.diferencia != null && Math.abs(srv.diferencia - d) < 1 ? srv.pista : null;
+      return { periodo: m.periodo, informe: inf[k], smarthome: real[k], diferencia: d, separaciones: sep[k], anticipos: ant[k], pista };
+    });
+  }, [bloqueSh, sh, cuadro]);
   // La referencia Smarthome va primero: es lo que más consulta quien revisa (también en el Excel).
   const todos = useMemo(() => (bloqueSh ? [bloqueSh, ...bloques] : bloques), [bloques, bloqueSh]);
   // Orden en pantalla: gráficas → referencia Smarthome → bloques de los informes.
-  const secciones = useMemo<(Bloque | "graficas")[]>(
-    () => (bloqueSh ? ["graficas", bloqueSh, ...bloques] : ["graficas", ...bloques]),
+  const secciones = useMemo<(Bloque | "graficas" | "smarthome")[]>(
+    () => (bloqueSh ? ["graficas", "smarthome", ...bloques] : ["graficas", ...bloques]),
     [bloques, bloqueSh],
   );
   const sinAprobar = cuadro.meses.filter((m) => m.informe && m.informe.estado !== "aprobado").length;
@@ -235,6 +250,66 @@ export function CuadroAnual({ informes, onAbrir, puedeRevisar = false }: {
   }
 
   const stickyCol = { position: "sticky" as const, left: 0, zIndex: 1, background: "var(--surface)", textAlign: "left" as const, minWidth: 190, boxShadow: "1px 0 0 var(--border)" };
+
+  /** Tabla de un bloque (meses en columnas). */
+  const tablaDe = (b: Bloque) => (
+    <section key={b.titulo} style={{ display: "grid", gap: 6 }} aria-label={b.titulo}>
+      <div>
+        <h3 className="section-title" style={{ margin: 0 }}>{b.titulo}</h3>
+        <span className="muted" style={{ fontSize: 12 }}>{b.nota}</span>
+      </div>
+      <div className="table-wrap table-scroll">
+        <table className="clean" aria-label={`${b.titulo} ${anio}`} style={{ fontSize: 12.5 }}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ ...stickyCol, background: "var(--surface-2)" }}>{b.encabezado ?? "Proyecto"}</th>
+              {cuadro.meses.map((m, k) => {
+                const inf = m.informe ? informes.find((i) => i.id === m.informe!.id) : undefined;
+                return (
+                  <th key={m.mes} scope="col" style={{ textAlign: "right", padding: "8px 12px" }}>
+                    {inf ? (
+                      <button type="button" onClick={() => onAbrir(inf)} title={`Abrir informe de ${nombrePeriodo(m.periodo)}`}
+                        style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--brand)", textDecoration: "underline", cursor: "pointer", textTransform: "inherit", letterSpacing: "inherit" }}>
+                        {MESES_CORTOS[k]}
+                      </button>
+                    ) : MESES_CORTOS[k]}
+                    {m.informe && m.informe.estado !== "aprobado" && (
+                      <span style={{ display: "block", fontSize: 10, fontWeight: 600, color: "var(--warn)", textTransform: "none", letterSpacing: 0 }}>
+                        {ESTADOS_INFORME[m.informe.estado].label}
+                      </span>
+                    )}
+                  </th>
+                );
+              })}
+              <th scope="col" style={{ textAlign: "right", padding: "8px 12px" }}>{b.columnaFinal}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {b.filas.map((f) => (
+              <tr key={f.etiqueta} style={f.tipo ? { background: "var(--surface-2)" } : undefined}>
+                <th scope="row" style={{ ...stickyCol, background: f.tipo ? "var(--surface-2)" : "var(--surface)", padding: "9px 12px", fontWeight: f.tipo ? 700 : 600, color: "var(--text)", borderTop: f.tipo === "subtotal" ? "2px solid var(--border-strong)" : "1px solid var(--border)" }}>
+                  {f.etiqueta}
+                </th>
+                {f.valores.map((v, k) => {
+                  const aviso = f.avisos?.[k];
+                  return (
+                    <td key={k} className="num" tabIndex={aviso ? 0 : undefined} title={aviso ?? undefined} aria-label={aviso ? `${fmt(v, f.formato)}. ${aviso}` : undefined}
+                      style={{ textAlign: "right", padding: "9px 12px", fontWeight: f.tipo ? 700 : undefined, color: v === null ? "var(--muted)" : undefined, background: aviso ? "var(--warn-soft)" : undefined, borderTop: f.tipo === "subtotal" ? "2px solid var(--border-strong)" : undefined }}>
+                      {aviso && <span aria-hidden="true" style={{ color: "var(--warn)", fontWeight: 700, marginRight: 4 }}>!</span>}
+                      {fmt(v, f.formato)}
+                    </td>
+                  );
+                })}
+                <td className="num" style={{ textAlign: "right", padding: "9px 12px", fontWeight: 700, borderTop: f.tipo === "subtotal" ? "2px solid var(--border-strong)" : undefined }}>
+                  {f.final === null ? "" : fmt(f.final, f.formato)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -289,66 +364,15 @@ export function CuadroAnual({ informes, onAbrir, puedeRevisar = false }: {
         </div>
       )}
 
-      {cuadro.mesesConInforme > 0 && secciones.map((b) => b === "graficas" ? (
-        <GraficasCuadro key="graficas" cuadro={cuadro} />
-      ) : (
-        <section key={b.titulo} style={{ display: "grid", gap: 6 }} aria-label={b.titulo}>
-          <div>
-            <h3 className="section-title" style={{ margin: 0 }}>{b.titulo}</h3>
-            <span className="muted" style={{ fontSize: 12 }}>{b.nota}</span>
+      {cuadro.mesesConInforme > 0 && secciones.map((b) =>
+        b === "graficas" ? <GraficasCuadro key="graficas" cuadro={cuadro} />
+        : b === "smarthome" ? (bloqueSh && (
+          <div key="smarthome" style={{ display: "grid", gap: 10 }}>
+            <TiraSmarthome meses={mesesTira} verTabla={verTablaSh} onVerTabla={() => setVerTablaSh((v) => !v)} />
+            {verTablaSh && tablaDe(bloqueSh)}
           </div>
-          <div className="table-wrap table-scroll">
-            <table className="clean" aria-label={`${b.titulo} ${anio}`} style={{ fontSize: 12.5 }}>
-              <thead>
-                <tr>
-                  <th scope="col" style={{ ...stickyCol, background: "var(--surface-2)" }}>{b.encabezado ?? "Proyecto"}</th>
-                  {cuadro.meses.map((m, k) => {
-                    const inf = m.informe ? informes.find((i) => i.id === m.informe!.id) : undefined;
-                    return (
-                      <th key={m.mes} scope="col" style={{ textAlign: "right", padding: "8px 12px" }}>
-                        {inf ? (
-                          <button type="button" onClick={() => onAbrir(inf)} title={`Abrir informe de ${nombrePeriodo(m.periodo)}`}
-                            style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--brand)", textDecoration: "underline", cursor: "pointer", textTransform: "inherit", letterSpacing: "inherit" }}>
-                            {MESES_CORTOS[k]}
-                          </button>
-                        ) : MESES_CORTOS[k]}
-                        {m.informe && m.informe.estado !== "aprobado" && (
-                          <span style={{ display: "block", fontSize: 10, fontWeight: 600, color: "var(--warn)", textTransform: "none", letterSpacing: 0 }}>
-                            {ESTADOS_INFORME[m.informe.estado].label}
-                          </span>
-                        )}
-                      </th>
-                    );
-                  })}
-                  <th scope="col" style={{ textAlign: "right", padding: "8px 12px" }}>{b.columnaFinal}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {b.filas.map((f) => (
-                  <tr key={f.etiqueta} style={f.tipo ? { background: "var(--surface-2)" } : undefined}>
-                    <th scope="row" style={{ ...stickyCol, background: f.tipo ? "var(--surface-2)" : "var(--surface)", padding: "9px 12px", fontWeight: f.tipo ? 700 : 600, color: "var(--text)", borderTop: f.tipo === "subtotal" ? "2px solid var(--border-strong)" : "1px solid var(--border)" }}>
-                      {f.etiqueta}
-                    </th>
-                    {f.valores.map((v, k) => {
-                      const aviso = f.avisos?.[k];
-                      return (
-                        <td key={k} className="num" tabIndex={aviso ? 0 : undefined} title={aviso ?? undefined} aria-label={aviso ? `${fmt(v, f.formato)}. ${aviso}` : undefined}
-                          style={{ textAlign: "right", padding: "9px 12px", fontWeight: f.tipo ? 700 : undefined, color: v === null ? "var(--muted)" : undefined, background: aviso ? "var(--warn-soft)" : undefined, borderTop: f.tipo === "subtotal" ? "2px solid var(--border-strong)" : undefined }}>
-                          {aviso && <span aria-hidden="true" style={{ color: "var(--warn)", fontWeight: 700, marginRight: 4 }}>!</span>}
-                          {fmt(v, f.formato)}
-                        </td>
-                      );
-                    })}
-                    <td className="num" style={{ textAlign: "right", padding: "9px 12px", fontWeight: 700, borderTop: f.tipo === "subtotal" ? "2px solid var(--border-strong)" : undefined }}>
-                      {f.final === null ? "" : fmt(f.final, f.formato)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ))}
+        ))
+        : tablaDe(b))}
     </div>
   );
 }

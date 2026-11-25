@@ -55,19 +55,6 @@ function contenido(b: Record<string, unknown>) {
   return out;
 }
 
-/** Informe más reciente anterior al periodo (para exigir la justificación de variaciones atípicas). */
-async function anteriorA(periodo: string): Promise<{ periodo: string; cifras: CifraProyecto[] } | null> {
-  const { data, error: e } = await supabaseAdmin()
-    .from("cartera_informes")
-    .select("periodo, cifras")
-    .lt("periodo", periodo)
-    .order("periodo", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (e) throw new Error(e.message);
-  return data ? { periodo: data.periodo as string, cifras: (data.cifras ?? []) as CifraProyecto[] } : null;
-}
-
 async function leerBody(req: NextRequest): Promise<Record<string, unknown> | null> {
   try {
     const b: unknown = await req.json();
@@ -134,7 +121,7 @@ export async function POST(req: NextRequest) {
       cifras: (campos.cifras as CifraProyecto[] | undefined) ?? [],
       separaciones: (campos.separaciones as SeparacionInforme[] | undefined) ?? [],
       analisis: (campos.analisis as string | null | undefined) ?? null,
-    }, await anteriorA(periodo));
+    });
     if (faltan.length) return NextResponse.json({ error: "Falta información para enviar a revisión", faltan }, { status: 400 });
     estado = "enviado";
     historial.push(evento(u, "enviado"));
@@ -201,7 +188,7 @@ export async function PATCH(req: NextRequest) {
         cifras: (patch.cifras ?? actual.cifras ?? []) as CifraProyecto[],
         separaciones: (patch.separaciones ?? actual.separaciones ?? []) as SeparacionInforme[],
         analisis: (patch.analisis !== undefined ? patch.analisis : actual.analisis) as string | null,
-      }, await anteriorA((patch.periodo ?? actual.periodo) as string));
+      });
       if (faltan.length) return NextResponse.json({ error: "Falta información para enviar a revisión", faltan }, { status: 400 });
       patch.estado = "enviado";
       patch.enviado_at = new Date().toISOString();

@@ -46,7 +46,8 @@ function Variacion({ actual, anterior }: { actual: number; anterior: number | un
 function Comparacion({ informe, resumen, anterior }: { informe: InformeResumen; resumen: ResumenInforme; anterior: InformeResumen | null }) {
   if (!anterior) return <p className="muted" style={{ margin: 0, fontSize: 13 }}>No hay un informe anterior para comparar.</p>;
   const previo = calcularResumen(anterior.cifras, anterior.separaciones);
-  const atipicos = carteraAtipica(informe.cifras, anterior);
+  // Solo se muestran las explicaciones que existen (ya no se exigen).
+  const atipicos = carteraAtipica(informe.cifras, anterior).filter((a) => a.justificacion);
   return (
     <>
       <div className="table-wrap table-scroll">
@@ -84,7 +85,7 @@ function Comparacion({ informe, resumen, anterior }: { informe: InformeResumen; 
             {atipicos.map((a) => (
               <li key={a.proyecto}>
                 <b>{NOMBRE_PROYECTO[a.proyecto]}</b> · cartera total {formatoVariacion(a.variacion)} ({COP.format(a.anterior)} → {COP.format(a.actual)}):{" "}
-                {a.justificacion ? <span style={{ whiteSpace: "pre-wrap" }}>«{a.justificacion}»</span> : <span style={{ color: "var(--high)" }}>sin explicación</span>}
+<span style={{ whiteSpace: "pre-wrap" }}>«{a.justificacion}»</span>
               </li>
             ))}
           </ul>
@@ -117,7 +118,7 @@ export function InformeDetalle({
 }) {
   const uid = useId();
   const resumen = useMemo(() => calcularResumen(informe.cifras, informe.separaciones), [informe]);
-  const faltan = informe.estado === "borrador" ? faltantesParaEnviar(informe, anterior) : [];
+  const faltan = informe.estado === "borrador" ? faltantesParaEnviar(informe) : [];
   const [modo, setModo] = useState<"devolver" | "reabrir" | null>(null);
   const [nota, setNota] = useState("");
   const [ocupado, setOcupado] = useState<AccionRevision | null>(null);

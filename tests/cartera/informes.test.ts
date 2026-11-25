@@ -138,7 +138,7 @@ test("variación atípica: la cartera total de Aqua E1 en mayo salta a la vista"
   assert.equal(variacionAtipica(0, 5), null);
 });
 
-test("la cartera total atípica exige explicación para enviar", () => {
+test("la cartera total atípica se detecta, pero ya no exige explicación para enviar", () => {
   const abril = { periodo: "2026-04-01", cifras: [{ proyecto: "aqua_e1" as const, recaudo_pagado: 0, recaudo_programado: 0, mora: 0, cartera_total: 92_795_198 }] };
   const mayo = [
     ...OCTUBRE.filter((c) => c.proyecto !== "aqua_e1"),
@@ -147,13 +147,11 @@ test("la cartera total atípica exige explicación para enviar", () => {
   const v = carteraAtipica(mayo, abril);
   assert.equal(v.length, 1);
   assert.equal(formatoVariacion(v[0].variacion), "+256 %");
-  const faltan = faltantesParaEnviar({ cifras: mayo, separaciones: [], analisis: "Ok" }, abril);
-  assert.ok(faltan.some((f) => f.includes("Aqua Etapa 1") && f.includes("+256 %") && f.includes("Abril 2026")));
-  // Con la explicación ya no falta nada.
+  // Ya no falta nada para enviar, aunque no haya explicación.
+  assert.deepEqual(faltantesParaEnviar({ cifras: mayo, separaciones: [], analisis: "Ok" }), []);
+  // La explicación existente se conserva para mostrarla en la revisión.
   const conExplicacion = mayo.map((c) => (c.proyecto === "aqua_e1" ? { ...c, justificacion_cartera: "Error de digitación corregido en junio" } : c));
-  assert.deepEqual(faltantesParaEnviar({ cifras: conExplicacion, separaciones: [], analisis: "Ok" }, abril), []);
-  // Sin informe anterior no se exige nada; variaciones de −37 % no son atípicas.
-  assert.deepEqual(faltantesParaEnviar({ cifras: mayo, separaciones: [], analisis: "Ok" }, null), []);
+  assert.equal(carteraAtipica(conExplicacion, abril)[0].justificacion, "Error de digitación corregido en junio");
   assert.equal(formatoVariacion(-0.7118), "−71 %");
 });
 

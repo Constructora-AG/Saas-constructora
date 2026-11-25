@@ -36,9 +36,9 @@ export interface CifraProyecto {
   mora: number;
   cartera_total: number;
   /**
-   * Explicación de quien sube el informe cuando la cartera total cambia más
-   * del 50 % frente al informe anterior (ventas nuevas, desistimientos, cierre
-   * de etapa, corrección…). Obligatoria para enviar a revisión en ese caso.
+   * Explicación de un cambio grande de la cartera total frente al informe
+   * anterior. Ya no se pide en el formulario; se conserva la de informes
+   * anteriores (p. ej. la carga histórica) y se muestra en la revisión.
    */
   justificacion_cartera?: string | null;
 }
@@ -195,11 +195,7 @@ export function calcularResumen(cifras: CifraProyecto[], separaciones: Separacio
 }
 
 /** Qué falta para poder enviar a revisión (vacío = completo). */
-export function faltantesParaEnviar(
-  i: { cifras: CifraProyecto[]; separaciones: SeparacionInforme[]; analisis: string | null },
-  /** Informe del mes anterior más cercano (para exigir la justificación de variaciones atípicas). */
-  anterior?: Pick<InformeResumen, "periodo" | "cifras"> | null,
-): string[] {
+export function faltantesParaEnviar(i: { cifras: CifraProyecto[]; separaciones: SeparacionInforme[]; analisis: string | null }): string[] {
   const faltan: string[] = [];
   for (const p of PROYECTOS_INFORME) {
     if (!i.cifras.some((c) => c.proyecto === p.id)) faltan.push(`Cifras de ${p.nombre}`);
@@ -207,11 +203,6 @@ export function faltantesParaEnviar(
   const r = calcularResumen(i.cifras, i.separaciones);
   for (const p of r.proyectos) {
     if (p.real < 0) faltan.push(`${p.nombre}: las separaciones superan el recaudo pagado`);
-  }
-  for (const v of carteraAtipica(i.cifras, anterior)) {
-    if (!v.justificacion) {
-      faltan.push(`${NOMBRE_PROYECTO[v.proyecto]}: explica por qué la cartera total cambió ${formatoVariacion(v.variacion)} frente a ${nombrePeriodo(v.periodoAnterior)}`);
-    }
   }
   return faltan;
 }

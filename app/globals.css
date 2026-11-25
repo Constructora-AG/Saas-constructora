@@ -30,6 +30,8 @@
 
   /* WhatsApp */
   --wa: #1a9d54; --wa-dark: #0f7a40;
+  /* Gráficas: colores para partes de un total (validados para daltonismo; siempre con leyenda). */
+  --viz-1: var(--brand-500); --viz-2: #f47230; --viz-3: #00b894;
 
   /* Sidebar */
   --sidebar-w: 244px;

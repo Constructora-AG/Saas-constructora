@@ -11,8 +11,6 @@ import {
   NOMBRE_PROYECTO,
   PROYECTOS_INFORME,
   calcularResumen,
-  carteraAtipica,
-  formatoVariacion,
   informeAnterior,
   faltantesParaEnviar,
   nombrePeriodo,
@@ -114,14 +112,12 @@ export function InformeForm({
     }
     return base;
   });
-  // Explicación de variaciones atípicas de la cartera total, por proyecto.
-  const [justif, setJustif] = useState<Record<ProyectoInforme, string>>(() => {
+  // Explicaciones de cartera de informes anteriores (ya no se piden): se conservan al guardar.
+  const [justif] = useState<Record<ProyectoInforme, string>>(() => {
     const base = {} as Record<ProyectoInforme, string>;
     for (const p of PROYECTOS_INFORME) base[p.id] = informe?.cifras.find((x) => x.proyecto === p.id)?.justificacion_cartera ?? "";
     return base;
   });
-  // Campo de cartera total en edición: la explicación se pide al salir de él, no a mitad de escritura.
-  const [enEdicion, setEnEdicion] = useState<ProyectoInforme | null>(null);
   const [seps, setSeps] = useState<SepForm[]>(() => (informe?.separaciones ?? []).map((s) => ({ ...s, valor: String(s.valor) })));
   const [moras, setMoras] = useState<MoraForm[]>(() => (informe?.mora_destacada ?? []).map((m) => ({ ...m, valor: String(m.valor) })));
   const [analisis, setAnalisis] = useState(informe?.analisis ?? "");
@@ -186,7 +182,6 @@ export function InformeForm({
     () => (periodoISO ? informeAnterior(historial.filter((x) => x.id !== informe?.id), periodoISO) : null),
     [historial, informe?.id, periodoISO],
   );
-  const atipicos = useMemo(() => new Map(carteraAtipica(datos.cifras, anterior).map((v) => [v.proyecto, v])), [datos, anterior]);
   const mesAnt = anterior ? MESES_CORTOS[Number(anterior.periodo.slice(5, 7)) - 1] : "";
   const periodoRepetido = periodoISO !== null && periodoISO !== informe?.periodo && periodosUsados.includes(periodoISO);
   const totalSeps = datos.separaciones.reduce((s, x) => s + x.valor, 0);
@@ -200,7 +195,7 @@ export function InformeForm({
     if (datos.separaciones.some((s) => !s.cliente)) { setError("Cada separación necesita el nombre del cliente."); return; }
     if (datos.mora_destacada.some((m) => !m.cliente)) { setError("Cada cliente en mora necesita el nombre."); return; }
     if (enviar) {
-      const f = faltantesParaEnviar({ cifras: datos.cifras, separaciones: datos.separaciones, analisis }, anterior);
+      const f = faltantesParaEnviar({ cifras: datos.cifras, separaciones: datos.separaciones, analisis });
       if (f.length) { setError("Falta información para enviar a revisión. Puedes guardarlo como borrador mientras tanto."); setFaltan(f); return; }
     }
     setGuardando(enviar ? "enviar" : "borrador");
@@ -256,14 +251,12 @@ export function InformeForm({
         <h3 id={`${uid}-s2`} className="section-title" style={{ margin: 0 }}>2. Cifras por proyecto</h3>
         <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>
           Escribe los valores en pesos. Si un proyecto no tuvo movimiento en el mes, marca «Sin movimiento».
-          {anterior && <> Bajo cada campo aparece el valor de {nombrePeriodo(anterior.periodo)} como referencia; si la cartera total cambia más del 50 %, se pide una breve explicación.</>}
+          {anterior && <> Bajo cada campo aparece el valor de {nombrePeriodo(anterior.periodo)} como referencia.</>}
         </p>
         {PROYECTOS_INFORME.map((p) => {
           const c = cifras[p.id];
           const incluido = c.sinMovimiento || CAMPOS.some((f) => c[f.key].trim() !== "");
           const previo = anterior?.cifras.find((x) => x.proyecto === p.id);
-          const atipico = atipicos.get(p.id);
-          const idJustif = `${uid}-${p.id}-justif`;
           return (
             <fieldset key={p.id} style={{ ...fila, margin: 0 }}>
               <legend style={{ fontWeight: 700, fontSize: 13.5, color: "var(--text)", padding: "0 4px" }}>
@@ -283,9 +276,7 @@ export function InformeForm({
                         <span>{f.label}</span>
                         <InputMonto id={id} className="input num" placeholder="$ 0"
                           value={c[f.key]} aria-invalid={invalido} aria-describedby={`${id}-ayuda`} title={f.ayuda}
-                          onChange={(v) => setCifra(p.id, { [f.key]: v } as Partial<CifraForm>)}
-                          onFocus={f.key === "cartera_total" ? () => setEnEdicion(p.id) : undefined}
-                          onBlur={f.key === "cartera_total" ? () => setEnEdicion((x) => (x === p.id ? null : x)) : undefined} />
+                          onChange={(v) => setCifra(p.id, { [f.key]: v } as Partial<CifraForm>)} />
                         {/* Siempre una línea: el valor del informe anterior o, sin él, la ayuda del campo. */}
                         <span id={`${id}-ayuda`} style={{ fontSize: 11, fontWeight: 400 }}>
                           {previo ? <>{mesAnt}: <span className="num">{COP.format(previo[f.key])}</span></> : f.ayuda}
@@ -294,18 +285,6 @@ export function InformeForm({
                     );
                   })}
                 </div>
-              )}
-              {atipico && enEdicion !== p.id && (
-                <label className="field" htmlFor={idJustif} style={{ background: "var(--warn-soft)", borderRadius: 6, padding: "8px 10px" }}>
-                  <span style={{ color: "var(--text)" }}>
-                    <span aria-hidden="true" style={{ color: "var(--warn)", fontWeight: 700 }}>! </span>
-                    La cartera total cambió <b>{formatoVariacion(atipico.variacion)}</b> frente a {nombrePeriodo(atipico.periodoAnterior)} ({COP.format(atipico.anterior)} → {COP.format(atipico.actual)}). Explica el motivo *
-                  </span>
-                  <input id={idJustif} className="input" value={justif[p.id]} maxLength={600}
-                    placeholder="Ej. nuevas ventas, desistimientos, cierre de etapa, corrección de una cifra…"
-                    aria-invalid={!justif[p.id].trim()}
-                    onChange={(e) => { marcar(); const v = e.target.value; setJustif((j) => ({ ...j, [p.id]: v })); }} />
-                </label>
               )}
             </fieldset>
           );

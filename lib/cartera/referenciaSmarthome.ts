@@ -42,13 +42,8 @@ export interface ReferenciaLotes {
  * `cuotas`: todas las cuotas de Lotes (para saber cuál es la primera de cada venta).
  * `abonos`: abonos de Lotes (se filtran al mes de `periodo`, YYYY-MM-01).
  */
-export function calcularReferenciaLotes(
-  periodo: string,
-  cuotas: CuotaSH[],
-  abonos: AbonoSH[],
-  clientes: Map<string, ClienteSH>,
-): ReferenciaLotes {
-  const mes = periodo.slice(0, 7);
+/** Cuotas por id, primera cuota (separación) de cada venta y cuáles son separaciones. */
+function estructura(cuotas: CuotaSH[]) {
   const porId = new Map(cuotas.map((c) => [c.payment_id, c]));
   // Primera cuota (no crédito) de cada venta = su separación.
   const primera = new Map<string, CuotaSH>();
@@ -58,6 +53,18 @@ export function calcularReferenciaLotes(
     if (!p || c.fecha < (p.fecha as string)) primera.set(c.prospect_id, c);
   }
   const esSeparacion = new Set([...primera.values()].map((c) => c.payment_id));
+  const esCuotaInicial = (c: CuotaSH | undefined): c is CuotaSH => !!c && !(c.tipo !== null && TIPOS_EXCLUIDOS.has(c.tipo));
+  return { porId, primera, esSeparacion, esCuotaInicial };
+}
+
+export function calcularReferenciaLotes(
+  periodo: string,
+  cuotas: CuotaSH[],
+  abonos: AbonoSH[],
+  clientes: Map<string, ClienteSH>,
+): ReferenciaLotes {
+  const mes = periodo.slice(0, 7);
+  const { porId, esSeparacion } = estructura(cuotas);
 
   const r: ReferenciaLotes = { recaudoTotal: 0, separacionesTotal: 0, recaudoReal: 0, delMes: 0, anticipado: 0, moraRecuperada: 0, separaciones: [] };
   const sep = new Map<string, number>();
@@ -94,3 +101,73 @@ export function separacionEnInforme(cliente: string, nombresInforme: string[]): 
   const a = new Set(normal(cliente));
   return nombresInforme.some((n) => normal(n).filter((p) => a.has(p)).length >= 2);
 }
+
+// ── Pista de la causa de una diferencia ─────────────────────────────
+
+export type TipoPista = "venta_nueva" | "pago_no_incluido" | "otro_mes" | "sin_causa";
+export interface PistaDiferencia { tipo: TipoPista; texto: string }
+
+const COP = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const fecha = (iso: string) => `${Number(iso.slice(8, 10))} ${MESES[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+const mesDesplazado = (mes: string, n: number) => {
+  const d = new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)) - 1 + n, 1));
+  return d.toISOString().slice(0, 7);
+};
+const lista = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`);
+
+/**
+ * Posible causa de una diferencia (Smarthome − informe) en el recaudo real de
+ * Lotes. Solo propone patrones verificables en los datos; si no hay ninguno,
+ * lo dice. `abonos` debe incluir el mes anterior y el siguiente.
+ */
+export function pistaDiferencia(
+  periodo: string,
+  diferencia: number,
+  cuotas: CuotaSH[],
+  abonos: AbonoSH[],
+  clientes: Map<string, ClienteSH>,
+): PistaDiferencia | null {
+  if (Math.abs(diferencia) < 1) return null;
+  const mes = periodo.slice(0, 7);
+  const { porId, primera, esSeparacion, esCuotaInicial } = estructura(cuotas);
+  const nombre = (pid: string) => {
+    const c = clientes.get(pid);
+    const n = (c?.cliente ?? "").replace(/\s+/g, " ").trim() || "un cliente";
+    return c?.module ? `${n} (${c.module.toLowerCase()})` : n;
+  };
+  const deCuotaInicial = abonos.filter((a) => esCuotaInicial(porId.get(cuotaDeAbono(a.id))));
+  const noSeparacion = (a: AbonoSH) => !esSeparacion.has(cuotaDeAbono(a.id));
+
+  if (diferencia > 0) {
+    // 1. Venta nueva que pagó una segunda cuota en su mismo mes de compra (el informe suele contarla como venta).
+    const extra = deCuotaInicial.filter((a) => {
+      if (a.fecha?.slice(0, 7) !== mes || !noSeparacion(a)) return false;
+      const q = porId.get(cuotaDeAbono(a.id));
+      return q?.fecha?.slice(0, 7) === primera.get(a.prospect_id)?.fecha?.slice(0, 7);
+    });
+    const sumaExtra = extra.reduce((t, a) => t + (a.monto ?? 0), 0);
+    if (extra.length && Math.abs(sumaExtra - diferencia) < 1) {
+      const quienes = lista([...new Set(extra.map((a) => nombre(a.prospect_id)))]);
+      return {
+        tipo: "venta_nueva",
+        texto: `${quienes} ${extra.length === 1 ? "es una venta nueva que pagó" : "son ventas nuevas que pagaron"} ${COP.format(diferencia)} a una segunda cuota en su mismo mes de compra. El informe suele contar ese dinero como venta, no como recaudo.`,
+      };
+    }
+    // 2. Un pago del mes por exactamente la diferencia que el informe no habría incluido.
+    const igual = deCuotaInicial.find((a) => a.fecha?.slice(0, 7) === mes && noSeparacion(a) && Math.abs((a.monto ?? 0) - diferencia) < 1);
+    if (igual?.fecha) {
+      return { tipo: "pago_no_incluido", texto: `El informe no habría incluido el pago de ${COP.format(diferencia)} de ${nombre(igual.prospect_id)} del ${fecha(igual.fecha)}.` };
+    }
+  }
+  // 3. Un pago por el mismo valor con fecha en el mes anterior o el siguiente.
+  const vecinos = [mesDesplazado(mes, -1), mesDesplazado(mes, 1)];
+  const otro = deCuotaInicial.find((a) => vecinos.includes(a.fecha?.slice(0, 7) ?? "") && noSeparacion(a) && Math.abs((a.monto ?? 0) - Math.abs(diferencia)) < 1);
+  if (otro?.fecha) {
+    return { tipo: "otro_mes", texto: `Smarthome tiene un pago de ${COP.format(Math.abs(diferencia))} de ${nombre(otro.prospect_id)} con fecha ${fecha(otro.fecha)}; pudo registrarse en un mes distinto al del informe.` };
+  }
+  return { tipo: "sin_causa", texto: "Sin causa identificada en Smarthome: puede ser un pago anulado o reprogramado, o un ajuste hecho en el informe." };
+}
+
+/** Comparación de un mes contra el informe guardado (la calcula la ruta de referencia). */
+export interface ComparacionSmarthome { informeReal: number | null; diferencia: number | null; pista: PistaDiferencia | null }

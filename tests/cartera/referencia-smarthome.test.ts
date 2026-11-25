@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { calcularReferenciaLotes, separacionEnInforme, type AbonoSH, type CuotaSH } from "@/lib/cartera/referenciaSmarthome";
+import { calcularReferenciaLotes, pistaDiferencia, separacionEnInforme, type AbonoSH, type CuotaSH } from "@/lib/cartera/referenciaSmarthome";
 
 const uuid = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 // Venta A (separó en agosto) y venta B (nueva en octubre: su primera cuota es la separación).
@@ -40,4 +40,28 @@ test("reconoce la separación en el informe aunque el nombre esté escrito disti
   assert.equal(separacionEnInforme("Ramiro Porras Sarmiento", ["ramiro porras"]), true);
   assert.equal(separacionEnInforme("José Antonio Muñoz Arrazola", ["Jose Antonio Muñoz Arrazola"]), true);
   assert.equal(separacionEnInforme("Javier Barrero", ["Jose Antonio Muñoz Arrazola"]), false);
+});
+
+test("la pista explica una venta nueva que pagó una segunda cuota en su mes de compra", () => {
+  // Venta C: separación 10M el 20-feb y segunda cuota de 5M el 21-feb, pagada el 24-feb.
+  const cs: CuotaSH[] = [
+    { payment_id: uuid(20), prospect_id: "C", fecha: "2026-02-20", tipo: 0 },
+    { payment_id: uuid(21), prospect_id: "C", fecha: "2026-02-21", tipo: 0 },
+    { payment_id: uuid(22), prospect_id: "C", fecha: "2026-03-31", tipo: 0 },
+  ];
+  const ab: AbonoSH[] = [abono(20, "C", "2026-02-20", 10_000_000, 20), abono(21, "C", "2026-02-24", 5_000_000, 21)];
+  const nombres = new Map([["C", { cliente: "Monica Ospino", module: "MANZANA 4 LOTE 26" }]]);
+  const p = pistaDiferencia("2026-02-01", 5_000_000, cs, ab, nombres);
+  assert.equal(p?.tipo, "venta_nueva");
+  assert.match(p!.texto, /Monica Ospino \(manzana 4 lote 26\) es una venta nueva/);
+  assert.equal(pistaDiferencia("2026-02-01", 0, cs, ab, nombres), null); // sin diferencia, sin pista
+});
+
+test("la pista detecta un pago del mismo valor en el mes vecino, o dice que no hay causa", () => {
+  const p = pistaDiferencia("2026-10-01", -1_000_000, cuotas, abonos, new Map());
+  assert.equal(p?.tipo, "sin_causa"); // ningún pago de $1.000.000 en sep/nov
+  const otro = pistaDiferencia("2026-09-01", -1_000_000, cuotas, abonos, new Map());
+  assert.equal(otro?.tipo, "otro_mes"); // el pago de $1.000.000 de A está en octubre
+  const incluido = pistaDiferencia("2026-10-01", 1_000_000, cuotas, abonos, new Map());
+  assert.equal(incluido?.tipo, "pago_no_incluido"); // pago de $1.000.000 de A en octubre
 });
