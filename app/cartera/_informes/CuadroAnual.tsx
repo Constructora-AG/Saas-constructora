@@ -6,14 +6,13 @@
 // de los informes mensuales. La misma estructura (bloques) se usa para la
 // pantalla y para la descarga en Excel.
 // ════════════════════════════════════════════════════════════════════
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ESTADOS_INFORME,
   MESES_CORTOS,
   PROYECTOS_INFORME,
   construirCuadroAnual,
   nombrePeriodo,
-  variacionAtipica,
   type CuadroAnual as Cuadro,
   type InformeResumen,
   type ResumenProyecto,
@@ -25,7 +24,8 @@ import { GraficasCuadro } from "./GraficasCuadro";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-type Formato = "cop" | "pct";
+/** "dif": diferencia Smarthome − informe; se muestra «✓» cuando coinciden. */
+type Formato = "cop" | "pct" | "dif";
 interface Fila {
   etiqueta: string;
   valores: (number | null)[];
@@ -38,6 +38,8 @@ interface Fila {
 }
 interface Bloque {
   titulo: string;
+  /** Encabezado de la primera columna (por defecto «Proyecto»). */
+  encabezado?: string;
   nota: string;
   columnaFinal: string;
   filas: Fila[];
@@ -57,13 +59,6 @@ function bloquesDe(c: Cuadro): Bloque[] {
   const suma = (xs: (number | null)[]) => xs.reduce<number>((s, x) => s + (x ?? 0), 0);
   const ultimoValor = (xs: (number | null)[]) => [...xs].reverse().find((x) => x !== null) ?? null;
   const ratio = (a: (number | null)[], b: (number | null)[]) => a.map((x, k) => (x === null || b[k] === null || !b[k] ? null : x / (b[k] as number)));
-  const avisos = (xs: (number | null)[], que: string) =>
-    xs.map((x, k) => {
-      if (k === 0) return null;
-      const prev = [...xs.slice(0, k)].reverse().find((v) => v !== null);
-      const v = variacionAtipica(prev, x);
-      return v === null ? null : `${que}: ${v > 0 ? "+" : ""}${Math.round(v * 100)} % frente al mes anterior con informe. Verifica la cifra.`;
-    });
 
   const flujo = (titulo: string, nota: string, campo: "real" | "programado", acumulado: (number | null)[]): Bloque => ({
     titulo,
@@ -80,7 +75,7 @@ function bloquesDe(c: Cuadro): Bloque[] {
     nota,
     columnaFinal: "Último mes",
     filas: [
-      ...PROYECTOS_INFORME.map((p) => { const xs = serie(p.id, campo); return { etiqueta: p.nombre, valores: xs, final: ultimoValor(xs), formato: "cop" as const, avisos: avisos(xs, `${nombre} de ${p.nombre}`) }; }),
+      ...PROYECTOS_INFORME.map((p) => { const xs = serie(p.id, campo); return { etiqueta: p.nombre, valores: xs, final: ultimoValor(xs), formato: "cop" as const }; }),
       { etiqueta: "Subtotal", valores: serie(null, campo), final: ultimoValor(serie(null, campo)), formato: "cop", tipo: "subtotal" },
     ],
   });
@@ -113,11 +108,54 @@ function bloquesDe(c: Cuadro): Bloque[] {
   ];
 }
 
-const fmt = (v: number | null, f: Formato) => (v === null ? "—" : f === "pct" ? pct(v, "—") : COP.format(v));
+const fmt = (v: number | null, f: Formato) =>
+  v === null ? "—"
+    : f === "pct" ? pct(v, "—")
+    : f === "dif" ? (Math.abs(v) < 1 ? "✓" : `${v > 0 ? "+" : "−"}${COP.format(Math.abs(v))}`)
+    : COP.format(v);
+
+/** Totales de Smarthome por mes (Lotes Reserva del Manantial), de /api/cartera/informes/referencia?anio=. */
+interface MesSmarthome { periodo: string; recaudoReal: number; separacionesTotal: number; anticipado: number; nSeparaciones: number }
+
+/** Bloque «Referencia Smarthome»: recaudo real del informe frente a Smarthome, mes a mes. */
+function bloqueSmarthome(c: Cuadro, meses: MesSmarthome[]): Bloque {
+  const hoy = new Date();
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+  // Meses futuros sin dato de Smarthome; meses sin informe, sin comparación.
+  const sh = (campo: "recaudoReal" | "separacionesTotal" | "anticipado") =>
+    c.meses.map((m) => (m.periodo.slice(0, 7) > mesActual ? null : meses.find((x) => x.periodo === m.periodo)?.[campo] ?? null));
+  const informe = c.meses.map((m) => m.resumen?.proyectos.find((p) => p.proyecto === "lotes_manantial")?.real ?? null);
+  const real = sh("recaudoReal");
+  const dif = informe.map((v, k) => (v === null || real[k] === null ? null : (real[k] as number) - v));
+  const comparables = dif.filter((d) => d !== null).length;
+  const coinciden = dif.filter((d) => d !== null && Math.abs(d) < 1).length;
+  const suma = (xs: (number | null)[]) => xs.reduce<number>((t, x) => t + (x ?? 0), 0);
+  return {
+    titulo: "Referencia Smarthome · Lotes Reserva del Manantial",
+    encabezado: "Concepto",
+    nota: `Recaudo real = pagos de cuota inicial del mes − separaciones (pagos a la primera cuota de cada venta). ${comparables ? `Coincide con el informe en ${coinciden} de ${comparables} meses.` : "Sin meses para comparar."} Aqua, Cascada Real, el programado y la cartera no se comparan.`,
+    columnaFinal: "Total año",
+    filas: [
+      { etiqueta: "Recaudo real · informe", valores: informe, final: suma(informe), formato: "cop" },
+      { etiqueta: "Recaudo real · Smarthome", valores: real, final: suma(real), formato: "cop" },
+      {
+        etiqueta: "Diferencia (Smarthome − informe)", valores: dif, final: null, formato: "dif", tipo: "subtotal",
+        avisos: dif.map((d, k) => (d === null || Math.abs(d) < 1 ? null : `${nombrePeriodo(c.meses[k].periodo)}: el informe registra ${COP.format(informe[k] as number)} y Smarthome ${COP.format(real[k] as number)}.`)),
+      },
+      { etiqueta: "Separaciones · Smarthome", valores: sh("separacionesTotal"), final: suma(sh("separacionesTotal")), formato: "cop" },
+      { etiqueta: "Anticipos · Smarthome", valores: sh("anticipado"), final: suma(sh("anticipado")), formato: "cop" },
+    ],
+  };
+}
 
 const ETIQUETA_CORTA: Record<string, string> = { borrador: "Borrador", enviado: "Por revisar", observado: "Con observ.", aprobado: "Aprobado" };
 
-export function CuadroAnual({ informes, onAbrir }: { informes: InformeResumen[]; onAbrir: (i: InformeResumen) => void }) {
+export function CuadroAnual({ informes, onAbrir, puedeRevisar = false }: {
+  informes: InformeResumen[];
+  onAbrir: (i: InformeResumen) => void;
+  /** Solo quien revisa ve la referencia de Smarthome. */
+  puedeRevisar?: boolean;
+}) {
   const anios = useMemo(() => {
     const set = new Set(informes.map((i) => Number(i.periodo.slice(0, 4))));
     set.add(new Date().getFullYear());
@@ -130,7 +168,29 @@ export function CuadroAnual({ informes, onAbrir }: { informes: InformeResumen[];
 
   const cuadro = useMemo(() => construirCuadroAnual(informes, anio, soloAprobados), [informes, anio, soloAprobados]);
   const bloques = useMemo(() => bloquesDe(cuadro), [cuadro]);
-  const hayAvisos = bloques.some((b) => b.filas.some((f) => f.avisos?.some(Boolean)));
+
+  // Referencia Smarthome (solo quien revisa): se consulta al elegir el año.
+  const [sh, setSh] = useState<{ anio: number; estado: "cargando" | "error" | "ok"; meses: MesSmarthome[]; error?: string } | null>(null);
+  const cargarSh = useCallback(async (a: number) => {
+    setSh({ anio: a, estado: "cargando", meses: [] });
+    try {
+      const res = await fetch(`/api/cartera/informes/referencia?anio=${a}`);
+      const body = (await res.json().catch(() => ({}))) as { meses?: MesSmarthome[]; error?: string };
+      if (!res.ok) throw new Error(body.error ?? `Error ${res.status}`);
+      setSh({ anio: a, estado: "ok", meses: body.meses ?? [] });
+    } catch (e) {
+      setSh({ anio: a, estado: "error", meses: [], error: e instanceof Error ? e.message : "No se pudo consultar Smarthome" });
+    }
+  }, []);
+  useEffect(() => { if (puedeRevisar) void cargarSh(anio); }, [puedeRevisar, anio, cargarSh]);
+  const bloqueSh = useMemo(() => (sh?.estado === "ok" && sh.anio === anio ? bloqueSmarthome(cuadro, sh.meses) : null), [sh, anio, cuadro]);
+  // La referencia Smarthome va primero: es lo que más consulta quien revisa (también en el Excel).
+  const todos = useMemo(() => (bloqueSh ? [bloqueSh, ...bloques] : bloques), [bloques, bloqueSh]);
+  // Orden en pantalla: gráficas → referencia Smarthome → bloques de los informes.
+  const secciones = useMemo<(Bloque | "graficas")[]>(
+    () => (bloqueSh ? ["graficas", bloqueSh, ...bloques] : ["graficas", ...bloques]),
+    [bloques, bloqueSh],
+  );
   const sinAprobar = cuadro.meses.filter((m) => m.informe && m.informe.estado !== "aprobado").length;
 
   async function exportar() {
@@ -145,10 +205,10 @@ export function CuadroAnual({ informes, onAbrir }: { informes: InformeResumen[];
       ws.columns = [{ width: 34 }, ...MESES_CORTOS.map(() => ({ width: 15 })), { width: 17 }];
       ws.addRow([`Cuadro control de recaudo y mora ${anio}${soloAprobados ? " (solo informes aprobados)" : ""}`]).font = { bold: true, size: 13 };
       ws.addRow([`Generado ${new Date().toLocaleString("es-CO")} · ${cuadro.mesesConInforme} mes(es) con informe`]).font = { italic: true, color: { argb: "FF6A7484" } };
-      for (const b of bloques) {
+      for (const b of todos) {
         ws.addRow([]);
         ws.addRow([b.titulo.toUpperCase()]).font = { bold: true, color: { argb: "FF123A7A" } };
-        const head = ws.addRow(["Proyecto", ...MESES_CORTOS.map((m, k) => {
+        const head = ws.addRow([b.encabezado ?? "Proyecto", ...MESES_CORTOS.map((m, k) => {
           const est = cuadro.meses[k].informe?.estado;
           return est && est !== "aprobado" ? `${m} (${ETIQUETA_CORTA[est]})` : m;
         }), b.columnaFinal]);
@@ -159,7 +219,7 @@ export function CuadroAnual({ informes, onAbrir }: { informes: InformeResumen[];
           if (f.tipo) row.font = { bold: true };
           row.eachCell((cell, col) => {
             if (col === 1) return;
-            cell.numFmt = f.formato === "pct" ? "0.00%" : '"$" #,##0';
+            cell.numFmt = f.formato === "pct" ? "0.00%" : f.formato === "dif" ? '"+$" #,##0;"-$" #,##0;"✓"' : '"$" #,##0';
             const aviso = f.avisos?.[col - 2];
             if (aviso) cell.note = aviso;
           });
@@ -211,16 +271,27 @@ export function CuadroAnual({ informes, onAbrir }: { informes: InformeResumen[];
           Incluye {sinAprobar} mes(es) sin aprobar; su estado aparece bajo el nombre del mes. Marca «Solo informes aprobados» para ver solo cifras oficiales.
         </p>
       )}
-      {hayAvisos && (
+      {bloqueSh && (
         <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-2)" }}>
           <span className="badge warn" style={{ marginRight: 6 }}><span aria-hidden="true">!</span> Revisar</span>
-          marca cifras de cartera que cambian más del 50 % frente al mes anterior. Pasa el cursor o enfoca la celda para ver el detalle.
+          marca las diferencias entre el informe y Smarthome. Pasa el cursor o enfoca la celda para ver el detalle.
         </p>
       )}
 
-      {cuadro.mesesConInforme > 0 && <GraficasCuadro cuadro={cuadro} />}
 
-      {cuadro.mesesConInforme > 0 && bloques.map((b) => (
+      {puedeRevisar && cuadro.mesesConInforme > 0 && sh?.estado === "cargando" && (
+        <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>Consultando la referencia de Smarthome…</p>
+      )}
+      {puedeRevisar && sh?.estado === "error" && (
+        <div role="alert" style={{ fontSize: 12.5, color: "var(--high)" }}>
+          No se pudo cargar la referencia de Smarthome: {sh.error}{" "}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void cargarSh(anio)}>Reintentar</button>
+        </div>
+      )}
+
+      {cuadro.mesesConInforme > 0 && secciones.map((b) => b === "graficas" ? (
+        <GraficasCuadro key="graficas" cuadro={cuadro} />
+      ) : (
         <section key={b.titulo} style={{ display: "grid", gap: 6 }} aria-label={b.titulo}>
           <div>
             <h3 className="section-title" style={{ margin: 0 }}>{b.titulo}</h3>
@@ -230,7 +301,7 @@ export function CuadroAnual({ informes, onAbrir }: { informes: InformeResumen[];
             <table className="clean" aria-label={`${b.titulo} ${anio}`} style={{ fontSize: 12.5 }}>
               <thead>
                 <tr>
-                  <th scope="col" style={{ ...stickyCol, background: "var(--surface-2)" }}>Proyecto</th>
+                  <th scope="col" style={{ ...stickyCol, background: "var(--surface-2)" }}>{b.encabezado ?? "Proyecto"}</th>
                   {cuadro.meses.map((m, k) => {
                     const inf = m.informe ? informes.find((i) => i.id === m.informe!.id) : undefined;
                     return (

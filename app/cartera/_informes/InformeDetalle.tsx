@@ -15,6 +15,7 @@ import {
 } from "@/lib/cartera/informes";
 import { IconAlert, IconChart, IconCoins, IconWallet } from "../../icons";
 import { COP, Cumplimiento, EstadoBadge, ResumenTabla, fmtFechaHora, pct } from "./comun";
+import { ReferenciaSmarthome } from "./ReferenciaSmarthome";
 
 export type AccionRevision = "aprobar" | "devolver" | "reabrir";
 
@@ -29,14 +30,13 @@ const COMPARADOS: { key: CampoComparado; label: string }[] = [
 const CELDA = { padding: "10px 12px" } as const;
 
 /** Celda de comparación: variación (texto + flecha) y valor anterior. */
-function Variacion({ actual, anterior, atipica }: { actual: number; anterior: number | undefined; atipica: boolean }) {
+function Variacion({ actual, anterior }: { actual: number; anterior: number | undefined }) {
   if (anterior === undefined) return <span className="muted">Sin dato anterior</span>;
   const v = anterior > 0 ? (actual - anterior) / anterior : null;
   const txt = v === null ? (actual > 0 ? "Nuevo" : "Sin cambio") : Math.abs(v) < 0.005 ? "Sin cambio" : `${v > 0 ? "▲" : "▼"} ${formatoVariacion(v)}`;
   return (
     <span style={{ display: "block" }}>
       <b style={{ color: "var(--text)" }}>{txt}</b>
-      {atipica && <span className="badge warn" style={{ marginLeft: 6, padding: "2px 7px" }}><span aria-hidden="true">!</span> Revisar</span>}
       <span className="cc-dias">antes {COP.format(anterior)}</span>
     </span>
   );
@@ -65,10 +65,9 @@ function Comparacion({ informe, resumen, anterior }: { informe: InformeResumen; 
                 <tr key={p.proyecto}>
                   <td style={{ ...CELDA, whiteSpace: "normal", minWidth: 120 }}><b>{p.nombre}</b></td>
                   {COMPARADOS.map((c) => {
-                    const atipica = c.key === "carteraTotal" && atipicos.some((a) => a.proyecto === p.proyecto);
                     return (
-                      <td key={c.key} style={{ ...CELDA, ...(atipica ? { background: "var(--warn-soft)" } : {}) }}>
-                        <Variacion actual={p[c.key]} anterior={tenia && ant ? ant[c.key] : undefined} atipica={atipica} />
+                      <td key={c.key} style={CELDA}>
+                        <Variacion actual={p[c.key]} anterior={tenia && ant ? ant[c.key] : undefined} />
                       </td>
                     );
                   })}
@@ -185,6 +184,14 @@ export function InformeDetalle({
         </h3>
         <Comparacion informe={informe} resumen={resumen} anterior={anterior} />
       </section>
+
+      {/* Solo para quien revisa: contraste con los datos sincronizados de Smarthome. */}
+      {puedeRevisar && (
+        <section aria-labelledby={`${uid}-sh`} style={{ display: "grid", gap: 8 }}>
+          <h3 id={`${uid}-sh`} className="section-title" style={{ margin: 0 }}>Referencia Smarthome</h3>
+          <ReferenciaSmarthome informe={informe} />
+        </section>
+      )}
 
       <section aria-labelledby={`${uid}-sep`} style={{ display: "grid", gap: 8 }}>
         <h3 id={`${uid}-sep`} className="section-title" style={{ margin: 0 }}>Separaciones eliminadas del proyectado</h3>

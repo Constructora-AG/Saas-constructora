@@ -314,7 +314,7 @@ export function InformeMensual({ clientes, puedeRevisar }: { clientes: ClienteCa
             </div>
             <div className="drawer-body">
               {panel.modo === "cuadro" ? (
-                <CuadroAnual informes={informes} onAbrir={abrir} />
+                <CuadroAnual informes={informes} onAbrir={abrir} puedeRevisar={puedeRevisar} />
               ) : panel.modo === "historial" ? (
                 <Historial informes={informes} puedeRevisar={puedeRevisar} onAbrir={abrir} />
               ) : panel.modo === "ver" && actual ? (
