@@ -36,7 +36,7 @@ export function ImportarConciliacionEmergencia({ t }: { t: UseTransporte }) {
   async function importar(file: File) {
     setMsg(null);
     try {
-      const filas = leerConciliacion(await file.arrayBuffer());
+      const filas = await leerConciliacion(await file.arrayBuffer());
       if (filas.length === 0) {
         setMsg({ ok: false, texto: "No se encontraron filas de conciliación (se esperan hojas con FECHA, VOLQUETA, MOVIMIENTO, ACTA, HORAS y GRUPO)." });
         return;

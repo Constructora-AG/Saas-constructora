@@ -15,7 +15,8 @@
 // No toca Transporte AAA ni Contrato de Alquiler.
 
 import { readFileSync } from "node:fs";
-import { leerConciliacion, registroConciliacion } from "../lib/transporte/conciliacion";
+import * as XLSX from "xlsx";
+import { leerConciliacionCon, registroConciliacion } from "../lib/transporte/conciliacion";
 import { TARIFARIO_EMERGENCIA_DEFAULT, ZONAS_EMERGENCIA } from "../lib/transporte/constants";
 import type { Servicio } from "../lib/transporte/model";
 
@@ -23,7 +24,7 @@ const archivo = process.argv[2];
 if (!archivo) throw new Error("Falta la ruta del Excel de conciliación.");
 
 const buf = readFileSync(archivo);
-const filas = leerConciliacion(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer)
+const filas = leerConciliacionCon(XLSX, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer)
   .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.placa.localeCompare(b.placa));
 
 const porMes = new Map<string, Servicio[]>();

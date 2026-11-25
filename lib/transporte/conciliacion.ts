@@ -5,7 +5,7 @@
 // Lógica pura (sin React): la usan el botón de Registros y el script de carga.
 // ════════════════════════════════════════════════════════════════════
 
-import * as XLSX from "xlsx";
+import type * as ModuloXlsx from "xlsx";
 import { nuevoServicioId, num, type Servicio, type Tarifario } from "./model";
 import { TARIFARIO_EMERGENCIA_DEFAULT, TARIFAS_GP_EMERGENCIA } from "./constants";
 
@@ -23,8 +23,16 @@ export interface FilaConciliacion {
   zona: "B2B" | "B2G" | "";
 }
 
+/**
+ * Lee el Excel en el navegador. `xlsx` se carga bajo demanda para que no
+ * forme parte del JS inicial de los módulos de contratos.
+ */
+export async function leerConciliacion(datos: ArrayBuffer): Promise<FilaConciliacion[]> {
+  return leerConciliacionCon(await import("xlsx"), datos);
+}
+
 /** Lee el Excel: por cada fecha se toman las filas de la ÚLTIMA hoja que la contiene (borradores repetidos). */
-export function leerConciliacion(datos: ArrayBuffer): FilaConciliacion[] {
+export function leerConciliacionCon(XLSX: typeof ModuloXlsx, datos: ArrayBuffer): FilaConciliacion[] {
   const wb = XLSX.read(datos, { cellDates: true });
   const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const porHoja: Array<{ hoja: string; filas: Omit<FilaConciliacion, "key">[] }> = [];

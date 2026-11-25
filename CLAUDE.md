@@ -10,6 +10,8 @@ Las reglas de compatibilidad para Codex y las reglas especializadas del proyecto
 
 Aplica las reglas especializadas según la ruta:
 
-- Para `app/**/*.tsx`, `app/**/*.css` y `app/**/*.ts`, consulta `.ai/instructions/web-ui.instructions.md`.
-- Para `public/auth-emails/**/*.html`, consulta `.ai/agents/email-accessibility.agent.md`.
+- Para `app/**/*.tsx`, `app/**/*.css` y `app/**/*.ts`:
+  @.ai/instructions/web-ui.instructions.md
+- Para `public/auth-emails/**/*.html`:
+  @.ai/agents/email-accessibility.agent.md
 - Para archivos de autenticación como `lib/auth/invitationCallback.ts`, conserva la validación estricta de URLs, no expongas variables de entorno y verifica los consumidores existentes antes de cambiar contratos o aliases de compatibilidad.

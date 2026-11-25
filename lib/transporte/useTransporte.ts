@@ -310,7 +310,7 @@ export function useTransporte(ns: ModuloNs = "transporte", contratoApp?: Contrat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Sondeo cada 20 s (pausado con modal abierto) ─────────────────
+  // ── Sondeo cada 20 s (pausado con modal abierto o pestaña oculta) ─
   // Una sola consulta ligera de metadatos (clave → updated_at) y se descarga
   // ÚNICAMENTE lo que cambió en el servidor (antes se bajaban los 14 meses,
   // con el bloque de ~12 MB de fotos, cada minuto aunque nada hubiera cambiado).
@@ -346,14 +346,21 @@ export function useTransporte(ns: ModuloNs = "transporte", contratoApp?: Contrat
     [applyAdminContract, loadAllMonths],
   );
 
+  // También se pausa con la pestaña oculta; al volver se sincroniza de inmediato.
   useEffect(() => {
     if (loading) return;
-    const id = setInterval(() => {
-      if (modalOpenRef.current) return; // pausa con modal/drawer abierto
+    const sondear = () => {
+      if (modalOpenRef.current || document.hidden) return; // pausa con modal/drawer abierto o pestaña oculta
       pollTickRef.current += 1;
       refreshOnce(false).catch(() => undefined); // solo lo que cambió
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
+    };
+    const id = setInterval(sondear, POLL_INTERVAL_MS);
+    const alVolver = () => { if (!document.hidden) sondear(); };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+    };
   }, [loading, refreshOnce]);
 
   const refresh = useCallback(async () => {
