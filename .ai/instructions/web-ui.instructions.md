@@ -14,3 +14,4 @@ applyTo: 'app/**/*.tsx, app/**/*.css, app/**/*.ts'
 - Diseña para pantallas pequeñas, zoom y contenido variable; las tablas y formularios no deben romper el flujo horizontal sin una alternativa.
 - En componentes Client, gestiona estados de carga, error, vacío y permisos de forma explícita.
 - Evita efectos que dependan únicamente de hover y respeta `prefers-reduced-motion` cuando agregues animación.
+- Criterios WCAG 2.2 AA: los objetivos táctiles miden al menos 24×24 px o tienen espacio equivalente; el elemento con foco no queda oculto por cabeceras fijas, drawers o banners; toda acción de arrastre tiene una alternativa con clic o teclado.

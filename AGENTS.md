@@ -21,6 +21,8 @@ Las instrucciones adicionales de `.ai/instructions/` y los agentes de `.ai/agent
 - No ocultes errores con `as any`, `@ts-ignore` o manejo silencioso de excepciones.
 - Mantén nombres, formato y convenciones ya usadas en el archivo que modificas.
 - No introduzcas dependencias nuevas si la funcionalidad puede resolverse con las dependencias actuales.
+- No refactorices, limpies ni cambies estilo en código que la tarea no toca.
+- Para datos que dependen de versiones (APIs de Next.js, Supabase, librerías), verifica la versión en `package.json` y la documentación vigente en lugar de confiar en conocimiento general.
 
 ## Seguridad y datos
 
@@ -42,6 +44,17 @@ Estas reglas aplican al modificar `app/**/*.tsx`, `app/**/*.css` o `app/**/*.ts`
 - Diseña para pantallas pequeñas, zoom y contenido variable.
 - En componentes Client, gestiona estados de carga, error, vacío y permisos de forma explícita.
 - Evita efectos que dependan únicamente de hover y respeta `prefers-reduced-motion` cuando agregues animación.
+- Criterios WCAG 2.2 AA: objetivos táctiles de al menos 24×24 px, foco no oculto por elementos fijos y alternativa con clic o teclado para toda acción de arrastre.
+
+## Reglas especializadas adicionales
+
+Lee el archivo correspondiente antes de trabajar en estas áreas:
+
+- Next.js App Router (`app/**`): `.ai/instructions/nextjs.instructions.md`. El proyecto usa Next.js 15.5: `params` y `cookies()` son asíncronos y no se usan APIs exclusivas de Next.js 16.
+- Seguridad (`app/api/**`, `lib/**`, `middleware.ts`, `supabase/**`): `.ai/instructions/security.instructions.md`. Toda ruta API autoriza al inicio con `lib/auth/servidor.ts` o `lib/sync/auth.ts`.
+- Comentarios en el código: `.ai/instructions/code-comments.instructions.md`. Comenta el porqué, no el qué.
+- Mensajes de commit: `.ai/instructions/commits.instructions.md`. Formato `tipo(alcance): resumen` en español, presente, minúscula inicial, sin punto final y máximo 72 caracteres.
+- Revisión de código: `.ai/agents/code-review.agent.md`.
 
 ## Reglas para correos HTML
 

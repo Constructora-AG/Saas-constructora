@@ -20,6 +20,8 @@ applyTo: '**/*'
 - No ocultes errores con `as any`, `@ts-ignore` o manejo silencioso de excepciones.
 - Mantén nombres, formato y convenciones ya usadas en el archivo que modificas.
 - No introduzcas dependencias nuevas si la funcionalidad puede resolverse con las dependencias actuales.
+- No refactorices, limpies ni cambies estilo en código que la tarea no toca.
+- Para datos que dependen de versiones (APIs de Next.js, Supabase, librerías), verifica la versión en `package.json` y la documentación vigente en lugar de confiar en conocimiento general.
 
 ## Seguridad y datos
 
