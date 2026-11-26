@@ -6,11 +6,103 @@
 // anticipos, mora recuperada) y separaciones del mes. No modifica el informe.
 // ════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useState } from "react";
-import { nombrePeriodo, type InformeResumen } from "@/lib/cartera/informes";
-import { separacionEnInforme, type ComparacionSmarthome, type ReferenciaLotes } from "@/lib/cartera/referenciaSmarthome";
+import { NOMBRE_PROYECTO, nombrePeriodo, type InformeResumen, type ProyectoInforme } from "@/lib/cartera/informes";
+import {
+  separacionEnInforme,
+  type ComparacionSmarthome,
+  type ReferenciaLotes,
+  type UnidadDuplicada,
+  type VerificacionCliente,
+} from "@/lib/cartera/referenciaSmarthome";
 import { COP, fmtFechaHora } from "./comun";
 
-interface Respuesta { periodo: string; sincronizado: string | null; lotes: ReferenciaLotes; comparacion: ComparacionSmarthome }
+interface Respuesta {
+  periodo: string;
+  sincronizado: string | null;
+  lotes: ReferenciaLotes;
+  comparacion: ComparacionSmarthome;
+  clientesMora: VerificacionCliente[];
+  duplicados: UnidadDuplicada[];
+}
+
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const fechaCorta = (iso: string | null) => (iso ? `${Number(iso.slice(8, 10))} ${MESES_CORTOS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}` : "—");
+
+/** Resultado de un cliente del informe frente a Smarthome (texto + ícono). */
+function ResultadoCliente({ v }: { v: VerificacionCliente }) {
+  if (v.resultado === "no_aplica") return <span className="muted" style={{ fontSize: 12 }}>No está en Smarthome</span>;
+  if (v.resultado === "no_encontrado") return <span className="badge warn" style={{ padding: "1px 8px" }}><span aria-hidden="true">!</span> No encontrado en Smarthome</span>;
+  const d = (v.estado?.mora ?? 0) - v.valorInforme;
+  if (Math.abs(d) < 1) return <span className="badge ok" style={{ padding: "1px 8px" }}><span aria-hidden="true">✓</span> Coincide</span>;
+  return <span className="badge warn" style={{ padding: "1px 8px" }}><span aria-hidden="true">!</span> Smarthome: {COP.format(Math.abs(d))} {d > 0 ? "más" : "menos"}</span>;
+}
+
+/** Clientes en mora destacados del informe, verificados en Smarthome al cierre del mes. */
+function ClientesMora({ clientes, periodo }: { clientes: VerificacionCliente[]; periodo: string }) {
+  if (!clientes.length) return <p className="muted" style={{ margin: 0, fontSize: 13 }}>El informe no destaca clientes en mora.</p>;
+  const coinciden = clientes.filter((v) => v.resultado === "encontrado" && Math.abs((v.estado?.mora ?? 0) - v.valorInforme) < 1).length;
+  const r = { textAlign: "right" as const };
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <span className="muted" style={{ fontSize: 12 }}>
+        Mora al cierre de {nombrePeriodo(periodo).toLowerCase()} según Smarthome (cuotas de cuota inicial vencidas sin pagar). Coinciden {coinciden} de {clientes.length}.
+      </span>
+      <div className="table-wrap table-scroll">
+        <table className="clean" aria-label="Clientes en mora del informe verificados en Smarthome" style={{ fontSize: 12.5 }}>
+          <thead>
+            <tr>
+              <th scope="col">Cliente</th>
+              <th scope="col" style={r}>Informe</th>
+              <th scope="col" style={r}>Smarthome</th>
+              <th scope="col">Resultado</th>
+              <th scope="col">Situación al cierre</th>
+              <th scope="col">Último pago</th>
+              <th scope="col" style={r}>Pagó en el mes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clientes.map((v, i) => (
+              <tr key={i}>
+                <td style={{ whiteSpace: "normal", minWidth: 180 }}>
+                  <b>{v.cliente}</b>
+                  <span className="cc-dias">{v.unidades.length ? v.unidades.join(" · ") : NOMBRE_PROYECTO[v.proyecto as ProyectoInforme] ?? v.proyecto}</span>
+                </td>
+                <td className="num" style={r}>{COP.format(v.valorInforme)}</td>
+                <td className="num" style={r}>{v.estado ? COP.format(v.estado.mora) : "—"}</td>
+                <td><ResultadoCliente v={v} /></td>
+                <td>{v.estado ? (v.estado.cuotasVencidas
+                  ? (v.estado.diasMora
+                    ? `${v.estado.cuotasVencidas} cuota${v.estado.cuotasVencidas === 1 ? "" : "s"} vencida${v.estado.cuotasVencidas === 1 ? "" : "s"} · ${v.estado.diasMora} días`
+                    : `${v.estado.cuotasVencidas} cuota${v.estado.cuotasVencidas === 1 ? "" : "s"} sin pagar · vence el último día del mes`)
+                  : "Al día") : "—"}</td>
+                <td>{v.estado ? fechaCorta(v.estado.ultimoPago) : "—"}</td>
+                <td className="num" style={r}>{v.estado ? COP.format(v.estado.pagadoMes) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** Unidades con dos ventas activas en Smarthome: ventas viejas sin anular que inflan la mora. */
+function DatosPorDepurar({ duplicados }: { duplicados: UnidadDuplicada[] }) {
+  if (!duplicados.length) return null;
+  return (
+    <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderLeft: "4px solid var(--warn)", borderRadius: "var(--radius-sm)", padding: "10px 14px", display: "grid", gap: 6, fontSize: 13 }}>
+      <b style={{ color: "var(--text)" }}><span aria-hidden="true" style={{ color: "var(--warn)" }}>! </span>Datos por depurar en Smarthome · {duplicados.length} {duplicados.length === 1 ? "unidad tiene" : "unidades tienen"} dos ventas activas</b>
+      <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 2, color: "var(--text-2)" }}>
+        {duplicados.map((d) => (
+          <li key={`${d.proyecto}|${d.unidad}`}><b style={{ color: "var(--text)" }}>{d.unidad}</b> <span className="muted">({d.proyecto})</span>: {d.clientes.join(" / ")}</li>
+        ))}
+      </ul>
+      <span className="muted" style={{ fontSize: 12 }}>
+        Suele ser una venta desistida o un lote revendido sin anular la venta anterior. Mientras siga activa, Smarthome cuenta sus cuotas como mora. Estado actual de Smarthome, no del mes del informe.
+      </span>
+    </div>
+  );
+}
 
 /** Estado principal, con texto e ícono (no solo color). */
 export function EstadoComparacion({ diferencia, grande = false }: { diferencia: number | null; grande?: boolean }) {
@@ -137,12 +229,15 @@ export function ReferenciaSmarthome({ informe }: { informe: InformeResumen }) {
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexWrap: "wrap", gap: 6 }}>
             {r.separaciones.map((s) => {
               const enInforme = sepInforme.length > 0 ? separacionEnInforme(s.cliente, nombresInforme) : null;
+              const delInforme = enInforme ? sepInforme.find((x) => separacionEnInforme(s.cliente, [x.cliente])) : undefined;
+              const otroValor = delInforme && Math.abs(delInforme.valor - s.valor) >= 1 ? delInforme.valor : null;
               return (
                 <li key={s.prospect_id} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--surface-2)", fontSize: 12.5 }}>
                   {enInforme !== null && <span aria-hidden="true" style={{ color: enInforme ? "var(--ok)" : "var(--warn)", fontWeight: 700 }}>{enInforme ? "✓" : "!"}</span>}
                   <span>{s.cliente}{s.unidad && <span className="muted"> · {s.unidad.toLowerCase()}</span>} · <b className="num">{COP.format(s.valor)}</b></span>
                   {enInforme === true && <span className="sr-text">(en el informe)</span>}
                   {enInforme === false && <span style={{ fontSize: 11.5, color: "var(--warn)" }}>no está en el informe</span>}
+                  {otroValor !== null && <span style={{ fontSize: 11.5, color: "var(--warn)" }}>el informe dice {COP.format(otroValor)}</span>}
                 </li>
               );
             })}
@@ -150,9 +245,19 @@ export function ReferenciaSmarthome({ informe }: { informe: InformeResumen }) {
         )}
       </div>
 
+      {/* 4. Clientes en mora del informe */}
+      <div style={{ display: "grid", gap: 6 }}>
+        <b style={{ fontSize: 13, color: "var(--text)" }}>Clientes en mora del informe en Smarthome</b>
+        <ClientesMora clientes={datos.clientesMora ?? []} periodo={informe.periodo} />
+      </div>
+
+      {/* 5. Datos por depurar */}
+      <DatosPorDepurar duplicados={datos.duplicados ?? []} />
+
       <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>
         Datos sincronizados el {fmtFechaHora(datos.sincronizado)} · Las separaciones son los pagos a la primera cuota de cada venta.
-        Solo se compara Lotes: Aqua no, porque la sincronización no conserva los pagos de ventas desistidas; Cascada Real no está en Smarthome; el programado no, porque el informe lo ajusta por anticipos.
+        El recaudo solo se compara para Lotes: Aqua no, porque la sincronización no conserva los pagos de ventas desistidas; Cascada Real no está en Smarthome; el programado no, porque el informe lo ajusta por anticipos.
+        La mora al cierre se calcula con los planes de pago actuales de Smarthome.
       </p>
     </div>
   );

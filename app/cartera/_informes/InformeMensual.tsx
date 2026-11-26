@@ -21,6 +21,7 @@ import { COP, Cumplimiento, EstadoBadge, abrirAdjunto, fmtFechaHora, pct } from 
 import { InformeForm, type ClienteCartera, type GuardarInforme } from "./InformeForm";
 import { InformeDetalle, type AccionRevision } from "./InformeDetalle";
 import { CuadroAnual } from "./CuadroAnual";
+import { EstadoComparacion } from "./ReferenciaSmarthome";
 
 export type { ClienteCartera };
 
@@ -164,6 +165,33 @@ export function InformeMensual({ clientes, puedeRevisar }: { clientes: ClienteCa
   // Todo lo que espera acción de este usuario: quien revisa, los enviados;
   // el equipo de cartera, los devueltos con observaciones.
   const pendientes = informes.filter((i) => (puedeRevisar ? i.estado === "enviado" : i.estado === "observado"));
+  // Resultado frente a Smarthome (solo quien revisa) de los informes que se ven en la franja:
+  // pendientes y último. Una consulta anual por año involucrado (normalmente uno).
+  const visiblesSh = puedeRevisar ? [...pendientes, ...(ultimo ? [ultimo] : [])] : [];
+  const claveSh = [...new Set(visiblesSh.map((i) => `${i.periodo}|${i.updated_at}`))].sort().join(",");
+  const [sh, setSh] = useState<{ clave: string; difs: Map<string, number | null>; error: string | null } | null>(null);
+  useEffect(() => {
+    if (!claveSh) return;
+    let vivo = true;
+    const anios = [...new Set(claveSh.split(",").map((k) => k.slice(0, 4)))];
+    Promise.all(anios.map(async (a) => {
+      const res = await fetch(`/api/cartera/informes/referencia?anio=${a}`);
+      const body = (await res.json().catch(() => ({}))) as { meses?: { periodo: string; diferencia: number | null }[]; error?: string };
+      if (!res.ok) throw new Error(body.error ?? `Error ${res.status}`);
+      return body.meses ?? [];
+    }))
+      .then((r) => { if (vivo) setSh({ clave: claveSh, difs: new Map(r.flat().map((m) => [m.periodo, m.diferencia])), error: null }); })
+      .catch((e: unknown) => { if (vivo) setSh({ clave: claveSh, difs: new Map(), error: e instanceof Error ? e.message : "No se pudo consultar Smarthome" }); });
+    return () => { vivo = false; };
+  }, [claveSh]);
+  /** Etiqueta «coincide / diferencia con Smarthome» de un informe (nada si no aplica o aún carga). */
+  const resultadoSh = (i: InformeResumen) => {
+    if (!puedeRevisar || !sh || sh.clave !== claveSh) return null;
+    if (sh.error) return <span className="muted" style={{ fontSize: 12 }} title={sh.error}>Smarthome no disponible</span>;
+    const d = sh.difs.get(i.periodo);
+    return d === undefined || d === null ? null : <EstadoComparacion diferencia={d} />;
+  };
+
   // «Nuevo informe» propone el mes cerrado; si ya existe, el mes en curso.
   const hoy = new Date();
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
@@ -237,7 +265,8 @@ export function InformeMensual({ clientes, puedeRevisar }: { clientes: ClienteCa
                   <li key={i.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid var(--border)" }}>
                     <div style={{ flex: "1 1 240px", minWidth: 0 }}>
                       <b style={{ color: "var(--text)" }}>{nombrePeriodo(i.periodo)}</b>{" "}
-                      <EstadoBadge estado={i.estado} />
+                      <EstadoBadge estado={i.estado} />{" "}
+                      {resultadoSh(i)}
                       <div style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 2 }}>
                         {puedeRevisar
                           ? <>Enviado por {i.creado_por ?? "—"} el {fmtFechaHora(i.enviado_at)} · cumplimiento {pct(sub.cumplimiento)} · mora {COP.format(sub.mora)}</>
@@ -266,6 +295,7 @@ export function InformeMensual({ clientes, puedeRevisar }: { clientes: ClienteCa
               </h3>
               {ultimo && <EstadoBadge estado={ultimo.estado} />}
               {subUltimo && subUltimo.cumplimiento !== null && <Cumplimiento valor={subUltimo.cumplimiento} />}
+              {ultimo && resultadoSh(ultimo)}
             </div>
             <div style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 3 }}>{detalle}</div>
           </div>

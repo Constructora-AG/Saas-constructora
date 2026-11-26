@@ -166,6 +166,14 @@ export function InformeDetalle({
         </div>
       )}
 
+      {/* Solo para quien revisa, y primero: lo que más revisa es si el recaudo del mes coincide con Smarthome. */}
+      {puedeRevisar && (
+        <section aria-labelledby={`${uid}-sh`} style={{ display: "grid", gap: 8 }}>
+          <h3 id={`${uid}-sh`} className="section-title" style={{ margin: 0 }}>Referencia Smarthome</h3>
+          <ReferenciaSmarthome informe={informe} />
+        </section>
+      )}
+
       <div className="kpis" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
         <div className="kpi"><div className="kpi-head"><span className="kpi-ico s-ok"><IconCoins /></span><span className="kpi-label">Recaudo real</span></div><div className="kpi-value" style={{ fontSize: 20 }}>{COP.format(sub.real)}</div><div className="kpi-foot">programado {COP.format(sub.programado)}</div></div>
         <div className="kpi"><div className="kpi-head"><span className="kpi-ico s-brand"><IconChart /></span><span className="kpi-label">Cumplimiento</span></div><div className="kpi-value" style={{ fontSize: 20 }}>{pct(sub.cumplimiento)}</div><div className="kpi-foot">{sub.cumplimiento === null ? "sin recaudo programado" : sub.real >= sub.programado ? `superó la meta en ${COP.format(sub.real - sub.programado)}` : `faltaron ${COP.format(sub.programado - sub.real)}`}</div></div>
@@ -185,14 +193,6 @@ export function InformeDetalle({
         </h3>
         <Comparacion informe={informe} resumen={resumen} anterior={anterior} />
       </section>
-
-      {/* Solo para quien revisa: contraste con los datos sincronizados de Smarthome. */}
-      {puedeRevisar && (
-        <section aria-labelledby={`${uid}-sh`} style={{ display: "grid", gap: 8 }}>
-          <h3 id={`${uid}-sh`} className="section-title" style={{ margin: 0 }}>Referencia Smarthome</h3>
-          <ReferenciaSmarthome informe={informe} />
-        </section>
-      )}
 
       <section aria-labelledby={`${uid}-sep`} style={{ display: "grid", gap: 8 }}>
         <h3 id={`${uid}-sep`} className="section-title" style={{ margin: 0 }}>Separaciones eliminadas del proyectado</h3>

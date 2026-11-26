@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { calcularReferenciaLotes, pistaDiferencia, separacionEnInforme, type AbonoSH, type CuotaSH } from "@/lib/cartera/referenciaSmarthome";
+import {
+  calcularReferenciaLotes,
+  estadoAlCierre,
+  pistaDiferencia,
+  separacionEnInforme,
+  unidadesDuplicadas,
+  ventasDelCliente,
+  verificarMoraDestacada,
+  type AbonoSH,
+  type ClienteCarteraSH,
+  type CuotaPlanSH,
+  type CuotaSH,
+} from "@/lib/cartera/referenciaSmarthome";
 
 const uuid = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 // Venta A (separó en agosto) y venta B (nueva en octubre: su primera cuota es la separación).
@@ -64,4 +76,43 @@ test("la pista detecta un pago del mismo valor en el mes vecino, o dice que no h
   assert.equal(otro?.tipo, "otro_mes"); // el pago de $1.000.000 de A está en octubre
   const incluido = pistaDiferencia("2026-10-01", 1_000_000, cuotas, abonos, new Map());
   assert.equal(incluido?.tipo, "pago_no_incluido"); // pago de $1.000.000 de A en octubre
+});
+
+const carteraSH: ClienteCarteraSH[] = [
+  { prospect_id: "J12", cliente: "Jonathan Marquez Marin", module: "MANZANA 4 LOTE 12", project_name: "Lotes Reservas del Manantial" },
+  { prospect_id: "J13", cliente: "Jonathan  Marquez Marin", module: "MANZANA 4 LOTE 13", project_name: "Lotes Reservas del Manantial" },
+  { prospect_id: "B1", cliente: "BRAYAN JOSE SIBAJA CASTILLO", module: "MANZANA 4 LOTE 1", project_name: "Lotes Reservas del Manantial" },
+  { prospect_id: "X14", cliente: "Blaiber Sanchez", module: "MANZANA 4 LOTE 14", project_name: "Lotes Reservas del Manantial" },
+  { prospect_id: "Y14", cliente: "Ramiro Porras", module: "manzana 4  lote 14", project_name: "Lotes Reservas del Manantial" },
+  { prospect_id: "A1", cliente: "Jonathan Marquez Marin", module: "TORRE 1 APTO 101", project_name: "Aqua Club Residencial" },
+];
+
+test("empareja al cliente del informe con todas sus ventas del mismo proyecto", () => {
+  // Sin vínculo: por nombre, solo en Lotes (no la venta homónima de Aqua).
+  assert.deepEqual(ventasDelCliente("Jonathan Marquez Marin", null, "lotes_manantial", carteraSH).map((v) => v.prospect_id), ["J12", "J13"]);
+  // Con vínculo a su ficha, aunque el informe lo nombre más corto.
+  assert.deepEqual(ventasDelCliente("Brayan Sibaja", "B1", "lotes_manantial", carteraSH).map((v) => v.prospect_id), ["B1"]);
+  assert.deepEqual(ventasDelCliente("Cualquiera", null, "cascada_real_e1", carteraSH), []); // Cascada no está en Smarthome
+});
+
+test("estado de cuenta al cierre: mora, cuotas vencidas, días y pagos", () => {
+  const cs: CuotaPlanSH[] = [
+    { payment_id: uuid(30), prospect_id: "J12", fecha: "2026-09-15", tipo: 0, programado: 1_250_000 },
+    { payment_id: uuid(31), prospect_id: "J12", fecha: "2026-10-15", tipo: 0, programado: 1_250_000 },
+    { payment_id: uuid(32), prospect_id: "J12", fecha: "2026-11-15", tipo: 0, programado: 1_250_000 }, // aún no vence
+    { payment_id: uuid(33), prospect_id: "J12", fecha: "2026-10-01", tipo: 5, programado: 90_000_000 }, // crédito: no cuenta
+  ];
+  const ab: AbonoSH[] = [abono(30, "J12", "2026-09-14", 1_250_000, 30), abono(31, "J12", "2026-10-20", 250_000, 31)];
+  assert.deepEqual(estadoAlCierre("2026-10-01", cs, ab), { mora: 1_000_000, cuotasVencidas: 1, diasMora: 16, ultimoPago: "2026-10-20", pagadoMes: 250_000 });
+});
+
+test("verifica los clientes en mora destacados y detecta lotes con dos ventas activas", () => {
+  const v = verificarMoraDestacada("2026-10-01", [
+    { proyecto: "lotes_manantial", cliente: "Jonathan Marquez Marin", prospect_id: null, detalle: "Lote 12 y 13", valor: 2_500_000 },
+    { proyecto: "lotes_manantial", cliente: "Persona Inexistente", prospect_id: null, detalle: "", valor: 1 },
+    { proyecto: "cascada_real_e1", cliente: "Alguien", prospect_id: null, detalle: "", valor: 1 },
+  ], carteraSH, [], []);
+  assert.deepEqual(v.map((x) => x.resultado), ["encontrado", "no_encontrado", "no_aplica"]);
+  assert.deepEqual(v[0].unidades, ["manzana 4 lote 12", "manzana 4 lote 13"]);
+  assert.deepEqual(unidadesDuplicadas(carteraSH), [{ proyecto: "Lotes Reservas del Manantial", unidad: "manzana 4 lote 14", clientes: ["Blaiber Sanchez", "Ramiro Porras"] }]);
 });

@@ -171,3 +171,128 @@ export function pistaDiferencia(
 
 /** Comparación de un mes contra el informe guardado (la calcula la ruta de referencia). */
 export interface ComparacionSmarthome { informeReal: number | null; diferencia: number | null; pista: PistaDiferencia | null }
+
+// ── Clientes en mora del informe, verificados en Smarthome ──────────
+
+export interface CuotaPlanSH extends CuotaSH { programado: number | null }
+export interface ClienteCarteraSH { prospect_id: string; cliente: string | null; module: string | null; project_name: string | null }
+
+/** Proyecto del informe → patrón del proyecto en Smarthome (null: no está en Smarthome). */
+export function proyectoSmarthome(proyecto: string): RegExp | null {
+  if (proyecto === "lotes_manantial") return /manantial/i;
+  if (proyecto === "aqua_e1" || proyecto === "aqua_e2") return /aqua/i;
+  return null; // Cascada Real Etapa 1
+}
+
+const mismoNombre = (a: string, b: string) => {
+  const x = new Set(normal(a));
+  return normal(b).filter((p) => x.has(p)).length >= 2;
+};
+
+/**
+ * Ventas en Smarthome de un cliente del informe: la vinculada a su ficha (si la hay)
+ * y las demás del mismo proyecto con el mismo nombre (un cliente puede tener varios lotes).
+ */
+export function ventasDelCliente(nombre: string, prospectId: string | null, proyecto: string, cartera: ClienteCarteraSH[]): ClienteCarteraSH[] {
+  const patron = proyectoSmarthome(proyecto);
+  if (!patron) return [];
+  const delProyecto = cartera.filter((c) => patron.test(c.project_name ?? ""));
+  const base = prospectId ? delProyecto.find((c) => c.prospect_id === prospectId) : undefined;
+  const referencia = base?.cliente ?? nombre;
+  return delProyecto.filter((c) => c.prospect_id === prospectId || mismoNombre(c.cliente ?? "", referencia));
+}
+
+export interface EstadoCuentaCliente {
+  /** Cuotas de cuota inicial vencidas al cierre del mes y no pagadas. */
+  mora: number;
+  cuotasVencidas: number;
+  /** Días desde la cuota vencida más antigua hasta el cierre del mes. */
+  diasMora: number;
+  ultimoPago: string | null;
+  pagadoMes: number;
+}
+
+/** Estado de cuenta al cierre del mes (`periodo` = YYYY-MM-01) con las cuotas y abonos de sus ventas. */
+export function estadoAlCierre(periodo: string, cuotas: CuotaPlanSH[], abonos: AbonoSH[]): EstadoCuentaCliente {
+  const mes = periodo.slice(0, 7);
+  const fin = new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const inicial = new Map(cuotas.filter((c) => !(c.tipo !== null && TIPOS_EXCLUIDOS.has(c.tipo))).map((c) => [c.payment_id, c]));
+  const pagado = new Map<string, number>();
+  let ultimoPago: string | null = null, pagadoMes = 0;
+  for (const a of abonos) {
+    if (!a.fecha || a.fecha > fin || !inicial.has(cuotaDeAbono(a.id))) continue;
+    pagado.set(cuotaDeAbono(a.id), (pagado.get(cuotaDeAbono(a.id)) ?? 0) + (a.monto ?? 0));
+    if (!ultimoPago || a.fecha > ultimoPago) ultimoPago = a.fecha;
+    if (a.fecha.slice(0, 7) === mes) pagadoMes += a.monto ?? 0;
+  }
+  let mora = 0, cuotasVencidas = 0, masAntigua: string | null = null;
+  for (const c of inicial.values()) {
+    if (!c.fecha || c.fecha > fin) continue;
+    const pendiente = (c.programado ?? 0) - (pagado.get(c.payment_id) ?? 0);
+    if (pendiente > 0.5) {
+      mora += pendiente;
+      cuotasVencidas++;
+      if (!masAntigua || c.fecha < masAntigua) masAntigua = c.fecha;
+    }
+  }
+  const diasMora = masAntigua ? Math.round((Date.parse(fin) - Date.parse(masAntigua)) / 86_400_000) : 0;
+  return { mora, cuotasVencidas, diasMora, ultimoPago, pagadoMes };
+}
+
+export interface VerificacionCliente {
+  cliente: string;
+  proyecto: string;
+  detalle: string;
+  /** Valor en mora que reporta el informe. */
+  valorInforme: number;
+  /** «no_aplica»: el proyecto no está en Smarthome (Cascada Real). */
+  resultado: "encontrado" | "no_encontrado" | "no_aplica";
+  unidades: string[];
+  estado: EstadoCuentaCliente | null;
+}
+
+/** Verifica en Smarthome cada cliente en mora destacado del informe. */
+export function verificarMoraDestacada(
+  periodo: string,
+  moraDestacada: { proyecto: string; cliente: string; prospect_id: string | null; detalle: string; valor: number }[],
+  cartera: ClienteCarteraSH[],
+  cuotas: CuotaPlanSH[],
+  abonos: AbonoSH[],
+): VerificacionCliente[] {
+  return moraDestacada.map((m) => {
+    const base = { cliente: m.cliente, proyecto: m.proyecto, detalle: m.detalle, valorInforme: m.valor };
+    if (!proyectoSmarthome(m.proyecto)) return { ...base, resultado: "no_aplica" as const, unidades: [], estado: null };
+    const ventas = ventasDelCliente(m.cliente, m.prospect_id, m.proyecto, cartera);
+    if (!ventas.length) return { ...base, resultado: "no_encontrado" as const, unidades: [], estado: null };
+    const ids = new Set(ventas.map((v) => v.prospect_id));
+    return {
+      ...base,
+      resultado: "encontrado" as const,
+      unidades: ventas.map((v) => (v.module ?? "").toLowerCase()).filter(Boolean),
+      estado: estadoAlCierre(periodo, cuotas.filter((c) => ids.has(c.prospect_id)), abonos.filter((a) => ids.has(a.prospect_id))),
+    };
+  });
+}
+
+// ── Datos por depurar: unidades con dos ventas activas ──────────────
+
+export interface UnidadDuplicada { proyecto: string; unidad: string; clientes: string[] }
+
+/** Lotes o apartamentos con más de una venta activa en Smarthome (ventas viejas sin anular). */
+export function unidadesDuplicadas(cartera: ClienteCarteraSH[]): UnidadDuplicada[] {
+  const grupos = new Map<string, ClienteCarteraSH[]>();
+  for (const c of cartera) {
+    const unidad = (c.module ?? "").replace(/\s+/g, " ").trim().toUpperCase();
+    if (!unidad) continue;
+    const k = `${c.project_name ?? ""}|${unidad}`;
+    grupos.set(k, [...(grupos.get(k) ?? []), c]);
+  }
+  return [...grupos.entries()]
+    .filter(([, v]) => v.length > 1)
+    .map(([k, v]) => ({
+      proyecto: k.split("|")[0],
+      unidad: k.split("|")[1].toLowerCase(),
+      clientes: v.map((c) => (c.cliente ?? "").replace(/\s+/g, " ").trim() || "Cliente sin nombre"),
+    }))
+    .sort((a, b) => a.proyecto.localeCompare(b.proyecto) || a.unidad.localeCompare(b.unidad, "es", { numeric: true }));
+}

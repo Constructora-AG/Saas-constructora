@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { exigirModulo, esRespuestaAutorizacion } from "@/lib/auth/servidor";
-import { periodoDesdeMes, type CifraProyecto, type SeparacionInforme } from "@/lib/cartera/informes";
+import { periodoDesdeMes, type CifraProyecto, type MoraDestacada, type SeparacionInforme } from "@/lib/cartera/informes";
 import {
   calcularReferenciaLotes,
   pistaDiferencia,
+  unidadesDuplicadas,
+  ventasDelCliente,
+  verificarMoraDestacada,
   type AbonoSH,
+  type ClienteCarteraSH,
   type ClienteSH,
   type ComparacionSmarthome,
+  type CuotaPlanSH,
   type CuotaSH,
 } from "@/lib/cartera/referenciaSmarthome";
 
@@ -15,7 +20,9 @@ import {
 // GET /api/cartera/informes/referencia?anio=YYYY        → los 12 meses (cuadro anual)
 // Referencia Smarthome (solo lectura) para revisar informes: recaudo real y
 // separaciones de Lotes Reserva del Manantial, diferencia contra el informe y
-// posible causa. Solo quien tiene «cartera_revision». Usa los datos ya sincronizados.
+// posible causa. En el modo de un mes también verifica en Smarthome los clientes
+// en mora del informe y lista las unidades con dos ventas activas (datos por depurar).
+// Solo quien tiene «cartera_revision». Usa los datos ya sincronizados.
 
 const PAGINA = 1000;
 const LOTES = "%manantial%";
@@ -59,16 +66,16 @@ export async function GET(req: NextRequest) {
     : [desde(anioN, 1, -1), hasta(anioN, 12, 1)];
 
   try {
-    const [cuotas, abonos, carteraLotes, informes] = await Promise.all([
+    const [cuotas, abonos, cartera, informes] = await Promise.all([
       todas<CuotaSH>((d, h) => supa.from("sh_cuotas").select("payment_id, prospect_id, fecha, tipo").ilike("project_name", LOTES).order("payment_id").range(d, h)),
       todas<AbonoSH>((d, h) => supa.from("sh_abonos").select("id, prospect_id, fecha, monto").ilike("project_name", LOTES).gte("fecha", ini).lte("fecha", fin).order("id").range(d, h)),
-      todas<{ prospect_id: string; cliente: string | null; module: string | null }>((d, h) => supa.from("cartera").select("prospect_id, cliente, module").ilike("project_name", LOTES).order("prospect_id").range(d, h)),
-      todas<{ periodo: string; cifras: CifraProyecto[]; separaciones: SeparacionInforme[] }>((d, h) => {
-        const q = supa.from("cartera_informes").select("periodo, cifras, separaciones");
+      todas<ClienteCarteraSH>((d, h) => supa.from("cartera").select("prospect_id, cliente, module, project_name").order("prospect_id").range(d, h)),
+      todas<{ periodo: string; cifras: CifraProyecto[]; separaciones: SeparacionInforme[]; mora_destacada: MoraDestacada[] }>((d, h) => {
+        const q = supa.from("cartera_informes").select("periodo, cifras, separaciones, mora_destacada");
         return (periodo ? q.eq("periodo", periodo) : q.gte("periodo", `${anioN}-01-01`).lte("periodo", `${anioN}-12-01`)).order("periodo").range(d, h);
       }),
     ]);
-    const clientes = new Map<string, ClienteSH>(carteraLotes.map((c) => [c.prospect_id, { cliente: c.cliente, module: c.module }]));
+    const clientes = new Map<string, ClienteSH>(cartera.filter((c) => /manantial/i.test(c.project_name ?? "")).map((c) => [c.prospect_id, { cliente: c.cliente, module: c.module }]));
     const { data: sync } = await supa.from("sh_abonos").select("synced_at").order("synced_at", { ascending: false }).limit(1).maybeSingle();
     const sincronizado = (sync?.synced_at as string | undefined) ?? null;
 
@@ -81,7 +88,24 @@ export async function GET(req: NextRequest) {
 
     if (periodo) {
       const lotes = calcularReferenciaLotes(periodo, cuotas, abonos, clientes);
-      return NextResponse.json({ periodo, sincronizado, lotes, comparacion: comparar(periodo, lotes.recaudoReal) });
+      // Clientes en mora destacados del informe: sus ventas, cuotas y pagos en Smarthome.
+      const moraDestacada = informes.find((i) => i.periodo === periodo)?.mora_destacada ?? [];
+      const ids = [...new Set(moraDestacada.flatMap((m) => ventasDelCliente(m.cliente, m.prospect_id, m.proyecto, cartera).map((v) => v.prospect_id)))];
+      const finMes = hasta(anioN, Number(periodo.slice(5, 7)), 0);
+      const [cuotasCli, abonosCli] = ids.length
+        ? await Promise.all([
+          todas<CuotaPlanSH>((d, h) => supa.from("sh_cuotas").select("payment_id, prospect_id, fecha, tipo, programado").in("prospect_id", ids).order("payment_id").range(d, h)),
+          todas<AbonoSH>((d, h) => supa.from("sh_abonos").select("id, prospect_id, fecha, monto").in("prospect_id", ids).lte("fecha", finMes).order("id").range(d, h)),
+        ])
+        : [[], []];
+      return NextResponse.json({
+        periodo,
+        sincronizado,
+        lotes,
+        comparacion: comparar(periodo, lotes.recaudoReal),
+        clientesMora: verificarMoraDestacada(periodo, moraDestacada, cartera, cuotasCli, abonosCli),
+        duplicados: unidadesDuplicadas(cartera),
+      });
     }
     const meses = Array.from({ length: 12 }, (_, k) => {
       const p = `${anioN}-${String(k + 1).padStart(2, "0")}-01`;
