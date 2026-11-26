@@ -13,8 +13,8 @@ prospect_id, customer_id, project_code, project_name, module (unidad), cliente, 
 ## cartera_gestion (estado de cobranza por unidad): prospect_id, estado (pendiente | contactado | acuerdo_pago | …), cobrador_id → cobradores.id, proxima_accion, proxima_accion_fecha, ultima_gestion_at, ultimo_canal.
 ## gestion_log (bitácora de cobranza): prospect_id, cobrador_nombre, canal (llamada | whatsapp | correo | visita), tipo (contacto | acuerdo | …), resultado (contesto | no_contesta | acuerdo | …), nota, estado_anterior, estado_nuevo, monto_comprometido, fecha_compromiso, created_at.
 ## cobradores: id, nombre, email, activo.
-## sh_cuotas (plan de pagos): payment_id, prospect_id, project_name, fecha, tipo (int Smarthome: cuota inicial / crédito), programado, pagado.
-## sh_abonos (pagos recibidos = recaudo): id, prospect_id, project_name, tipo, fecha, monto.
+## sh_cuotas (plan de pagos, una fila por cuota): payment_id, prospect_id, project_name, fecha (vencimiento), tipo (5 = crédito, desembolso del banco; 2 y 3 = sin confirmar, «otros»; el resto = cuota inicial), programado, pagado.
+## sh_abonos (pagos recibidos = recaudo en caja): id, prospect_id, project_name, tipo, fecha (del pago), monto. La cuota que paga cada abono es la de sh_cuotas con payment_id = left(sh_abonos.id, 36).
 ## sh_eventos (eventos del CRM por cliente): prospect_id, cliente, module, usuario, fecha, tipo (int), contenido, es_pago (true = pago), monto, recibo.`;
 export const ESQUEMA_PROSPECTOS = `## sh_prospectos (todos los prospectos del CRM, ~histórico completo): prospect_id, nombre, asesor, proyecto, etapa, ciclo, valor, celular, email, fecha_creacion, es_venta, genero, edad, ocupacion, profesion, cargo, empresa, barrio, ciudad, estado_civil, fuente (canal por el que llegó), probabilidad (0-100), fecha_cierre, seguimiento (0 sin tareas | 1 tarea activa | 3 tarea vencida), estado_credito, digital (true = entró por canal digital), campana, medio, visita_sala, reportado, acciones (número de gestiones: llamadas, WhatsApp, correos, visitas), acciones_detalle jsonb, synced_at.
 ## sh_contactos (gestiones de asesores): asesor, proyecto, canal, prospect_id, fecha.`;
@@ -31,7 +31,18 @@ Los importes vienen como texto: usar nullif(s.value,'')::numeric.`;
 export const REGLAS_CALCULO = `- Marketing (sobre mk_leads o sh_prospectos): descartado = ciclo ILIKE '%cancelad%' OR ciclo ILIKE '%desistid%'. Venta = es_venta OR ciclo ILIKE '%compra%' OR etapa ILIKE 'compra%'. Contactado = acciones > 0 OR etapa distinta de 'Prospecto'. Calificado = venta OR (no descartado AND probabilidad >= 25). Oportunidad = venta OR (no descartado AND probabilidad >= 50). "Sin gestión" = no venta, no descartado y no contactado.
 - Ventas reales = filas de cartera (fuente de verdad), no los es_venta de leads. Valor vendido = sum(total_valor).
 - Cartera: mora = cuotas_vencidas > 0 o dias_mora > 0; semáforo por dias_mora.
-- Recaudo de un mes = sum(sh_abonos.monto) por fecha.
+- Recaudo (misma regla de la página Recaudo). Cada pago se aplica a la cuota que paga (sh_cuotas.payment_id = left(sh_abonos.id, 36)). Por defecto reporta solo cuota inicial (coalesce(tipo, 0) not in (2, 3, 5)) y el crédito (tipo 5) aparte; nunca los sumes sin decirlo. Para un período:
+  · Debe recaudar = sum(programado) de las cuotas que vencen en el período.
+  · Ya pagado = lo pagado a ESAS cuotas con cualquier fecha (corte: hoy), sin pasar del programado de cada cuota. Pendiente = Debe recaudar − Ya pagado. Avance = Ya pagado ÷ Debe recaudar.
+  · Recaudado en caja = sum(monto) de los pagos con fecha en el período, desglosado según la fecha de su cuota: del período, anticipos (cuota posterior al período) y atrasadas (cuota anterior).
+  · Nunca calcules cumplimiento o avance como caja ÷ programado: los anticipos inflan el mes en que se pagan (más del 100 %) y dejan como deuda la cuota ya pagada en el mes en que vence.
+  · Separaciones (ventas nuevas): pagos a la primera cuota no crédito de cada venta. La página Recaudo las incluye; el informe mensual de cartera las excluye del recaudo real.
+  Consultas tipo (cambia las fechas; sin punto y coma):
+  with pag as (select left(id, 36) as payment_id, sum(monto) as pagado from sh_abonos group by 1) select c.project_name, sum(c.programado) as debe, sum(least(c.programado, coalesce(p.pagado, 0))) as ya_pagado, sum(c.programado - least(c.programado, coalesce(p.pagado, 0))) as pendiente from sh_cuotas c left join pag p on p.payment_id = c.payment_id where c.fecha between '2026-10-01' and '2026-10-31' and coalesce(c.tipo, 0) not in (2, 3, 5) group by 1
+  select c.project_name, sum(a.monto) as caja, coalesce(sum(a.monto) filter (where c.fecha between '2026-10-01' and '2026-10-31'), 0) as del_periodo, coalesce(sum(a.monto) filter (where c.fecha > '2026-10-31'), 0) as anticipos, coalesce(sum(a.monto) filter (where c.fecha < '2026-10-01'), 0) as atrasadas from sh_abonos a join sh_cuotas c on c.payment_id = left(a.id, 36) where a.fecha between '2026-10-01' and '2026-10-31' and coalesce(c.tipo, 0) not in (2, 3, 5) group by 1
+- Unidades con dos ventas activas (dato por depurar en Smarthome): un mismo lote o apartamento (cartera.module) con más de una fila en cartera. Suele ser una venta desistida o un lote revendido sin anular la venta anterior; mientras siga activa, sus cuotas sin pagar aparecen como pendiente y mora. Al reportar pendiente, mora o cobranza, cruza por prospect_id con estas unidades y presenta su monto aparte («de los $X pendientes, $Y son de lotes con dos ventas activas»); la venta sin pagos recientes suele ser la anterior. No la recomiendes como cobro prioritario sin que el equipo de cartera la confirme.
+  Consulta tipo (sin punto y coma):
+  select project_name, upper(regexp_replace(btrim(module), '\\s+', ' ', 'g')) as unidad, count(*) as ventas, string_agg(cliente, ' / ' order by cliente) as clientes from cartera where coalesce(btrim(module), '') <> '' group by 1, 2 having count(*) > 1
 - Prefacturas activas = estado in (pendiente_acta_migo, por_facturar, pendiente_pago).`;
 
 export function sistemaAsistente(nombreUsuario: string, rolLabel: string, areas: Area[]): string {
@@ -41,7 +52,7 @@ export function sistemaAsistente(nombreUsuario: string, rolLabel: string, areas:
 # La plataforma
 Es el sistema interno de la empresa. Sus módulos y de dónde salen sus datos:
 - **Cartera y cobranza** (tablas cartera, cartera_gestion, gestion_log, cobradores, sh_cuotas, sh_abonos, sh_eventos): unidades vendidas con su plan de pagos, mora y gestiones de cobro. Espejo del CRM Smarthome.
-- **Recaudo**: pagos recibidos por proyecto y mes (sh_abonos / sh_cuotas).
+- **Recaudo**: por proyecto y período, cuotas que vencen (debe recaudar), cuánto se ha pagado de ellas (avance y pendiente, a hoy) y el dinero recibido en caja con sus anticipos (sh_cuotas / sh_abonos).
 - **Vendedores**: desempeño de asesores comerciales (sh_prospectos, sh_contactos).
 - **Marketing y leads** (mk_leads, sh_prospectos, mk_inversion): leads digitales de campañas (Meta/Facebook/Instagram/WhatsApp), embudo, gestión por asesor, inversión y costo por lead.
 - **Proyecto Triple A**: contratos con la empresa de acueducto TRIPLE AAA (Barranquilla). Incluye Transporte AAA (Contrato IS No. 04-2026: servicios de transporte de vehículos y carga), Contrato de Alquiler de maquinaria, y Prefacturas (aaa_prefacturas).
