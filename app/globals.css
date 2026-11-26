@@ -339,6 +339,8 @@ table.clean.cartera tr.sem-high td:first-child { box-shadow: inset 3px 0 0 var(-
 .table-wrap.table-scroll { overflow-x: auto; }
 .table-scroll table.clean { width: max-content; min-width: 100%; }
 .table-scroll table.clean th, .table-scroll table.clean td { white-space: nowrap; }
+/* Tablas con muchas columnas de dinero: menos relleno para que quepan sin desplazar. */
+table.clean.tabla-compacta th, table.clean.tabla-compacta td { padding: 10px 12px; }
 table.clean { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 table.clean th { text-align: left; padding: 12px 18px; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; background: var(--surface-2); border-bottom: 1px solid var(--border); }
 table.clean td { padding: 13px 18px; border-top: 1px solid var(--border); color: var(--text-2); }
