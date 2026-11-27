@@ -10,6 +10,12 @@
 // - Exportación mensual (SPEC §5.2): checkbox «Solo pendientes por
 //   facturar» + CSV / Excel / PDF con soportes (lib/transporte/export)
 //   y pregunta de facturación (askInvoice, SPEC §4.7).
+// - Barra de filtros generales (Área AAA, tipo, placa…; definidos en
+//   lib/transporte/filtrosRegistros): aplican a tabla, totales,
+//   prefacturación y exportaciones; «Soportes (ZIP)» descarga en un solo
+//   archivo las evidencias. Al marcar registros aparece una barra de
+//   acciones (prefacturar / descargar solo los marcados); la barra general
+//   siempre descarga todos los filtrados.
 // - Formulario en drawer (ServicioForm): t.setModalOpen pausa el polling.
 // ════════════════════════════════════════════════════════════════════
 
@@ -22,7 +28,8 @@ import { aprobadorDe, areaAAADe, num } from "@/lib/transporte/model";
 import { costoServicio, fdate, findCategoria, findRuta, fmtCOP, recargosCobrados, totales, totalesContratista } from "@/lib/transporte/logic";
 import { agruparItems } from "@/lib/aaa/catalogo";
 import { adjuntoSrc, openAttachment } from "@/lib/transporte/media";
-import { exportServicios, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
+import { FILTROS_REGISTROS, aplicarFiltros, etiquetasActivas, filtrosVigentes, opcionesFiltro, SIN_DATO, type FiltrosActivos } from "@/lib/transporte/filtrosRegistros";
+import { exportServicios, exportSoportesZip, type ExportFormat, type ExportPair } from "@/lib/transporte/export";
 import { ServicioForm } from "./ServicioForm";
 import { buildOrderPdf } from "./ordenPdf";
 import { ConfirmarEliminacion } from "@/app/components/ConfirmarEliminacion";
@@ -37,6 +44,7 @@ const TIPO_BADGE: Record<string, { label: string; cls: string }> = {
 const chipBtn: React.CSSProperties = { border: "none", cursor: "pointer", font: "inherit" };
 
 const PAGE_SIZE = 10;
+type AlcanceDescarga = "general" | "seleccion";
 const COLS_KEY = "transporte.registros.columnas.v1";
 
 type ColId =
@@ -118,8 +126,12 @@ export function RegistrosView({ t }: ViewProps) {
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   // Exportación mensual (SPEC §5.2): solo pendientes por defecto.
   const [soloPendientes, setSoloPendientes] = useState(true);
-  const [exportando, setExportando] = useState<ExportFormat | null>(null);
+  // Descarga en curso: alcance («general» = filtrados, «seleccion» = marcados) y formato.
+  const [exportando, setExportando] = useState<{ alcance: AlcanceDescarga; fmt: ExportFormat | "zip" } | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportAviso, setExportAviso] = useState<string | null>(null);
+  // Filtros generales de la tabla (id del filtro → valor elegido).
+  const [filtros, setFiltros] = useState<FiltrosActivos>({});
   // Columnas visibles, paginación y menú de acciones
   const [ocultas, setOcultas] = useState<Set<ColId>>(() => new Set(OCULTAS_DEFAULT));
   const [colPickOpen, setColPickOpen] = useState(false);
@@ -144,10 +156,27 @@ export function RegistrosView({ t }: ViewProps) {
   }, []);
 
   const mes = t.activeMonth;
-  const items = useMemo(
+  const itemsMes = useMemo(
     () => [...t.activeServices].sort((a, b) => (a.date || "").localeCompare(b.date || "") || seqDe(a) - seqDe(b)),
     [t.activeServices],
   );
+  // Los filtros cuyo valor no existe en el mes (p. ej. al cambiar de mes) se ignoran.
+  const activos = useMemo(() => filtrosVigentes(itemsMes, filtros), [itemsMes, filtros]);
+  const nActivos = Object.keys(activos).length;
+  const etiquetaFiltro = etiquetasActivas(activos).join(" · ");
+  const items = useMemo(() => aplicarFiltros(itemsMes, activos), [itemsMes, activos]);
+  // Solo se muestran los filtros con datos en el mes (o con un valor elegido).
+  const filtrosVisibles = useMemo(
+    () => FILTROS_REGISTROS
+      .map((f) => ({ f, opciones: opcionesFiltro(itemsMes, f, activos) }))
+      .filter(({ f, opciones }) => activos[f.id] || opciones.some((o) => o.valor !== SIN_DATO)),
+    [itemsMes, activos],
+  );
+  const cambiarFiltro = (id: string, valor: string) => setFiltros((prev) => {
+    const next = { ...prev };
+    if (valor) next[id] = valor; else delete next[id];
+    return next;
+  });
   const tot = useMemo(() => totales(items), [items]);
   // Alquiler / Emergencia: contratos con IVA → la tabla muestra base + IVA de cada registro.
   const conIva = t.ficha.registros && t.ficha.ivaIncluido;
@@ -160,7 +189,7 @@ export function RegistrosView({ t }: ViewProps) {
   const diasMes = mes ? new Date(mes.year, mes.month + 1, 0).getDate() : 0;
 
   // Paginación (10 por página); vuelve a la página 1 al cambiar de mes
-  useEffect(() => { setPagina(1); setSel(new Set()); }, [mes?.key]);
+  useEffect(() => { setPagina(1); setSel(new Set()); }, [mes?.key, etiquetaFiltro]);
   const totalPaginas = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = useMemo(() => items.slice((paginaActual - 1) * PAGE_SIZE, paginaActual * PAGE_SIZE), [items, paginaActual]);
@@ -189,6 +218,13 @@ export function RegistrosView({ t }: ViewProps) {
 
   // ── Prefacturar (crea la prefactura en Proyecto Triple A y marca los servicios) ──
   const prefacturables = useMemo(() => items.filter((s) => !s.prefactura), [items]);
+  // La selección puede abarcar todos los registros filtrados, no solo la página visible.
+  // Se puede marcar cualquier registro (también los prefacturados) para descargarlo;
+  // prefacturar solo toma los marcados que aún no tienen prefactura.
+  const seleccionados = useMemo(() => items.filter((s) => sel.has(s.id)), [items, sel]);
+  const selPrefacturables = seleccionados.filter((s) => !s.prefactura);
+  const paginaCompleta = visibles.length > 0 && visibles.every((s) => sel.has(s.id));
+  const todosSeleccionados = items.length > 0 && seleccionados.length === items.length;
   const toggleSel = (id: string) => setSel((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   /** Una prefactura por centro de costo (Área AAA solicitante): los servicios de áreas distintas no se mezclan. */
   const crearPrefactura = async (lista: Servicio[]) => {
@@ -294,14 +330,48 @@ export function RegistrosView({ t }: ViewProps) {
     }
   };
 
-  // ── Exportación mensual con flujo de facturación (SPEC §4.7) ─────
-  const exportarMes = async (fmt: ExportFormat) => {
+  // Barra general: TODOS los filtrados (no solo la página), con «Solo pendientes».
+  // Barra de seleccionados: exactamente los marcados.
+  const paraExportarGeneral = items.filter((s) => !soloPendientes || !s.invoiced);
+  const listaDescarga = (alcance: AlcanceDescarga) => (alcance === "seleccion" ? seleccionados : paraExportarGeneral);
+  const nombreDescarga = (alcance: AlcanceDescarga) => `${nombreExport}${alcance === "seleccion" ? "_seleccion" : ""}`;
+
+  /** Nombre base de los archivos exportados; incluye el área filtrada para distinguirlos. */
+  const nombreExport = `servicios_${mes?.key ?? ""}${etiquetaFiltro ? `_${etiquetaFiltro.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60)}` : ""}`;
+
+  // ── Soportes de los registros en un solo ZIP ──
+  // No pregunta por facturación: el ZIP es un paquete de evidencias, no la cuenta de cobro.
+  const exportarSoportes = async (alcance: AlcanceDescarga) => {
     if (!mes) return;
-    const pares: ExportPair[] = items
-      .filter((s) => !soloPendientes || !s.invoiced)
-      .map((item) => ({ monthKey: mes.key, monthLabel: mes.label, item }));
+    const pares: ExportPair[] = listaDescarga(alcance).map((item) => ({ monthKey: mes.key, monthLabel: mes.label, item }));
     setExportError(null);
-    setExportando(fmt);
+    setExportAviso(null);
+    setExportando({ alcance, fmt: "zip" });
+    try {
+      const r = await exportSoportesZip(pares, `soportes_${nombreDescarga(alcance).replace(/^servicios_/, "")}`, {
+        vigencia: "",
+        totalGlobalValue: 0,
+        ns: t.ns,
+        ficha: t.ficha,
+        tarifario: t.ns === "transporte" ? t.tarifario : null,
+      });
+      if (r.faltantes.length) {
+        setExportAviso(`Se descargaron ${r.archivos} soporte(s). ${r.faltantes.length} no se pudieron descargar; están listados en «soportes_faltantes.txt» dentro del ZIP.`);
+      }
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "No se pudieron descargar los soportes.");
+    } finally {
+      setExportando(null);
+    }
+  };
+
+  // ── Exportación mensual con flujo de facturación (SPEC §4.7) ─────
+  const exportarMes = async (fmt: ExportFormat, alcance: AlcanceDescarga) => {
+    if (!mes) return;
+    const pares: ExportPair[] = listaDescarga(alcance).map((item) => ({ monthKey: mes.key, monthLabel: mes.label, item }));
+    setExportError(null);
+    setExportAviso(null);
+    setExportando({ alcance, fmt });
     try {
       const totalGlobalValue = t.allMonths.reduce(
         (acc, m) => acc + (t.servicesByMonth[m.key] ?? []).reduce((s, it) => s + num(it.value), 0),
@@ -313,7 +383,7 @@ export function RegistrosView({ t }: ViewProps) {
         t.contractEndExclusive.getDate() - 1,
       );
       const fF = (d: Date) => d.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
-      await exportServicios(pares, fmt, `servicios_${mes.key}`, mes.label, {
+      await exportServicios(pares, fmt, nombreDescarga(alcance), etiquetaFiltro ? `${mes.label} · ${etiquetaFiltro}` : mes.label, {
         vigencia: `${fF(t.contractStart)} - ${fF(finIncl)}`,
         totalGlobalValue,
         valorContrato: t.contractValue,
@@ -321,8 +391,9 @@ export function RegistrosView({ t }: ViewProps) {
         ficha: t.ficha,
         tarifario: t.ns === "transporte" ? t.tarifario : null,
       });
-      // askInvoice: ¿marcar los pendientes exportados como facturados?
-      const pendientes = pares.filter((p) => !p.item.invoiced);
+      // askInvoice: ¿marcar los pendientes exportados como facturados? Solo en la
+      // exportación general (cuenta de cobro del mes); descargar marcados no factura.
+      const pendientes = alcance === "general" ? pares.filter((p) => !p.item.invoiced) : [];
       if (pendientes.length > 0 &&
         window.confirm(`¿Marcar los ${pendientes.length} servicio(s) pendientes exportados como facturados?`)) {
         await t.markInvoiced(pendientes.map((p) => ({ monthKey: p.monthKey, id: p.item.id })));
@@ -332,6 +403,29 @@ export function RegistrosView({ t }: ViewProps) {
     } finally {
       setExportando(null);
     }
+  };
+
+  /** Botones de descarga de un alcance; el texto «…» se muestra solo en el botón en curso. */
+  const botonesDescarga = (alcance: AlcanceDescarga) => {
+    const enCurso = (fmt: ExportFormat | "zip") => exportando?.alcance === alcance && exportando.fmt === fmt;
+    const vacia = listaDescarga(alcance).length === 0;
+    return (
+      <>
+        <button className="btn btn-ghost btn-sm" disabled={exportando !== null || vacia} onClick={() => void exportarMes("csv", alcance)}>
+          <IconDownload width={15} height={15} /> {enCurso("csv") ? "Exportando…" : "CSV"}
+        </button>
+        <button className="btn btn-ghost btn-sm" disabled={exportando !== null || vacia} onClick={() => void exportarMes("xlsx", alcance)}>
+          <IconDownload width={15} height={15} /> {enCurso("xlsx") ? "Exportando…" : "Excel"}
+        </button>
+        <button className="btn btn-ghost btn-sm" disabled={exportando !== null || vacia} onClick={() => void exportarMes("pdf", alcance)}>
+          <IconDownload width={15} height={15} /> {enCurso("pdf") ? "Generando…" : "PDF con soportes"}
+        </button>
+        <button className="btn btn-ghost btn-sm" disabled={exportando !== null || vacia} onClick={() => void exportarSoportes(alcance)}
+          title="Descarga en un solo ZIP las evidencias y V°B° de estos registros">
+          <IconDownload width={15} height={15} /> {enCurso("zip") ? "Empaquetando…" : "Soportes (ZIP)"}
+        </button>
+      </>
+    );
   };
 
   if (!mes) {
@@ -371,9 +465,30 @@ export function RegistrosView({ t }: ViewProps) {
         </div>
       </div>
 
+      {/* Filtros generales de la tabla */}
+      {filtrosVisibles.length > 0 && (
+        <div className="toolbar" role="group" aria-label="Filtros de registros" style={{ margin: "4px 0 14px", gap: 12 }}>
+          {filtrosVisibles.map(({ f, opciones }) => (
+            <label key={f.id} className="field" style={{ flex: "1 1 160px", maxWidth: 240, minWidth: 0 }}>
+              {f.label}
+              <select value={activos[f.id] ?? ""} onChange={(e) => cambiarFiltro(f.id, e.target.value)}
+                style={{ width: "100%", textOverflow: "ellipsis", ...(activos[f.id] ? { borderColor: "var(--brand-500)", fontWeight: 600 } : null) }}>
+                <option value="">Todos</option>
+                {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.label} ({o.cantidad})</option>)}
+              </select>
+            </label>
+          ))}
+          {nActivos > 0 && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setFiltros({})} style={{ marginBottom: 2 }}>
+              Limpiar filtros ({nActivos})
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Toolbar del mes + botón de registro */}
       <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span>{t.ficha.registros ? "Registros" : "Servicios"} de {mes.label}</span>
+        <span>{t.ficha.registros ? "Registros" : "Servicios"} de {mes.label}{etiquetaFiltro ? ` · ${etiquetaFiltro}` : ""}</span>
         <span className="topbar-spacer" style={{ flex: 1 }} />
         <span className="muted" style={{ fontSize: 12.5, textTransform: "none", letterSpacing: 0 }}>
           Servicios: {tot.servicios}{esTransporte ? ` · En contratistas: ${fmtCOP(totC.costo)} · Margen: ${fmtCOP(totC.margen)}` : ""} · Valor del mes{conIva ? " (con IVA)" : ""}: {fmtCOP(valorMes)} · Peajes del mes: {fmtCOP(tot.peajes)} · Días del mes: {diasMes}
@@ -388,13 +503,9 @@ export function RegistrosView({ t }: ViewProps) {
           Solo pendientes por facturar
         </label>
         <span className="topbar-spacer" style={{ flex: 1 }} />
-        <button className="btn btn-primary btn-sm" disabled={prefacturando || sel.size === 0} title="Crea una prefactura con los servicios marcados"
-          onClick={() => void crearPrefactura(items.filter((s) => sel.has(s.id) && !s.prefactura))}>
-          {prefacturando ? "Creando…" : `Prefacturar seleccionados${sel.size ? ` (${sel.size})` : ""}`}
-        </button>
-        <button className="btn btn-ghost btn-sm" disabled={prefacturando || prefacturables.length === 0} title="Crea una prefactura con todos los servicios del mes aún no prefacturados"
+        <button className="btn btn-ghost btn-sm" disabled={prefacturando || prefacturables.length === 0} title={etiquetaFiltro ? `Crea una prefactura con los servicios filtrados (${etiquetaFiltro}) aún no prefacturados` : "Crea una prefactura con todos los servicios del mes aún no prefacturados"}
           onClick={() => void crearPrefactura(prefacturables)}>
-          Prefacturar mes completo{prefacturables.length ? ` (${prefacturables.length})` : ""}
+          {etiquetaFiltro ? "Prefacturar filtrados" : "Prefacturar mes completo"}{prefacturables.length ? ` (${prefacturables.length})` : ""}
         </button>
         <div className="colpick" ref={colPickRef}>
           <button className={`btn btn-ghost btn-sm${colPickOpen ? " active" : ""}`} onClick={() => setColPickOpen((v) => !v)} title="Mostrar u ocultar columnas">
@@ -413,17 +524,13 @@ export function RegistrosView({ t }: ViewProps) {
             </div>
           )}
         </div>
-        <button className="btn btn-ghost btn-sm" disabled={exportando !== null} onClick={() => void exportarMes("csv")}>
-          <IconDownload width={15} height={15} /> {exportando === "csv" ? "Exportando…" : "CSV"}
-        </button>
-        <button className="btn btn-ghost btn-sm" disabled={exportando !== null} onClick={() => void exportarMes("xlsx")}>
-          <IconDownload width={15} height={15} /> {exportando === "xlsx" ? "Exportando…" : "Excel"}
-        </button>
-        <button className="btn btn-ghost btn-sm" disabled={exportando !== null} onClick={() => void exportarMes("pdf")}>
-          <IconDownload width={15} height={15} /> {exportando === "pdf" ? "Generando…" : "PDF con soportes"}
-        </button>
+        <span className="muted" style={{ fontSize: 12.5 }} aria-live="polite">
+          Descargar {paraExportarGeneral.length} registro(s){etiquetaFiltro ? " filtrados" : " del mes"}{soloPendientes ? " pendientes" : ""}:
+        </span>
+        {botonesDescarga("general")}
       </div>
-      {exportError && <div style={{ color: "var(--high)", fontSize: 13, margin: "0 0 10px" }}>{exportError}</div>}
+      {exportError && <div role="alert" style={{ color: "var(--high)", fontSize: 13, margin: "0 0 10px" }}>{exportError}</div>}
+      {exportAviso && <div role="status" style={{ color: "var(--warn)", fontSize: 13, margin: "0 0 10px" }}>{exportAviso}</div>}
 
       {rowError && <div style={{ color: "var(--high)", fontSize: 13, margin: "0 0 10px" }}>{rowError}</div>}
       {prefMsg?.error && <div style={{ color: "var(--high)", fontSize: 13, margin: "0 0 10px" }}>{prefMsg.error}</div>}
@@ -449,6 +556,36 @@ export function RegistrosView({ t }: ViewProps) {
         </div>
       )}
 
+      {/* Acciones sobre los registros marcados (pueden estar en varias páginas) */}
+      {seleccionados.length > 0 && (
+        <div className="info-bar" role="region" aria-label="Acciones para los registros seleccionados" style={{ marginBottom: 12, alignItems: "center", flexWrap: "wrap", gap: 10, borderLeft: "4px solid var(--brand)" }}>
+          <div aria-live="polite">
+            <b>{seleccionados.length} seleccionado(s)</b>
+            {todosSeleccionados
+              ? <span className="muted"> · todos los registros{etiquetaFiltro ? " filtrados" : " del mes"}</span>
+              : <span className="muted"> de {items.length}</span>}
+          </div>
+          {!todosSeleccionados && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setSel(new Set(items.map((s) => s.id)))}>
+              Seleccionar los {items.length}{etiquetaFiltro ? " filtrados" : " del mes"}
+            </button>
+          )}
+          <span className="topbar-spacer" style={{ flex: 1 }} />
+          <button className="btn btn-primary btn-sm" disabled={prefacturando || selPrefacturables.length === 0}
+            onClick={() => void crearPrefactura(selPrefacturables)}>
+            {prefacturando ? "Creando…" : `Prefacturar ${selPrefacturables.length}`}
+          </button>
+          {seleccionados.length > selPrefacturables.length && (
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {seleccionados.length - selPrefacturables.length} ya prefacturado(s): no se vuelven a prefacturar
+            </span>
+          )}
+          <span className="muted" style={{ fontSize: 12.5 }}>Descargar {seleccionados.length}:</span>
+          {botonesDescarga("seleccion")}
+          <button className="btn btn-ghost btn-sm" onClick={() => setSel(new Set())}>Quitar selección</button>
+        </div>
+      )}
+
       {/* Tabla del mes: ajustada al ancho, sin scroll horizontal */}
       <div className="table-wrap tbl-fit-wrap">
         <table className="clean tbl-fit">
@@ -461,9 +598,9 @@ export function RegistrosView({ t }: ViewProps) {
                 <th key={c.id} style={c.num ? { textAlign: "right" } : undefined}>
                   {c.id === "fecha" ? (
                     <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                      <input type="checkbox" title="Seleccionar todos los de esta página sin prefacturar"
-                        checked={visibles.some((s) => !s.prefactura) && visibles.filter((s) => !s.prefactura).every((s) => sel.has(s.id))}
-                        onChange={(e) => setSel((p) => { const n = new Set(p); visibles.filter((s) => !s.prefactura).forEach((s) => (e.target.checked ? n.add(s.id) : n.delete(s.id))); return n; })} />
+                      <input type="checkbox" title="Seleccionar todos los de esta página" aria-label="Seleccionar todos los registros de esta página"
+                        checked={paginaCompleta}
+                        onChange={(e) => setSel((p) => { const n = new Set(p); visibles.forEach((s) => (e.target.checked ? n.add(s.id) : n.delete(s.id))); return n; })} />
                       {c.label}
                     </span>
                   ) : c.label}
@@ -475,7 +612,9 @@ export function RegistrosView({ t }: ViewProps) {
             {items.length === 0 && (
               <tr>
                 <td colSpan={columnas.length} className="muted" style={{ padding: 18 }}>
-                  Aún no hay servicios registrados en {mes.label}. Usa &laquo;Agregar servicio&raquo; para comenzar.
+                  {itemsMes.length > 0
+                    ? <>Ningún servicio de {mes.label} cumple los filtros seleccionados. <button className="btn btn-ghost btn-sm" onClick={() => setFiltros({})}>Limpiar filtros</button></>
+                    : <>Aún no hay servicios registrados en {mes.label}. Usa &laquo;Agregar servicio&raquo; para comenzar.</>}
                 </td>
               </tr>
             )}
@@ -487,7 +626,9 @@ export function RegistrosView({ t }: ViewProps) {
                   {ver("fecha") && (
                     <td>
                       <span style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
-                        <input type="checkbox" checked={sel.has(s.id)} disabled={!!s.prefactura} onChange={() => toggleSel(s.id)} title={s.prefactura ? `Ya en prefactura ${s.prefactura}` : "Seleccionar para prefacturar"} style={{ marginTop: 2 }} />
+                        <input type="checkbox" checked={sel.has(s.id)} onChange={() => toggleSel(s.id)}
+                          title={s.prefactura ? `Ya en prefactura ${s.prefactura}: se puede marcar para descargar` : "Seleccionar para descargar o prefacturar"}
+                          aria-label={`Seleccionar el registro del ${s.date ? fechaCorta(s.date) : "sin fecha"}${s.plate ? ` ${s.plate}` : ""}`} style={{ marginTop: 2 }} />
                         <span>
                           <b>{s.date ? fechaCorta(s.date) : "—"}</b>
                           {s.orderNo && <span className="sub">N° {s.orderNo}</span>}
