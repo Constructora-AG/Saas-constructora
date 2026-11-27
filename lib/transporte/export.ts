@@ -5,9 +5,9 @@
 // con membrete (HEADER_PNG_B64, exportado también para la orden de
 // servicio de ordenPdf.ts), portada, tabla resumen, detalle y anexos.
 // Módulo COMPARTIDO por ResumenView, RegistrosView, ReportesView y
-// ordenPdf.ts. Solo navegador (descarga vía Blob); importar desde
-// client components. xlsx y pdf-lib se cargan con import() dinámico
-// para no engordar el bundle inicial.
+// ordenPdf.ts; también arma el ZIP de soportes. Solo navegador (descarga
+// vía Blob); importar desde client components. xlsx y pdf-lib se cargan
+// con import() dinámico para no engordar el bundle inicial.
 // ════════════════════════════════════════════════════════════════════
 
 import type { PDFFont, PDFImage, PDFPage, RGB } from "pdf-lib";
@@ -305,6 +305,60 @@ async function adjuntoBytes(f: AdjuntoFile): Promise<PdfAdjunto> {
     return { name: f.name, type: f.type, bytes: new Uint8Array() };
   }
   return { name: f.name, type: f.type, bytes: b64ToBytes((f.dataUrl || "").split(",")[1] || "") };
+}
+
+// ── ZIP con todos los soportes de los registros ────────────────────
+
+/** Resultado de exportSoportesZip: archivos empaquetados y los que no se pudieron descargar. */
+export interface ResultadoSoportesZip {
+  archivos: number;
+  faltantes: string[];
+}
+
+/**
+ * Descarga en un solo ZIP las evidencias y el V°B° de los registros, en
+ * carpetas «Área AAA / fecha N° orden placa /», más un CSV índice con los
+ * registros. Los adjuntos que no se puedan descargar se omiten y se listan
+ * en `faltantes` y en «soportes_faltantes.txt». Lanza Error si no hay registros
+ * o ningún registro tiene soportes.
+ */
+export async function exportSoportesZip(
+  pairs: ExportPair[],
+  filenameBase: string,
+  ctx: ExportContexto,
+): Promise<ResultadoSoportesZip> {
+  if (!pairs.length) throw new Error(SIN_REGISTROS_MSG);
+  const { crearZip, segmentoSeguro } = await import("./zip");
+  const entradas: Array<{ ruta: string; bytes: Uint8Array }> = [];
+  const faltantes: string[] = [];
+  for (const p of pairs) {
+    const s = p.item;
+    const adjuntos = [
+      ...(s.photoFiles || []).map((f) => ({ f, prefijo: "" })),
+      ...(s.approvalFile ? [{ f: s.approvalFile, prefijo: "VoBo - " }] : []),
+    ].filter(({ f }) => f.url || f.dataUrl);
+    if (!adjuntos.length) continue;
+    const area = segmentoSeguro(areaAAADe(s), "Sin área AAA");
+    const servicio = segmentoSeguro([s.date, s.orderNo ? `N° ${s.orderNo}` : "", s.plate].filter(Boolean).join(" "), `servicio ${s.id}`);
+    const descargas = await Promise.all(adjuntos.map(({ f }) => adjuntoBytes(f)));
+    descargas.forEach((d, i) => {
+      if (!d.bytes.length) { faltantes.push(`${area}/${servicio}/${d.name}`); return; }
+      entradas.push({ ruta: `${area}/${servicio}/${adjuntos[i].prefijo}${segmentoSeguro(d.name)}`, bytes: d.bytes });
+    });
+  }
+  if (!entradas.length) {
+    throw new Error(faltantes.length
+      ? "No se pudo descargar ningún soporte. Revisa la conexión e intenta de nuevo."
+      : "Los registros filtrados no tienen soportes adjuntos.");
+  }
+  const enc = new TextEncoder();
+  entradas.push({ ruta: "registros.csv", bytes: enc.encode(rowsToCSV(pairs.map((p) => filaExport(p, ctx)))) });
+  if (faltantes.length) {
+    entradas.push({ ruta: "soportes_faltantes.txt", bytes: enc.encode(`No se pudieron descargar estos soportes:\r\n${faltantes.join("\r\n")}\r\n`) });
+  }
+  const zip = crearZip(entradas);
+  downloadBlob(new Blob([zip as BlobPart], { type: "application/zip" }), `${filenameBase}.zip`, "application/zip");
+  return { archivos: entradas.length - 1 - (faltantes.length ? 1 : 0), faltantes };
 }
 
 /** Base64 puro del adjunto (para incrustar en Excel), desde Storage o data URL legado. */
